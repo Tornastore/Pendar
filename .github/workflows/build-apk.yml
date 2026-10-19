@@ -48,6 +48,14 @@ jobs:
       - name: Import project
         run: godot --headless --verbose --import || true
 
+      - name: Diagnostics
+        run: |
+          echo "--- SDK ---"; ls -la /usr/lib/android-sdk || true
+          ls /usr/lib/android-sdk/build-tools /usr/lib/android-sdk/platforms /usr/lib/android-sdk/platform-tools /usr/lib/android-sdk/cmdline-tools || true
+          echo "--- templates ---"; ls -la ~/.local/share/godot/export_templates/*/ | head -30 || true
+          echo "--- editor settings ---"; cat ~/.config/godot/editor_settings-4.tres | head -20 || true
+          echo "--- java ---"; which java javac; java -version 2>&1 | head -1
+
       - name: Export debug APK
         run: |
           mkdir -v -p build/android
