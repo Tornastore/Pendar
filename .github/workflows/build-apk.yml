@@ -24,9 +24,14 @@ jobs:
           mv /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
           KS=/tmp/mb-debug.keystore
           rm -f "$KS"
-          keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android \
+          if ! keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android \
             -keystore "$KS" -storepass android \
-            -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12
+            -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12; then
+            echo "keytool failed, using the keystore that ships with the image"
+            KS=/root/debug.keystore
+          fi
+          echo "Using keystore: $KS"
+          ls -la "$KS"
           JAVA_HOME_DIR=$(dirname $(dirname $(readlink -f $(which javac))))
           cat > ~/.config/godot/editor_settings-4.tres <<EOT
           [gd_resource type="EditorSettings" format=3]
@@ -34,7 +39,7 @@ jobs:
           [resource]
           export/android/android_sdk_path = "/usr/lib/android-sdk"
           export/android/java_sdk_path = "${JAVA_HOME_DIR}"
-          export/android/debug_keystore = "/tmp/mb-debug.keystore"
+          export/android/debug_keystore = "${KS}"
           export/android/debug_keystore_user = "androiddebugkey"
           export/android/debug_keystore_pass = "android"
           EOT
