@@ -97,28 +97,36 @@ func _hokm_cpu() -> void:
 			break
 	_hokm_play(1, idx)
 
+func _hokm_me() -> int:
+	return app._my_seat()
+
 func _hokm_rects() -> Array:
-	return app._fan_rects(hokm_hands[0].size(), 58.0, 86.0, 762.0, 500.0, 6.0)
+	return app._fan_rects(hokm_hands[_hokm_me()].size(), 58.0, 86.0, 762.0, 500.0, 6.0)
 
 func _hokm_tap(p: Vector2) -> void:
-	if hokm_game_over or hokm_turn != 0 or app._time - hokm_last_t < 0.9:
+	var me: int = _hokm_me()
+	if hokm_game_over or hokm_turn != me or app._time - hokm_last_t < 0.9:
 		return
 	var i: int = app._fan_hit(_hokm_rects(), p)
 	if i < 0:
 		return
-	if not _hokm_legal(0, hokm_hands[0][i]):
+	if not _hokm_legal(me, hokm_hands[me][i]):
 		app._show_toast("باید هم‌خالِ زمین بازی کنید.")
 		return
-	_hokm_play(0, i)
+	if app._net_on():
+		app.rpc("_rpc_hokm_play", me, i)
+	else:
+		_hokm_play(me, i)
 
 func _draw_hokm() -> void:
 	var suit_cols := [app.TEXT, app.RED, app.RED, app.TEXT]
-	var pa: Dictionary = app._pl("شما", app.BLUE, app._fa(hokm_scores[0]), hokm_turn == 0 and not hokm_game_over, true, "دست برده")
-	var pb: Dictionary = app._pl("حریف", app.PINK, app._fa(hokm_scores[1]), hokm_turn == 1 and not hokm_game_over, false, "دست برده")
+	var me: int = _hokm_me()
+	var pa: Dictionary = app._pl("شما", app.BLUE, app._fa(hokm_scores[me]), hokm_turn == me and not hokm_game_over, true, "دست برده")
+	var pb: Dictionary = app._pl("حریف", app.PINK, app._fa(hokm_scores[1 - me]), hokm_turn == 1 - me and not hokm_game_over, false, "دست برده")
 	if pa.active:
 		pa.sub = "نوبت شما"
 	app._draw_hud("حکم", pa, pb)
-	var orr: Array = app._fan_rects(hokm_hands[1].size(), 36.0, 52.0, 150.0, 240.0, 4.0)
+	var orr: Array = app._fan_rects(hokm_hands[1 - me].size(), 36.0, 52.0, 150.0, 240.0, 4.0)
 	for r in orr:
 		app._draw_card_back(r)
 	var badge := Rect2(app.VIEW_W - 16 - 118, 150, 118, 40)
@@ -135,16 +143,16 @@ func _draw_hokm() -> void:
 	var showing_last: bool = hokm_trick.size() == 0 and hokm_last.size() == 2 and app._time - hokm_last_t < 1.4
 	var plays: Array = hokm_last if showing_last else hokm_trick
 	for it in plays:
-		var rr: Rect2 = slot_me if int(it.p) == 0 else slot_opp
+		var rr: Rect2 = slot_me if int(it.p) == me else slot_opp
 		var won: bool = showing_last and int(it.p) == hokm_last_winner
 		app._draw_card(rr, it.c, false, false, won)
 	if showing_last:
-		app._txt_c("برنده این دست: " + ("شما" if hokm_last_winner == 0 else "حریف"), Rect2(table.position.x, table.position.y + 4, table.size.x, 26), 13, app.ACCENT, true)
-	app._txt_c("هنوز ۱۳ دست: " + app._fa(13 - hokm_hands[0].size()) + " / " + app._fa(13), Rect2(table.position.x, table.end.y - 30, table.size.x, 24), 12, Color(1, 1, 1, 0.4))
+		app._txt_c("برنده این دست: " + ("شما" if hokm_last_winner == me else "حریف"), Rect2(table.position.x, table.position.y + 4, table.size.x, 26), 13, app.ACCENT, true)
+	app._txt_c("هنوز ۱۳ دست: " + app._fa(13 - hokm_hands[me].size()) + " / " + app._fa(13), Rect2(table.position.x, table.end.y - 30, table.size.x, 24), 12, Color(1, 1, 1, 0.4))
 	var rects: Array = _hokm_rects()
 	for i in rects.size():
-		var c: Dictionary = hokm_hands[0][i]
-		var ok: bool = hokm_turn == 0 and _hokm_legal(0, c)
-		app._draw_card(rects[i], c, false, hokm_turn == 0 and not ok, false)
+		var c: Dictionary = hokm_hands[me][i]
+		var ok: bool = hokm_turn == me and _hokm_legal(me, c)
+		app._draw_card(rects[i], c, false, hokm_turn == me and not ok, false)
 	if not hokm_game_over:
-		app._hint("کارت بزنید تا بازی شود" if hokm_turn == 0 else "حریف در حال بازی…", 706, app.TEXT_DIM)
+		app._hint("کارت بزنید تا بازی شود" if hokm_turn == me else "حریف در حال بازی…", 706, app.TEXT_DIM)

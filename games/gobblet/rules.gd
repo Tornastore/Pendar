@@ -103,8 +103,17 @@ func _gob_cpu() -> void:
 			_gob_place(c.x, c.y, size, 2)
 			return
 
+func _gob_me() -> int:
+	return app._my_seat() + 1
+
 func _gob_my_turn() -> bool:
-	return gob_turn == 1 and not gob_game_over
+	return gob_turn == _gob_me() and not gob_game_over
+
+func _gob_can_place(x: int, y: int, size: int, player: int) -> bool:
+	var top: Dictionary = _gob_top(x, y)
+	if not top.is_empty() and int(top.s) >= size:
+		return false
+	return gob_hand[player - 1][size - 1] > 0
 
 func _gob_tap(p: Vector2) -> void:
 	if not _gob_my_turn() or gob_sel_size < 1:
@@ -112,8 +121,13 @@ func _gob_tap(p: Vector2) -> void:
 	var gx: int = int(floor((p.x - app.GOB_ORIGIN.x) / app.GOB_CELL))
 	var gy: int = int(floor((p.y - app.GOB_ORIGIN.y) / app.GOB_CELL))
 	if gx >= 0 and gx < 4 and gy >= 0 and gy < 4:
-		if not _gob_place(gx, gy, gob_sel_size, 1):
+		var me: int = _gob_me()
+		if not _gob_can_place(gx, gy, gob_sel_size, me):
 			app._show_toast("این مهره روی این خانه نمی‌نشیند؛ باید از مهره موجود بزرگ‌تر باشد.")
+		elif app._net_on():
+			app.rpc("_rpc_gob_place", gx, gy, gob_sel_size, me)
+		else:
+			_gob_place(gx, gy, gob_sel_size, me)
 
 func _gob_pick(s: int) -> void:
 	gob_sel_size = s if gob_sel_size != s else -1
@@ -121,19 +135,22 @@ func _gob_pick(s: int) -> void:
 func _btns_gobblet() -> void:
 	for s in 3:
 		var r := Rect2(app.VIEW_W - 16 - 160 - s * 170, 640, 160, 92)
-		var ok: bool = _gob_my_turn() and gob_hand[0][s] > 0
+		var ok: bool = _gob_my_turn() and gob_hand[_gob_me() - 1][s] > 0
 		app._add_hit(r, _gob_pick.bind(s + 1), "gob_%d" % s, false, ok)
 
 func _draw_gobblet() -> void:
+	var me: int = _gob_me()
 	var tot0: int = 0
 	var tot1: int = 0
 	for s in 3:
-		tot0 += gob_hand[0][s]
-		tot1 += gob_hand[1][s]
-	var c0 := Color(1.0, 0.45, 0.35)
-	var c1 := Color(0.35, 0.58, 1.0)
-	var pa: Dictionary = app._pl("شما", c0, app._fa(tot0), gob_turn == 1 and not gob_game_over, true, "مهره باقی‌مانده")
-	var pb: Dictionary = app._pl("حریف", c1, app._fa(tot1), gob_turn == 2 and not gob_game_over, false, "مهره باقی‌مانده")
+		tot0 += gob_hand[me - 1][s]
+		tot1 += gob_hand[2 - me][s]
+	var c_p1 := Color(1.0, 0.45, 0.35)
+	var c_p2 := Color(0.35, 0.58, 1.0)
+	var c0: Color = c_p1 if me == 1 else c_p2
+	var c1: Color = c_p2 if me == 1 else c_p1
+	var pa: Dictionary = app._pl("شما", c0, app._fa(tot0), gob_turn == me and not gob_game_over, true, "مهره باقی‌مانده")
+	var pb: Dictionary = app._pl("حریف", c1, app._fa(tot1), gob_turn == 3 - me and not gob_game_over, false, "مهره باقی‌مانده")
 	if pa.active:
 		pa.sub = "نوبت شما"
 	app._draw_hud("گابلت", pa, pb)
@@ -160,7 +177,7 @@ func _draw_gobblet() -> void:
 			var t: float = app._cell_t("gob", y * 4 + x)[0]
 			for k in st2.size():
 				var pc: Dictionary = st2[k]
-				var col: Color = c0 if int(pc.o) == 1 else c1
+				var col: Color = c0 if int(pc.o) == me else c1
 				var rad: float = 14.0 + int(pc.s) * 11.0
 				if k == st2.size() - 1 and t < 1.0:
 					rad *= app._ease_back(t)
@@ -171,7 +188,7 @@ func _draw_gobblet() -> void:
 					app.draw_circle(cc + Vector2(-rad * 0.3, -rad * 0.36), rad * 0.2, Color(1, 1, 1, 0.4))
 	for s in 3:
 		var r := Rect2(app.VIEW_W - 16 - 160 - s * 170, 640, 160, 92)
-		var n: int = gob_hand[0][s]
+		var n: int = gob_hand[me - 1][s]
 		var sel: bool = (gob_sel_size == s + 1)
 		var can: bool = _gob_my_turn() and n > 0
 		app._panel(r, app.CARD_H if sel else app.CARD, 20, app.ACCENT if sel else app.LINE_STRONG, 2.5 if sel else 1.0, 8, 3)

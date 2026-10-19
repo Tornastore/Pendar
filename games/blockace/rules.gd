@@ -116,16 +116,31 @@ func _blk_cpu() -> void:
 					return
 	blk_turn = 0
 
+func _blk_me() -> int:
+	return app._my_seat()
+
+func _blk_apply_net(px: int, py: int, sel: int, rot: int, player: int) -> void:
+	if blk_game_over or blk_turn != player:
+		return
+	var cells: Array = _blk_cells(sel, rot)
+	if _blk_can_place(px, py, cells, player):
+		_blk_place(px, py, cells, player)
+	blk_prev = Vector2i(-1, -1)
+
 func _blk_confirm() -> void:
-	if blk_game_over or blk_turn != 0 or blk_prev.x < 0:
+	var me: int = _blk_me()
+	if blk_game_over or blk_turn != me or blk_prev.x < 0:
 		return
 	var cells: Array = _blk_cells(blk_sel, blk_rot)
-	if _blk_can_place(blk_prev.x, blk_prev.y, cells, 0):
-		_blk_place(blk_prev.x, blk_prev.y, cells, 0)
-		blk_prev = Vector2i(-1, -1)
+	if _blk_can_place(blk_prev.x, blk_prev.y, cells, me):
+		if app._net_on():
+			app.rpc("_rpc_blk_place", blk_prev.x, blk_prev.y, blk_sel, blk_rot, me)
+		else:
+			_blk_place(blk_prev.x, blk_prev.y, cells, me)
+			blk_prev = Vector2i(-1, -1)
 
 func _blk_tap(p: Vector2) -> void:
-	if blk_game_over or blk_turn != 0:
+	if blk_game_over or blk_turn != _blk_me():
 		return
 	var gx: int = int(floor((p.x - app.BLK_ORIGIN.x) / app.BLK_CELL))
 	var gy: int = int(floor((p.y - app.BLK_ORIGIN.y) / app.BLK_CELL))
@@ -147,8 +162,8 @@ func _btns_blockace() -> void:
 	for i in blk_pieces.size():
 		app._add_hit(Rect2(app.VIEW_W - 16 - 88 - i * 96, 650, 88, 76), _blk_select.bind(i), "blk_p%d" % i)
 	var valid: bool = false
-	if blk_prev.x >= 0 and blk_turn == 0 and not blk_game_over:
-		valid = _blk_can_place(blk_prev.x, blk_prev.y, _blk_cells(blk_sel, blk_rot), 0)
+	if blk_prev.x >= 0 and blk_turn == _blk_me() and not blk_game_over:
+		valid = _blk_can_place(blk_prev.x, blk_prev.y, _blk_cells(blk_sel, blk_rot), _blk_me())
 	app._add_btn(Rect2(app.VIEW_W - 16 - 150, 740, 150, 52), "چرخش", _blk_rotate, true, app.BLUE, "soft", "rot_cw", "blk_rot")
 	app._add_btn(Rect2(16, 740, 340, 52), "قراردادن", _blk_confirm, valid, app.GREEN, "solid", "check", "blk_ok")
 	app._last_btn().hint = "ابتدا روی صفحه ضربه بزنید تا پیش‌نمایش ببینید."
@@ -171,8 +186,9 @@ func _draw_blockace() -> void:
 	app._track_board("blk", flat)
 	var ca := Color(0.30, 0.82, 0.76)
 	var cb := Color(1.0, 0.62, 0.35)
-	var pa: Dictionary = app._pl("شما", ca, app._fa(c0), blk_turn == 0 and not blk_game_over, true, "خانه")
-	var pb: Dictionary = app._pl("حریف", cb, app._fa(c1), blk_turn == 1 and not blk_game_over, false, "خانه")
+	var me: int = _blk_me()
+	var pa: Dictionary = app._pl("شما", ca if me == 0 else cb, app._fa(c0 if me == 0 else c1), blk_turn == me and not blk_game_over, true, "خانه")
+	var pb: Dictionary = app._pl("حریف", cb if me == 0 else ca, app._fa(c1 if me == 0 else c0), blk_turn == 1 - me and not blk_game_over, false, "خانه")
 	if pa.active:
 		pa.sub = "نوبت شما"
 	app._draw_hud("بلاک‌آس", pa, pb)
@@ -189,9 +205,9 @@ func _draw_blockace() -> void:
 				var t: float = app._cell_t("blk", y * 10 + x)[0]
 				var rr: Rect2 = r if t >= 1.0 else r.grow(-(1.0 - app._ease_out(t)) * 10.0)
 				_draw_blk_cell(rr, ca if v == 1 else cb)
-	if blk_prev.x >= 0 and blk_turn == 0 and not blk_game_over:
+	if blk_prev.x >= 0 and blk_turn == me and not blk_game_over:
 		var cells: Array = _blk_cells(blk_sel, blk_rot)
-		var ok: bool = _blk_can_place(blk_prev.x, blk_prev.y, cells, 0)
+		var ok: bool = _blk_can_place(blk_prev.x, blk_prev.y, cells, me)
 		for oc in cells:
 			var px: int = blk_prev.x + oc.x
 			var py: int = blk_prev.y + oc.y
@@ -211,9 +227,9 @@ func _draw_blockace() -> void:
 		var us: float = 16.0
 		var org := Vector2(r2.get_center().x - (mxx + 1) * us * 0.5, r2.get_center().y - (myy + 1) * us * 0.5)
 		for oc in cells2:
-			_draw_blk_cell(Rect2(org + Vector2(oc.x, oc.y) * us, Vector2(us - 2, us - 2)), ca)
+			_draw_blk_cell(Rect2(org + Vector2(oc.x, oc.y) * us, Vector2(us - 2, us - 2)), ca if me == 0 else cb)
 	if not blk_game_over:
-		if blk_turn == 0:
+		if blk_turn == me:
 			app._hint("روی صفحه ضربه بزنید تا پیش‌نمایش ببینید" if blk_prev.x < 0 else "دوباره همان‌جا ضربه بزنید یا «قراردادن»", 620, app.TEXT_DIM)
 		else:
 			app._hint("حریف در حال بازی…", 620, app.TEXT_DIM)

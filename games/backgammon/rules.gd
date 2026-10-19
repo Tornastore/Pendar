@@ -72,13 +72,31 @@ func _bg_cpu() -> void:
 func _bg_pt_x(col: int) -> float:
 	return 40.0 + col * 36.0 + (24.0 if col >= 6 else 0.0)
 
+func _bg_me() -> int:
+	return app._my_seat()
+
 func _bg_step() -> void:
 	if bg_game_over or (app.vs_cpu and bg_turn == 1):
+		return
+	if app._net_on():
+		if bg_turn != _bg_me():
+			return
+		app.rpc("_rpc_bg_step", randi() % 6 + 1, randi() % 6 + 1)
+	else:
+		_bg_step_apply(0, 0)
+
+func _bg_step_apply(d1: int, d2: int) -> void:
+	if bg_game_over:
 		return
 	if bg_moves_left.size() == 0:
 		bg_turn = 1 - bg_turn
 		if app.vs_cpu and bg_turn == 1:
 			_bg_cpu()
+		elif d1 > 0:
+			bg_dice = [d1, d2]
+			bg_moves_left = [d1, d2]
+			if d1 == d2:
+				bg_moves_left = [d1, d1, d1, d1]
 		else:
 			_bg_roll()
 		return
@@ -118,13 +136,14 @@ func _bg_tap(p: Vector2) -> void:
 		_bg_step()
 
 func _btns_backgammon() -> void:
-	var mine: bool = bg_turn == 0 and not bg_game_over
+	var mine: bool = bg_turn == _bg_me() and not bg_game_over
 	var label: String = "پایان نوبت" if bg_moves_left.size() == 0 else "حرکت بعدی"
 	app._add_btn(Rect2(110, 714, app.VIEW_W - 220, 58), label, _bg_step, mine, app.GREEN if bg_moves_left.size() > 0 else app.ACCENT, "solid", "play" if bg_moves_left.size() > 0 else "check", "bg_step")
 
 func _draw_backgammon() -> void:
-	var pa: Dictionary = app._pl("شما", Color(0.9, 0.88, 0.8), app._fa(bg_off[0]), bg_turn == 0 and not bg_game_over, true, "خارج‌شده", 1)
-	var pb: Dictionary = app._pl("حریف", Color(0.15, 0.15, 0.2), app._fa(bg_off[1]), bg_turn == 1 and not bg_game_over, false, "خارج‌شده", 0)
+	var me: int = _bg_me()
+	var pa: Dictionary = app._pl("شما", Color(0.9, 0.88, 0.8) if me == 0 else Color(0.15, 0.15, 0.2), app._fa(bg_off[me]), bg_turn == me and not bg_game_over, true, "خارج‌شده", 1 if me == 0 else 0)
+	var pb: Dictionary = app._pl("حریف", Color(0.15, 0.15, 0.2) if me == 0 else Color(0.9, 0.88, 0.8), app._fa(bg_off[1 - me]), bg_turn == 1 - me and not bg_game_over, false, "خارج‌شده", 0 if me == 0 else 1)
 	if pa.active:
 		pa.sub = "نوبت شما"
 	app._draw_hud("تخته نرد", pa, pb)

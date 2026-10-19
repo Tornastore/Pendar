@@ -46,8 +46,19 @@ func _aba_cpu() -> void:
 						return
 	aba_turn = 1
 
+func _aba_me() -> int:
+	return app._my_seat() + 1
+
+func _aba_apply_move(from: Vector2i, to: Vector2i) -> void:
+	if aba_game_over or aba_board[from.y][from.x] != aba_turn or aba_board[to.y][to.x] != 0:
+		return
+	aba_board[to.y][to.x] = aba_turn
+	aba_board[from.y][from.x] = 0
+	aba_sel = Vector2i(-1, -1)
+	aba_turn = 3 - aba_turn
+
 func _aba_tap(p: Vector2) -> void:
-	if aba_game_over or aba_turn != 1:
+	if aba_game_over or aba_turn != _aba_me():
 		return
 	var gx: int = int(floor((p.x - app.ABA_ORIGIN.x) / app.ABA_CELL))
 	var gy: int = int(floor((p.y - app.ABA_ORIGIN.y) / app.ABA_CELL))
@@ -60,10 +71,11 @@ func _aba_tap(p: Vector2) -> void:
 		var dx: int = gx - aba_sel.x
 		var dy: int = gy - aba_sel.y
 		if absi(dx) + absi(dy) == 1 and aba_board[gy][gx] == 0:
-			aba_board[gy][gx] = aba_turn
-			aba_board[aba_sel.y][aba_sel.x] = 0
-			aba_sel = Vector2i(-1, -1)
-			aba_turn = 3 - aba_turn
+			if app._net_on():
+				app.rpc("_rpc_aba_move", aba_sel.x, aba_sel.y, gx, gy)
+				aba_sel = Vector2i(-1, -1)
+			else:
+				_aba_apply_move(aba_sel, Vector2i(gx, gy))
 		else:
 			aba_sel = Vector2i(-1, -1)
 
@@ -73,8 +85,9 @@ func _draw_abalone() -> void:
 		for x in 9:
 			flat.append(aba_board[y][x])
 	app._track_board("aba", flat)
-	var pa: Dictionary = app._pl("شما", Color(0.9, 0.9, 0.95), app._fa(aba_out[0]), aba_turn == 1 and not aba_game_over, true, "", 1)
-	var pb: Dictionary = app._pl("حریف", Color(0.15, 0.15, 0.2), app._fa(aba_out[1]), aba_turn == 2 and not aba_game_over, false, "", 0)
+	var me: int = _aba_me()
+	var pa: Dictionary = app._pl("شما", Color(0.9, 0.9, 0.95) if me == 1 else Color(0.15, 0.15, 0.2), app._fa(aba_out[me - 1]), aba_turn == me and not aba_game_over, true, "", 1 if me == 1 else 0)
+	var pb: Dictionary = app._pl("حریف", Color(0.15, 0.15, 0.2) if me == 1 else Color(0.9, 0.9, 0.95), app._fa(aba_out[2 - me]), aba_turn == 3 - me and not aba_game_over, false, "", 0 if me == 1 else 1)
 	app._draw_hud("ابلون (آزمایشی)", pa, pb)
 	var o: Vector2 = app.ABA_ORIGIN
 	var cs: float = app.ABA_CELL
@@ -98,5 +111,5 @@ func _draw_abalone() -> void:
 			var n: Vector2i = aba_sel + d
 			if n.x >= 0 and n.x < 9 and n.y >= 0 and n.y < 9 and aba_board[n.y][n.x] == 0:
 				app._hint_dot(Vector2(o.x + n.x * cs + cs * 0.5, o.y + n.y * cs + cs * 0.5), 7, app.ACCENT)
-	app._hint("مهره را انتخاب و به خانه کناری ببرید" if aba_turn == 1 else "حریف در حال بازی…", 668, app.TEXT_DIM)
+	app._hint("مهره را انتخاب و به خانه کناری ببرید" if aba_turn == me else "حریف در حال بازی…", 668, app.TEXT_DIM)
 	app._hint("نسخه آزمایشی: قانون هل‌دادن هنوز اضافه نشده", 708, Color(1.0, 0.8, 0.45))

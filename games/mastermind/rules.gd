@@ -10,6 +10,8 @@ var mm_turn_role: int = 0  # 0 maker shown as CPU sets, 1 guesser
 var mm_game_over: bool = false
 var mm_won: bool = false
 var mm_filled: Array = [false, false, false, false]
+var mm_turn: int = 0       # network duel: whose guess it is (seat 0/1)
+var mm_winner: int = -1    # network duel: seat that cracked the code, -1 none
 
 func reset_game() -> void:
 	_reset_mastermind()
@@ -46,12 +48,17 @@ func _reset_mastermind() -> void:
 	mm_slot = 0
 	mm_game_over = false
 	mm_won = false
+	mm_turn = 0
+	mm_winner = -1
+
+func _mm_my_turn() -> bool:
+	return (not app._net_on()) or mm_turn == app._my_seat()
 
 func _mm_slot_pos(i: int) -> Vector2:
 	return Vector2(app.VIEW_W * 0.5 + (1.5 - i) * 86.0, 640.0)
 
 func _mm_pick(c: int) -> void:
-	if mm_game_over:
+	if mm_game_over or not _mm_my_turn():
 		return
 	mm_cur[mm_slot] = c
 	mm_filled[mm_slot] = true
@@ -79,7 +86,7 @@ func _mm_tap(_p: Vector2) -> void:
 	pass
 
 func _btns_mastermind() -> void:
-	if mm_game_over:
+	if mm_game_over or not _mm_my_turn():
 		return
 	for i in 4:
 		var c: Vector2 = _mm_slot_pos(i)
@@ -93,7 +100,14 @@ func _btns_mastermind() -> void:
 
 func _draw_mastermind() -> void:
 	var used: int = mm_guesses.size()
-	app._draw_hud("فکر بکر", app._pl("تلاش‌ها", app.ACCENT, "%s/%s" % [app._fa(used), app._fa(10)], true, true, "حداکثر ۱۰ تلاش"))
+	var net: bool = app._net_on()
+	var me: int = app._my_seat()
+	if net:
+		var na: Dictionary = app._pl("شما", app.BLUE, app._fa(used), mm_turn == me and not mm_game_over, true, "تلاش کل")
+		var nb: Dictionary = app._pl("حریف", app.PINK, app._fa(10 - used), mm_turn != me and not mm_game_over, false, "تلاش باقی")
+		app._draw_hud("فکر بکر · دو نفره", na, nb)
+	else:
+		app._draw_hud("فکر بکر", app._pl("تلاش‌ها", app.ACCENT, "%s/%s" % [app._fa(used), app._fa(10)], true, true, "حداکثر ۱۰ تلاش"))
 	var panel := Rect2(16, 150, app.VIEW_W - 32, 400)
 	app._panel(panel, app.CARD, 22, app.LINE, 1.0, 12, 4)
 	for gi in 10:
@@ -107,6 +121,9 @@ func _draw_mastermind() -> void:
 			if gi < used:
 				var g: Dictionary = mm_guesses[gi]
 				app._draw_marble(c, 13, app.MM_COLORS[g.g[i]])
+				if net and i == 0:
+					var mine_row: bool = int(g.get("p", 0)) == me
+					app.draw_circle(Vector2(panel.position.x + 14, y), 4, app.BLUE if mine_row else app.PINK)
 			elif active and mm_filled[i]:
 				app._draw_marble(c, 13, app.MM_COLORS[mm_cur[i]])
 			else:
@@ -124,7 +141,9 @@ func _draw_mastermind() -> void:
 				else:
 					app.draw_circle(pc, 5, Color(1, 1, 1, 0.08))
 	app._txt_r("سیاه: رنگ و جای درست · سفید: فقط رنگ درست", app.VIEW_W - 24, 574, 12, app.TEXT_DIM, false, 420)
-	if not mm_game_over:
+	if not mm_game_over and not _mm_my_turn():
+		app._hint("حریف در حال حدس زدن…", 640, app.TEXT_DIM)
+	if not mm_game_over and _mm_my_turn():
 		app._txt_c("حدس فعلی", Rect2(0, 586, app.VIEW_W, 22), 13, app.TEXT_DIM, true)
 		for i in 4:
 			var c2: Vector2 = _mm_slot_pos(i)
@@ -139,22 +158,32 @@ func _draw_mastermind() -> void:
 			app._draw_marble(Vector2(cx, 738), 24 if not pressed else 21, app.MM_COLORS[i])
 
 func _mm_submit() -> void:
-	if mm_game_over or not _mm_all_filled():
+	if mm_game_over or not _mm_all_filled() or not _mm_my_turn():
 		return
-	var g: Array = mm_cur.duplicate()
+	if app._net_on():
+		app.rpc("_rpc_mm_submit", mm_cur.duplicate(), app._my_seat())
+		return
+	_mm_apply(mm_cur.duplicate(), 0)
+
+func _mm_apply(g: Array, player: int) -> void:
+	if mm_game_over:
+		return
 	var ev: Array = _mm_evaluate(g)
-	mm_guesses.append({"g": g, "b": ev[0], "w": ev[1]})
+	mm_guesses.append({"g": g, "b": ev[0], "w": ev[1], "p": player})
 	if ev[0] == 4:
 		mm_game_over = true
-		mm_won = true
+		mm_winner = player
+		mm_won = (player == app._my_seat())
 		app.state = State.RESULT
 		app._build_result_buttons()
 	elif mm_guesses.size() >= 10:
 		mm_game_over = true
 		mm_won = false
+		mm_winner = -1
 		app.state = State.RESULT
 		app._build_result_buttons()
 	else:
+		mm_turn = 1 - player
 		mm_cur = [0, 0, 0, 0]
 		mm_filled = [false, false, false, false]
 		mm_slot = 0

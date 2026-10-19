@@ -734,6 +734,8 @@ func _start_host() -> void:
 	vs_cpu = false
 	is_host = true
 	_cleanup_network()
+	if selected_game == "quoridor":
+		max_players_for_game = 2
 	peer = ENetMultiplayerPeer.new()
 	var err := peer.create_server(PORT, max_players_for_game)
 	if err != OK:
@@ -842,9 +844,18 @@ func _start_network_game() -> void:
 func _rpc_start_game(game_id: String, rng_seed: int = 0) -> void:
 	selected_game = game_id
 	vs_cpu = false
+	if game_id == "quoridor":
+		_game_modules["quoridor"].quo_player_count = 2
+		_game_modules["quoridor"].quo_local_multiplayer = false
 	if rng_seed != 0:
 		seed(rng_seed)  # یکسان‌سازی تصادفی برای پخش کارت/مهره
 	_start_game()
+
+func _my_seat() -> int:
+	return 0 if vs_cpu else local_seat
+
+func _net_on() -> bool:
+	return not vs_cpu and multiplayer.multiplayer_peer != null
 
 func _is_my_turn() -> bool:
 	if vs_cpu:
@@ -2051,6 +2062,7 @@ func _result_is_draw() -> bool:
 		"pasoor": return pas_winner < 0
 		"blockace": return blk_winner < 0
 		"quoridor": return quo_winner < 0
+		"mastermind": return not vs_cpu and int(_game_modules["mastermind"].mm_winner) < 0
 	return false
 
 func _player_won_current() -> bool:
@@ -2109,7 +2121,8 @@ func _apply_resign(seat: int) -> void:
 				pas_match_scores[0] = maxi(pas_match_scores[0], PAS_TARGET)
 		"mastermind":
 			mm_game_over = true
-			mm_won = false
+			mm_won = (not vs_cpu) and (1 - seat) == local_seat
+			_game_modules["mastermind"].mm_winner = 1 - seat
 		"gobblet":
 			gob_game_over = true
 			gob_winner = 2 - seat
@@ -2247,7 +2260,7 @@ func _ui_sig() -> String:
 			"quoridor": s += "|%d|%d" % [quo_mode, quo_turn]
 			"domino": s += "|%d|%d|%d|%d|%d|%d" % [dom_turn, dom_selected, dom_boneyard.size(), dom_hands[0].size(), dom_hands[1].size(), dom_chain.size()]
 			"pasoor": s += "|%d|%d|%d|%d" % [pas_turn, pas_selected, pas_table.size(), pas_hands[0].size() + pas_hands[1].size()]
-			"mastermind": s += "|%d|%s" % [mm_slot, str(mm_filled)]
+			"mastermind": s += "|%d|%s|%d|%d" % [mm_slot, str(mm_filled), int(_game_modules["mastermind"].mm_turn), mm_guesses.size()]
 			"gobblet": s += "|%d|%d" % [gob_sel_size, gob_turn]
 			"backgammon": s += "|%d|%d" % [bg_turn, bg_moves_left.size()]
 			"blockace": s += "|%d|%d|%d|%d|%d" % [blk_sel, blk_rot, blk_turn, blk_prev.x, blk_prev.y]
@@ -2282,7 +2295,7 @@ func _cell_t(key: String, idx: int, dur: float = 0.4) -> Array:
 # ======================================================================
 #  SCREENS — buttons builder + drawing for every non-game screen
 # ======================================================================
-const NET_GAMES := ["othello", "othello12", "pentago", "chess", "domino", "pasoor"]
+const NET_GAMES := ["othello", "othello12", "pentago", "chess", "domino", "pasoor", "quoridor", "hokm", "backgammon", "gobblet", "mastermind", "abalone", "blockace"]
 const TILE_W := 248.0
 const TILE_H := 176.0
 const TILE_GAP := 12.0
@@ -2667,6 +2680,11 @@ func _pick_online_game(id: String) -> void:
 	online_game = id
 	_rebuild_buttons()
 
+func _online_extra() -> float:
+	var rows: int = int(ceil(float(NET_GAMES.size()) / 3.0))
+	var end_y: float = 156.0 + (rows - 1) * 44.0 + 38.0
+	return maxf(0.0, end_y - 254.0)
+
 func _btns_online() -> void:
 	_scroll_top = 76.0
 	_scroll_bottom = 868.0
@@ -2677,21 +2695,23 @@ func _btns_online() -> void:
 		var row: int = int(i / 3)
 		var w: float = 156.0
 		var x: float = VIEW_W - 16.0 - w - col * (w + 10.0)
-		var y: float = 156.0 + row * 54.0
+		var y: float = 156.0 + row * 44.0
 		var nm: String = str(_game_info(id).name)
-		_add_btn(Rect2(x, y, w, 44), nm, _pick_online_game.bind(id), true, _game_info(id).icon_col, "seg_on" if id == online_game else "ghost", "", "og_" + id)
+		_add_btn(Rect2(x, y, w, 38), nm, _pick_online_game.bind(id), true, _game_info(id).icon_col, "seg_on" if id == online_game else "ghost", "", "og_" + id)
 		i += 1
-	_add_btn(Rect2(24, 292, 492, 84), "ساخت اتاق", _create_online_room, true, GREEN, "option", "plus", "o_create", "کد اتاق ۶ رقمی می‌گیرید و میزبان می‌شوید")
-	_add_btn(Rect2(24, 390, 492, 84), "ورود با IP میزبان", _join_online_room_ui, true, BLUE, "option", "keypad", "o_join", "IP را با صفحه‌کلید وارد کنید")
-	_add_btn(Rect2(24, 488, 492, 84), "جستجوی سریع هم‌بازی", _quick_match_search, false, PINK, "option", "globe", "o_quick", "به‌زودی · نیازمند سرور آنلاین")
+	var ex: float = _online_extra()
+	_add_btn(Rect2(24, 292 + ex, 492, 84), "ساخت اتاق", _create_online_room, true, GREEN, "option", "plus", "o_create", "کد اتاق ۶ رقمی می‌گیرید و میزبان می‌شوید")
+	_add_btn(Rect2(24, 390 + ex, 492, 84), "ورود با IP میزبان", _join_online_room_ui, true, BLUE, "option", "keypad", "o_join", "IP را با صفحه‌کلید وارد کنید")
+	_add_btn(Rect2(24, 488 + ex, 492, 84), "جستجوی سریع هم‌بازی", _quick_match_search, false, PINK, "option", "globe", "o_quick", "به‌زودی · نیازمند سرور آنلاین")
 	_last_btn().hint = "جستجوی سریع به سرور آنلاین نیاز دارد و هنوز فعال نیست."
 	_btns_nav()
 
 func _draw_online() -> void:
 	_draw_topbar("بازی آنلاین", "اتاق بسازید یا به دوستتان بپیوندید")
 	_txt_r("۱. بازی را انتخاب کنید", VIEW_W - 24, 138, 15, TEXT_DIM, true, 300)
-	_txt_r("۲. روش اتصال", VIEW_W - 24, 280, 15, TEXT_DIM, true, 300)
-	var note := Rect2(24, 592, 492, 120)
+	var ex: float = _online_extra()
+	_txt_r("۲. روش اتصال", VIEW_W - 24, 280 + ex, 15, TEXT_DIM, true, 300)
+	var note := Rect2(24, 592 + ex, 492, 120)
 	_panel(note, Color(0.38, 0.62, 1.0, 0.10), 18, Color(0.38, 0.62, 1.0, 0.35), 1.0)
 	_draw_icon("info", Vector2(note.end.x - 28, note.position.y + 30), 22, BLUE, 2.0)
 	_wrap("اتصال فعلی روی همان وای‌فای (یا با IP عمومی و پورت‌فوروارد) کار می‌کند.", note.position.x + 18, note.position.y + 34, note.size.x - 76, 14, TEXT, HORIZONTAL_ALIGNMENT_RIGHT)
@@ -2958,16 +2978,19 @@ func _result_info() -> Dictionary:
 				title = "این دست را بردید" if won else ("این دست مساوی شد" if _result_draw else "این دست را باختید")
 				sub = "مسابقه تا رسیدن به %s امتیاز ادامه دارد" % _fa(PAS_TARGET)
 		"hokm":
-			rows.append(["دست‌های شما", _fa(hokm_scores[0])])
-			rows.append(["دست‌های حریف", _fa(hokm_scores[1])])
+			rows.append(["دست‌های شما", _fa(hokm_scores[_my_seat()])])
+			rows.append(["دست‌های حریف", _fa(hokm_scores[1 - _my_seat()])])
 		"mastermind":
-			title = "کد را شکستید!" if mm_won else "کد شکسته نشد"
+			if vs_cpu:
+				title = "کد را شکستید!" if mm_won else "کد شکسته نشد"
+			elif _result_draw:
+				title = "کد شکسته نشد"
 			sub = "تعداد تلاش: " + _fa(mm_guesses.size())
 		"gobblet":
 			sub = "۴ مهره هم‌رنگ در یک خط"
 		"backgammon":
-			rows.append(["خارج‌شده شما", _fa(bg_off[0])])
-			rows.append(["خارج‌شده حریف", _fa(bg_off[1])])
+			rows.append(["خارج‌شده شما", _fa(bg_off[_my_seat()])])
+			rows.append(["خارج‌شده حریف", _fa(bg_off[1 - _my_seat()])])
 		"blockace":
 			var c0: int = 0
 			var c1: int = 0
@@ -2977,8 +3000,8 @@ func _result_info() -> Dictionary:
 						c0 += 1
 					elif v == 2:
 						c1 += 1
-			rows.append(["خانه‌های شما", _fa(c0)])
-			rows.append(["خانه‌های حریف", _fa(c1)])
+			rows.append(["خانه‌های شما", _fa(c1 if _my_seat() == 1 else c0)])
+			rows.append(["خانه‌های حریف", _fa(c0 if _my_seat() == 1 else c1)])
 	return {"title": title, "sub": sub, "rows": rows}
 
 func _btns_result() -> void:
@@ -3708,6 +3731,42 @@ func _rpc_dom_pass(p: int) -> void:
 
 func _btns_domino() -> void:
 	_game_modules["domino"]._btns_domino()
+
+# ---------- network moves for the newer 2-player games ----------
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_gob_place(x: int, y: int, size: int, player: int) -> void:
+	if selected_game == "gobblet" and state == State.PLAYING:
+		_game_modules["gobblet"]._gob_place(x, y, size, player)
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_aba_move(fx: int, fy: int, tx: int, ty: int) -> void:
+	if selected_game == "abalone" and state == State.PLAYING:
+		_game_modules["abalone"]._aba_apply_move(Vector2i(fx, fy), Vector2i(tx, ty))
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_blk_place(px: int, py: int, sel: int, rot: int, player: int) -> void:
+	if selected_game == "blockace" and state == State.PLAYING:
+		_game_modules["blockace"]._blk_apply_net(px, py, sel, rot, player)
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_bg_step(d1: int, d2: int) -> void:
+	if selected_game == "backgammon" and state == State.PLAYING:
+		_game_modules["backgammon"]._bg_step_apply(d1, d2)
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_hokm_play(p: int, idx: int) -> void:
+	if selected_game == "hokm" and state == State.PLAYING:
+		_game_modules["hokm"]._hokm_play(p, idx)
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_mm_submit(g: Array, player: int) -> void:
+	if selected_game == "mastermind" and state == State.PLAYING:
+		_game_modules["mastermind"]._mm_apply(g, player)
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_quo_action(kind: int, x: int, y: int, vertical: bool) -> void:
+	if selected_game == "quoridor" and state == State.PLAYING:
+		_game_modules["quoridor"]._quo_net_apply(kind, x, y, vertical)
 
 func _draw_domino() -> void:
 	_game_modules["domino"]._draw_domino()

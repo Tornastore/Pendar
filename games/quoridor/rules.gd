@@ -275,6 +275,23 @@ func _quo_edge_at(p: Vector2) -> Dictionary:
 			return candidate
 	return {}
 
+func _quo_net_apply(kind: int, x: int, y: int, vertical: bool) -> void:
+	if quo_game_over:
+		return
+	if kind == 0:
+		var target := Vector2i(x, y)
+		if target in _quo_legal_moves(quo_turn):
+			quo_mode = 0
+			_quo_apply_move(quo_turn, target)
+	else:
+		if quo_walls_left[quo_turn] <= 0:
+			return
+		if _quo_place_wall(x, y, vertical):
+			var completed_player: int = quo_turn
+			quo_walls_left[completed_player] -= 1
+			quo_mode = 0
+			_quo_advance_turn(completed_player)
+
 func _quo_tap(p: Vector2) -> void:
 	if quo_game_over or not _quo_my_turn():
 		return
@@ -284,7 +301,10 @@ func _quo_tap(p: Vector2) -> void:
 			int(floor((p.y - app.QUO_ORIGIN.y) / app.QUO_CELL))
 		)
 		if target in _quo_legal_moves(quo_turn):
-			_quo_apply_move(quo_turn, target)
+			if app._net_on():
+				app.rpc("_rpc_quo_action", 0, target.x, target.y, false)
+			else:
+				_quo_apply_move(quo_turn, target)
 	else:
 		if quo_walls_left[quo_turn] <= 0:
 			app._show_toast("دیوار باقی نمانده است.")
@@ -292,7 +312,12 @@ func _quo_tap(p: Vector2) -> void:
 		var edge: Dictionary = _quo_edge_at(p)
 		if edge.is_empty():
 			return
-		if _quo_place_wall(int(edge.x), int(edge.y), bool(edge.v)):
+		if app._net_on():
+			if _quo_wall_placement_legal(int(edge.x), int(edge.y), bool(edge.v)):
+				app.rpc("_rpc_quo_action", 1, int(edge.x), int(edge.y), bool(edge.v))
+			else:
+				app._show_toast("دیوار غیرمجاز است: هم‌پوشانی، تقاطع یا بستن مسیر بازیکن.")
+		elif _quo_place_wall(int(edge.x), int(edge.y), bool(edge.v)):
 			var completed_player: int = quo_turn
 			quo_walls_left[completed_player] -= 1
 			_quo_advance_turn(completed_player)
