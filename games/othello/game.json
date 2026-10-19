@@ -1,0 +1,11 @@
+{
+  "id": "othello",
+  "name": "اتلو",
+  "category": "strategy",
+  "ai_module": "ai.gd",
+  "difficulty_levels": 6,
+  "shared_module_for": [
+    "othello",
+    "othello12"
+  ]
+}
