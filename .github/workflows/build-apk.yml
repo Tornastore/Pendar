@@ -44,6 +44,7 @@ jobs:
           export/android/debug_keystore_pass = "android"
           EOT
           sed -i 's/^          //' ~/.config/godot/editor_settings-4.tres
+          cp ~/.config/godot/editor_settings-4.tres ~/.config/godot/editor_settings-4.3.tres
 
       - name: Import project
         run: godot --headless --verbose --import || true
