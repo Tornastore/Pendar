@@ -22,9 +22,11 @@ jobs:
           mkdir -v -p ~/.local/share/godot/export_templates/
           mkdir -v -p ~/.config/godot/
           mv /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
-          keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android \
-            -keystore /root/debug.keystore -storepass android \
-            -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12
+          if [ ! -f /root/debug.keystore ]; then
+            keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android \
+              -keystore /root/debug.keystore -storepass android \
+              -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12
+          fi
           JAVA_HOME_DIR=$(dirname $(dirname $(readlink -f $(which javac))))
           cat > ~/.config/godot/editor_settings-4.tres <<EOT
           [gd_resource type="EditorSettings" format=3]
