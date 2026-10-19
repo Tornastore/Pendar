@@ -17,6 +17,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install Android SDK components
+        run: |
+          SDK=/usr/lib/android-sdk
+          mkdir -p "$SDK/cmdline-tools"
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/cmdtools.zip
+          rm -rf /tmp/cmdtools && unzip -q /tmp/cmdtools.zip -d /tmp/cmdtools
+          rm -rf "$SDK/cmdline-tools/latest"
+          mv /tmp/cmdtools/cmdline-tools "$SDK/cmdline-tools/latest"
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK" --licenses > /dev/null || true
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK" "platform-tools" "build-tools;34.0.0" "platforms;android-34"
+          ls "$SDK" "$SDK/build-tools" "$SDK/platforms" "$SDK/cmdline-tools"
+
       - name: Setup Godot templates and Android settings
         run: |
           mkdir -v -p ~/.local/share/godot/export_templates/
