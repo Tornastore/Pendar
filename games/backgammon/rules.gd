@@ -1,8 +1,11 @@
 extends "res://core/game_module.gd"
 ## Rule engine and authoritative state for backgammon.
 
+const BackgammonAIScript = preload("res://games/backgammon/ai.gd")
+
 # ---------- Game-owned state ----------
-var bg_points: Array = []  # 24 points, each list of 1/-1 checkers
+var bg_difficulty: int = 3
+var bg_points: Array = []  # 24 points, signed checker counts
 var bg_bar: Array = [0, 0]
 var bg_off: Array = [0, 0]
 var bg_dice: Array = [0, 0]
@@ -46,28 +49,57 @@ func _bg_roll() -> void:
 		bg_moves_left = [bg_dice[0], bg_dice[0], bg_dice[0], bg_dice[0]]
 
 func _bg_cpu() -> void:
+	if bg_game_over:
+		return
 	_bg_roll()
-	for _k in 8:
-		if bg_moves_left.size() == 0:
+	var ai = BackgammonAIScript.new()
+	var plan: Array = ai.choose_turn(self, bg_difficulty)
+	for step_value in plan:
+		if bg_game_over or bg_moves_left.is_empty():
 			break
-		var die: int = bg_moves_left[0]
-		var moved := false
-		for i in range(23, -1, -1):
-			if bg_points[i] < 0:
-				var dest: int = i - die
-				if dest >= 0 and bg_points[dest] <= 1:
-					if bg_points[dest] == 1:
-						bg_points[dest] = 0
-						bg_bar[0] += 1
-					bg_points[i] += 1
-					bg_points[dest] -= 1
-					bg_moves_left.remove_at(0)
-					moved = true
-					break
-		if not moved:
+		var step: Dictionary = step_value
+		var die: int = int(bg_moves_left[0])
+		if int(step.get("die", die)) != die:
+			# A stale or malformed plan must never make an unrelated move.
 			bg_moves_left.remove_at(0)
+			continue
+		var source: int = int(step.get("source", -1))
+		if source < 0:
+			bg_moves_left.remove_at(0)
+			continue
+		_bg_cpu_apply_source(source, die)
+	while not bg_moves_left.is_empty():
+		bg_moves_left.remove_at(0)
+	if bg_game_over:
+		return
 	bg_turn = 0
 	_bg_roll()
+
+func _bg_cpu_apply_source(source: int, die: int) -> void:
+	if source < 0 or source >= 24 or int(bg_points[source]) >= 0:
+		if not bg_moves_left.is_empty():
+			bg_moves_left.remove_at(0)
+		return
+	var dest: int = source - die
+	if dest >= 0 and int(bg_points[dest]) > 1:
+		if not bg_moves_left.is_empty():
+			bg_moves_left.remove_at(0)
+		return
+	bg_points[source] = int(bg_points[source]) + 1
+	if dest < 0:
+		bg_off[1] = int(bg_off[1]) + 1
+	else:
+		if int(bg_points[dest]) == 1:
+			bg_points[dest] = 0
+			bg_bar[0] = int(bg_bar[0]) + 1
+		bg_points[dest] = int(bg_points[dest]) - 1
+	if not bg_moves_left.is_empty():
+		bg_moves_left.remove_at(0)
+	if int(bg_off[1]) >= 15:
+		bg_game_over = true
+		bg_winner = 1
+		app.state = State.RESULT
+		app._build_result_buttons()
 
 func _bg_pt_x(col: int) -> float:
 	return 40.0 + col * 36.0 + (24.0 if col >= 6 else 0.0)

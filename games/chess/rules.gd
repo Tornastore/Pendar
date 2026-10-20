@@ -1,7 +1,10 @@
 extends "res://core/game_module.gd"
 ## Rule engine and authoritative state for chess.
 
+const ChessAIScript = preload("res://games/chess/ai.gd")
+
 # ---------- Game-owned state ----------
+var chess_difficulty: int = 3
 var chess_board: Array = []
 var chess_turn: int = 1           # 1 white, 2 black
 var chess_selected: Vector2i = Vector2i(-1, -1)
@@ -144,22 +147,16 @@ func _chess_make_move(from: Vector2i, to: Vector2i) -> void:
 	chess_turn = 3 - chess_turn
 
 func _chess_cpu_move() -> void:
-	var moves: Array = _chess_all_moves(2)
-	if moves.size() == 0:
+	if chess_game_over or chess_turn != 2:
+		return
+	var ai = ChessAIScript.new()
+	var best: Array = ai.choose_move(self, chess_difficulty)
+	if best.is_empty():
 		chess_game_over = true
 		chess_winner = 1
 		app.state = State.RESULT
 		app._build_result_buttons()
 		return
-	var best: Array = moves[0]
-	var best_score: int = -1
-	for m in moves:
-		var mv: Array = m
-		var target: int = chess_board[mv[1].y][mv[1].x]
-		var score: int = app.CHESS_VAL[target]
-		if score > best_score:
-			best_score = score
-			best = mv
 	_chess_make_move(best[0], best[1])
 
 func _chess_king_in_check(col: int) -> Vector2i:

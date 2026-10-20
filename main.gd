@@ -171,6 +171,11 @@ var gob_winner: int:
 		return _game_modules["gobblet"].gob_winner
 	set(value):
 		_game_modules["gobblet"].gob_winner = value
+var bg_difficulty: int:
+	get:
+		return _game_modules["backgammon"].bg_difficulty
+	set(value):
+		_game_modules["backgammon"].bg_difficulty = value
 var bg_points: Array:
 	get:
 		return _game_modules["backgammon"].bg_points
@@ -491,6 +496,11 @@ var dom_scores: Array:
 		return _game_modules["domino"].dom_scores
 	set(value):
 		_game_modules["domino"].dom_scores = value
+var chess_difficulty: int:
+	get:
+		return _game_modules["chess"].chess_difficulty
+	set(value):
+		_game_modules["chess"].chess_difficulty = value
 var chess_board: Array:
 	get:
 		return _game_modules["chess"].chess_board
@@ -2603,6 +2613,18 @@ func _btns_mode() -> void:
 			var color: Color = GREEN if active else ACCENT
 			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_othello_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "oth_difficulty_%d" % (i + 1))
 		option_y = 398.0
+	elif selected_game == "chess":
+		for i in range(6):
+			var active: bool = chess_difficulty == i + 1
+			var color: Color = GREEN if active else ACCENT
+			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_chess_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "chess_difficulty_%d" % (i + 1))
+		option_y = 398.0
+	elif selected_game == "backgammon":
+		for i in range(6):
+			var active: bool = bg_difficulty == i + 1
+			var color: Color = GREEN if active else ACCENT
+			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_backgammon_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "backgammon_difficulty_%d" % (i + 1))
+		option_y = 398.0
 	_add_btn(Rect2(24, option_y, 492, 84), "بازی با کامپیوتر", _start_vs_cpu, true, GREEN, "option", "cpu", "m_cpu", "تک‌نفره · بدون نیاز به اینترنت")
 	_add_btn(Rect2(24, option_y + 98, 492, 84), "میزبانی روی وای‌فای", _start_host, net, BLUE, "option", "wifi", "m_host", "شما میزبان باشید، دوستتان با IP وصل می‌شود")
 	_add_btn(Rect2(24, option_y + 196, 492, 84), "اتصال با IP", _go_ip_entry, net, ACCENT, "option", "keypad", "m_join", "به بازی میزبانِ دیگر بپیوندید")
@@ -2622,6 +2644,14 @@ func _set_quoridor_difficulty(level: int) -> void:
 
 func _set_othello_difficulty(level: int) -> void:
 	_game_modules["othello"].oth_difficulty = clampi(level, 1, 6)
+	_rebuild_buttons()
+
+func _set_chess_difficulty(level: int) -> void:
+	_game_modules["chess"].chess_difficulty = clampi(level, 1, 6)
+	_rebuild_buttons()
+
+func _set_backgammon_difficulty(level: int) -> void:
+	_game_modules["backgammon"].bg_difficulty = clampi(level, 1, 6)
 	_rebuild_buttons()
 
 func _draw_mode() -> void:

@@ -100,3 +100,35 @@ def test_web_export_preset_and_github_workflows_are_present() -> None:
     assert 'not web_build, GREEN' in main
     assert 'نسخه وب از اتصال شبکه‌ای ENet پشتیبانی نمی‌کند' in main
     assert 'ENet/UDP' in readme
+
+
+def test_chess_ai_has_six_difficulty_levels_and_alpha_beta_search() -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    ai = (project_root / "games" / "chess" / "ai.gd").read_text(encoding="utf-8")
+    rules = (project_root / "games" / "chess" / "rules.gd").read_text(encoding="utf-8")
+    main = (project_root / "main.gd").read_text(encoding="utf-8")
+    assert "func choose_move(game, difficulty: int) -> Array" in ai
+    assert "var depths: Array[int] = [0, 0, 1, 2, 3, 4]" in ai
+    assert "func _search(" in ai
+    assert "func _evaluate(" in ai
+    assert "ChessAIScript = preload(\"res://games/chess/ai.gd\")" in rules
+    assert "ai.choose_move(self, chess_difficulty)" in rules
+    assert 'elif selected_game == "chess":' in main
+    assert "_set_chess_difficulty.bind(i + 1)" in main
+    assert '"chess_difficulty_%d"' in main
+
+
+def test_backgammon_ai_has_six_levels_and_turn_sequence_search() -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    ai = (project_root / "games" / "backgammon" / "ai.gd").read_text(encoding="utf-8")
+    rules = (project_root / "games" / "backgammon" / "rules.gd").read_text(encoding="utf-8")
+    main = (project_root / "main.gd").read_text(encoding="utf-8")
+    assert "func choose_turn(game, difficulty: int) -> Array" in ai
+    assert "func _search_plan(" in ai
+    assert "func _evaluate(game, level: int) -> float" in ai
+    assert "func _cpu_can_hit(" in ai and "func _human_can_hit(" in ai
+    assert "BackgammonAIScript = preload(\"res://games/backgammon/ai.gd\")" in rules
+    assert "ai.choose_turn(self, bg_difficulty)" in rules
+    assert 'elif selected_game == "backgammon":' in main
+    assert "_set_backgammon_difficulty.bind(i + 1)" in main
+    assert '"backgammon_difficulty_%d"' in main
