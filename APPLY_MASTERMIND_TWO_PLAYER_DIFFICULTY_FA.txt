@@ -1,0 +1,19 @@
+اصلاحات فکر بکر
+================
+
+۱) درجه سختی ۱ تا ۶ اضافه شد. طول کد برای سطح‌های ۱، ۲، ۳، ۴، ۵ و ۶ به‌ترتیب ۴، ۵، ۶، ۷، ۸ و ۹ مهره است. بازیکن همچنان ۱۰ تلاش دارد؛ تکرار رنگ مجاز است.
+۲) حالت «دو نفره روی یک دستگاه» اضافه شد: بازیکن اول کد را ثبت می‌کند، کد نمایش داده نمی‌شود و صفحه برای واگذاری دستگاه مکث می‌کند؛ سپس بازیکن دوم حدس می‌زند. اگر در ۱۰ تلاش کد را نشکند، بازیکن اول برنده می‌شود.
+۳) نشانگرهای سیاه و سفید هر حدس از چیدمان ۲×۲ به یک ردیف افقی منتقل شدند تا هر ردیف بازخورد با ردیف حدس متناظر باشد.
+۴) درجه سختی بازیکنان شبکه‌ای برای شروع دوباره نیز همراه آغاز بازی همگام می‌شود.
+
+برای بررسی ساختار پروژه:
+  python tools/verify_structure.py
+  python tests/test_mastermind_features.py
+
+برای اعمال در مخزن محلی، فایل‌های پروژه را جایگزین کنید (پوشه .git را نگه دارید) و اجرا کنید:
+  git add main.gd games/mastermind/rules.gd games/mastermind/README.md tests/test_mastermind_features.py APPLY_MASTERMIND_TWO_PLAYER_DIFFICULTY_FA.txt
+  git commit -m "Add Mastermind hot-seat mode and difficulty levels"
+  git push origin main
+
+سپس در GitHub Actions اجرای Deploy Web App to GitHub Pages را بررسی کنید.
+توجه: تست ساختاری Python جایگزین اجرای واقعی Godot نیست.

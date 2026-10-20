@@ -131,6 +131,26 @@ var mm_turn_role: int:
 		return _game_modules["mastermind"].mm_turn_role
 	set(value):
 		_game_modules["mastermind"].mm_turn_role = value
+var mm_difficulty: int:
+	get:
+		return _game_modules["mastermind"].mm_difficulty
+	set(value):
+		_game_modules["mastermind"].mm_difficulty = value
+var mm_code_len: int:
+	get:
+		return _game_modules["mastermind"].mm_code_len
+	set(value):
+		_game_modules["mastermind"].mm_code_len = value
+var mm_local_two_player: bool:
+	get:
+		return _game_modules["mastermind"].mm_local_two_player
+	set(value):
+		_game_modules["mastermind"].mm_local_two_player = value
+var mm_phase: int:
+	get:
+		return _game_modules["mastermind"].mm_phase
+	set(value):
+		_game_modules["mastermind"].mm_phase = value
 var mm_game_over: bool:
 	get:
 		return _game_modules["mastermind"].mm_game_over
@@ -725,9 +745,21 @@ func _start_vs_cpu() -> void:
 	is_host = true
 	local_seat = 0
 	local_player_id = 1
+	if selected_game == "mastermind":
+		mm_local_two_player = false
 	if selected_game == "quoridor":
 		_game_modules["quoridor"].quo_player_count = 2
 		_game_modules["quoridor"].quo_local_multiplayer = false
+	_start_game()
+
+func _start_mastermind_local_two_player() -> void:
+	# Local hot-seat: player 1 creates a hidden code; player 2 gets ten attempts.
+	_cleanup_network()
+	vs_cpu = false
+	is_host = true
+	local_seat = 0
+	local_player_id = 1
+	mm_local_two_player = true
 	_start_game()
 
 func _start_quoridor_local_four_player() -> void:
@@ -754,6 +786,8 @@ func _start_host() -> void:
 	if OS.has_feature("web"):
 		_show_toast("نسخه وب از اتصال شبکه‌ای ENet پشتیبانی نمی‌کند؛ بازی محلی را انتخاب کنید.")
 		return
+	if selected_game == "mastermind":
+		mm_local_two_player = false
 	vs_cpu = false
 	is_host = true
 	_cleanup_network()
@@ -780,6 +814,8 @@ func _start_host() -> void:
 		_show_toast("میزبان آماده — پورت " + str(PORT))
 
 func _go_ip_entry() -> void:
+	if selected_game == "mastermind":
+		mm_local_two_player = false
 	vs_cpu = false
 	is_host = false
 	join_ip = ""
@@ -863,13 +899,19 @@ func _start_network_game() -> void:
 		_show_toast("حداقل ۲ بازیکن لازم است")
 		return
 	var rng_seed: int = randi()
-	rpc("_rpc_start_game", selected_game, rng_seed)
+	var selected_mm_level: int = mm_difficulty if selected_game == "mastermind" else -1
+	rpc("_rpc_start_game", selected_game, rng_seed, selected_mm_level)
 	# call_local will also run on host
 
 @rpc("authority", "call_local", "reliable")
-func _rpc_start_game(game_id: String, rng_seed: int = 0) -> void:
+func _rpc_start_game(game_id: String, rng_seed: int = 0, mastermind_level: int = -1) -> void:
 	selected_game = game_id
 	vs_cpu = false
+	if game_id == "mastermind":
+		mm_local_two_player = false
+		if mastermind_level >= 1:
+			mm_difficulty = clampi(mastermind_level, 1, 6)
+			mm_code_len = 3 + mm_difficulty
 	if game_id == "quoridor":
 		_game_modules["quoridor"].quo_player_count = 2
 		_game_modules["quoridor"].quo_local_multiplayer = false
@@ -2065,8 +2107,9 @@ func _build_result_buttons() -> void:
 		var won: bool = _player_won_current()
 		_result_delta = 0
 		var shared_device_four_player: bool = selected_game == "quoridor" and bool(_game_modules["quoridor"].quo_local_multiplayer)
-		# Do not award a single account a win/loss for a shared-device match between four people.
-		if not shared_device_four_player and not _result_draw and _result_counts():
+		var shared_device_two_player: bool = selected_game == "mastermind" and mm_local_two_player
+		# Shared-device matches are for fun; do not attribute both players' result to one account.
+		if not shared_device_four_player and not shared_device_two_player and not _result_draw and _result_counts():
 			_result_delta = scoring_service.WIN_PTS if won else scoring_service.LOSS_PTS
 			_record_match_result(won)
 		_result_t0 = _time
@@ -2101,7 +2144,12 @@ func _player_won_current() -> bool:
 		"quoridor": return quo_winner == seat
 		"domino": return dom_winner == seat
 		"pasoor": return pas_winner == seat
-		"mastermind": return mm_won
+		"mastermind":
+			if vs_cpu:
+				return mm_won
+			if mm_local_two_player:
+				return int(_game_modules["mastermind"].mm_winner) == 1
+			return int(_game_modules["mastermind"].mm_winner) == seat
 		"gobblet": return gob_winner == seat + 1
 		"hokm": return hokm_winner == seat
 		"backgammon": return bg_winner == seat
@@ -2227,7 +2275,8 @@ func _restart_current() -> void:
 	if not vs_cpu and multiplayer.multiplayer_peer != null:
 		if is_host:
 			var rng_seed: int = randi()
-			rpc("_rpc_start_game", selected_game, rng_seed)
+			var selected_mm_level: int = mm_difficulty if selected_game == "mastermind" else -1
+			rpc("_rpc_start_game", selected_game, rng_seed, selected_mm_level)
 	else:
 		_start_game()
 
@@ -2611,7 +2660,13 @@ func _btns_mode() -> void:
 	var difficulty_labels: Array[String] = ["خیلی آسان", "آسان", "متوسط", "سخت", "استاد", "استادتمام"]
 	_back_btn()
 	_add_btn(Rect2(16, 16, 44, 44), "", _open_rules, true, TEXT, "icon", "help", "help")
-	if selected_game == "quoridor":
+	if selected_game == "mastermind":
+		for i in range(6):
+			var active: bool = mm_difficulty == i + 1
+			var color: Color = GREEN if active else ACCENT
+			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_mastermind_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "mastermind_difficulty_%d" % (i + 1))
+		option_y = 398.0
+	elif selected_game == "quoridor":
 		var qmod = _game_modules["quoridor"]
 		for i in range(6):
 			var active: bool = int(qmod.quo_difficulty) == i + 1
@@ -2679,9 +2734,13 @@ func _btns_mode() -> void:
 			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_abalone_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "abalone_difficulty_%d" % (i + 1))
 		option_y = 398.0
 	_add_btn(Rect2(24, option_y, 492, 84), "بازی با کامپیوتر", _start_vs_cpu, true, GREEN, "option", "cpu", "m_cpu", "تک‌نفره · بدون نیاز به اینترنت")
-	_add_btn(Rect2(24, option_y + 98, 492, 84), "میزبانی روی وای‌فای", _start_host, net, BLUE, "option", "wifi", "m_host", "شما میزبان باشید، دوستتان با IP وصل می‌شود")
-	_add_btn(Rect2(24, option_y + 196, 492, 84), "اتصال با IP", _go_ip_entry, net, ACCENT, "option", "keypad", "m_join", "به بازی میزبانِ دیگر بپیوندید")
-	_add_btn(Rect2(24, option_y + 294, 492, 84), "بازی آنلاین", _open_online_for_game, net, PINK, "option", "globe", "m_online", "ساخت اتاق و دعوت دوست")
+	var network_y: float = option_y + 98.0
+	if selected_game == "mastermind":
+		_add_btn(Rect2(24, option_y + 98, 492, 84), "دو نفره روی یک دستگاه", _start_mastermind_local_two_player, true, BLUE, "option", "users", "m_mm_local2", "بازیکن اول کد مخفی را می‌سازد؛ بازیکن دوم حدس می‌زند")
+		network_y += 98.0
+	_add_btn(Rect2(24, network_y, 492, 84), "میزبانی روی وای‌فای", _start_host, net, BLUE, "option", "wifi", "m_host", "شما میزبان باشید، دوستتان با IP وصل می‌شود")
+	_add_btn(Rect2(24, network_y + 98, 492, 84), "اتصال با IP", _go_ip_entry, net, ACCENT, "option", "keypad", "m_join", "به بازی میزبانِ دیگر بپیوندید")
+	_add_btn(Rect2(24, network_y + 196, 492, 84), "بازی آنلاین", _open_online_for_game, net, PINK, "option", "globe", "m_online", "ساخت اتاق و دعوت دوست")
 	if web_build:
 		for i in range(buttons.size() - 3, buttons.size()):
 			buttons[i].hint = "اتصال شبکه‌ای ENet در نسخه وب پشتیبانی نمی‌شود؛ بازی با کامپیوتر قابل اجراست."
@@ -2734,6 +2793,11 @@ func _set_abalone_difficulty(level: int) -> void:
 	_game_modules["abalone"].aba_difficulty = clampi(level, 1, 6)
 	_rebuild_buttons()
 
+func _set_mastermind_difficulty(level: int) -> void:
+	mm_difficulty = clampi(level, 1, 6)
+	mm_code_len = 3 + mm_difficulty
+	_rebuild_buttons()
+
 func _draw_mode() -> void:
 	var info: Dictionary = _game_info(selected_game)
 	var col: Color = info.get("icon_col", ACCENT)
@@ -2769,9 +2833,11 @@ func _draw_mode() -> void:
 	if selected_game == "quoridor":
 		_txt_r("سطح هوش کامپیوتر را انتخاب کنید", VIEW_W - 28, 333, 13, TEXT_DIM, true, 310)
 		_txt_r("روش بازی", VIEW_W - 28, 389, 13, TEXT_DIM, true, 180)
-	elif selected_game in ["othello", "othello12", "pentago", "domino", "gobblet", "abalone"]:
-		_txt_r("سطح هوش کامپیوتر را انتخاب کنید", VIEW_W - 28, 333, 13, TEXT_DIM, true, 310)
-		_txt_r("روش بازی", VIEW_W - 28, 389, 13, TEXT_DIM, true, 180)
+	elif selected_game in ["othello", "othello12", "pentago", "domino", "gobblet", "abalone", "mastermind"]:
+		var difficulty_prompt: String = "درجه سختی و تعداد مهره‌ها را انتخاب کنید" if selected_game == "mastermind" else "سطح هوش کامپیوتر را انتخاب کنید"
+		_txt_r(difficulty_prompt, VIEW_W - 28, 333, 13, TEXT_DIM, true, 310)
+		var mode_prompt: String = "طول کد: %s مهره" % _fa(3 + mm_difficulty) if selected_game == "mastermind" else "روش بازی"
+		_txt_r(mode_prompt, VIEW_W - 28, 389, 13, TEXT_DIM, true, 180)
 	else:
 		_txt_r("روش بازی را انتخاب کنید", VIEW_W - 28, 336, 15, TEXT_DIM, true, 300)
 	_txt_c(nm, Rect2(70, 10, VIEW_W - 140, 40), 22, TEXT, true)
@@ -3126,11 +3192,13 @@ func _result_info() -> Dictionary:
 			rows.append(["دست‌های شما", _fa(hokm_scores[_my_seat()])])
 			rows.append(["دست‌های حریف", _fa(hokm_scores[1 - _my_seat()])])
 		"mastermind":
-			if vs_cpu:
+			if mm_local_two_player:
+				title = "بازیکن دوم کد را شکست!" if int(_game_modules["mastermind"].mm_winner) == 1 else "بازیکن اول برنده شد!"
+			elif vs_cpu:
 				title = "کد را شکستید!" if mm_won else "کد شکسته نشد"
 			elif _result_draw:
 				title = "کد شکسته نشد"
-			sub = "تعداد تلاش: " + _fa(mm_guesses.size())
+			sub = "تعداد تلاش: %s از ۱۰ · طول کد: %s" % [_fa(mm_guesses.size()), _fa(mm_code_len)]
 		"gobblet":
 			sub = "۴ مهره هم‌رنگ در یک خط"
 		"backgammon":
@@ -3214,12 +3282,13 @@ func _draw_result() -> void:
 	if selected_game == "mastermind":
 		var sy: float = maxf(y, 440.0)
 		_txt_c("کد مخفی", Rect2(0, sy, VIEW_W, 24), 14, TEXT_DIM)
-		for i in 4:
+		var result_gap: float = minf(56.0, float(VIEW_W - 56) / float(maxi(1, mm_code_len)))
+		for i in range(mm_code_len):
 			var mc: Color = MM_COLORS[mm_secret[i]]
-			var sc := Vector2(VIEW_W * 0.5 + (1.5 - i) * 56.0, sy + 54)
-			draw_circle(sc, 22, mc.darkened(0.3))
-			draw_circle(sc + Vector2(0, -1), 19, mc)
-			draw_circle(sc + Vector2(-6, -8), 5, Color(1, 1, 1, 0.35))
+			var sc := Vector2(VIEW_W * 0.5 + (float(mm_code_len - 1) * 0.5 - float(i)) * result_gap, sy + 54)
+			draw_circle(sc, 22 if mm_code_len <= 7 else 17, mc.darkened(0.3))
+			draw_circle(sc + Vector2(0, -1), 19 if mm_code_len <= 7 else 14, mc)
+			draw_circle(sc + Vector2(-6, -8), 5 if mm_code_len <= 7 else 4, Color(1, 1, 1, 0.35))
 		y = sy + 96.0
 	# delta chip
 	var dtxt: String
