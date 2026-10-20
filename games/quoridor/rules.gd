@@ -16,6 +16,7 @@ var quo_mode: int = 0           # 0 move pawn, 1 place wall
 var quo_game_over: bool = false
 var quo_winner: int = -1
 var quo_walls: Dictionary = {}  # key "h3,4" or "v2,5"; each wall covers two edges
+var quo_cpu_position_history: Array[Vector2i] = [] # Recent real CPU pawn positions, used to prevent cycles.
 
 func reset_game() -> void:
 	_reset_quoridor()
@@ -33,6 +34,9 @@ func _reset_quoridor() -> void:
 	quo_game_over = false
 	quo_winner = -1
 	quo_walls.clear()
+	quo_cpu_position_history.clear()
+	if quo_player_count == 2:
+		quo_cpu_position_history.append(quo_pawns[1])
 
 func _quo_in_bounds(pos: Vector2i) -> bool:
 	return pos.x >= 0 and pos.x <= 8 and pos.y >= 0 and pos.y <= 8
@@ -249,6 +253,10 @@ func _quo_cpu() -> void:
 	if step == quo_pawns[1]:
 		quo_turn = 0
 		return
+	# Store only actual CPU moves, never the temporary positions explored by minimax.
+	quo_cpu_position_history.append(step)
+	while quo_cpu_position_history.size() > 12:
+		quo_cpu_position_history.pop_front()
 	_quo_apply_move(1, step)
 
 func _quo_my_turn() -> bool:

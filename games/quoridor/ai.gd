@@ -7,6 +7,9 @@ const DIRS: Array[Vector2i] = [
 const MASTER_SEARCH_DEPTH: int = 4 # CPU move plus up to three opponent/CPU replies.
 const MASTER_WALL_BRANCH: int = 2 # Keep search practical while retaining tactical wall choices.
 const WIN_SCORE: float = 100000.0
+const IMMEDIATE_REVERSAL_PENALTY: float = 175.0
+const RECENT_REVISIT_PENALTY: float = 42.0
+const HISTORY_LOOKBACK: int = 9
 
 func choose_action(game, difficulty: int) -> Dictionary:
 	var level: int = clampi(difficulty, 1, 6)
@@ -26,7 +29,7 @@ func choose_action(game, difficulty: int) -> Dictionary:
 		var forced_wall: Dictionary = _first_legal_wall(game, 1)
 		return forced_wall if not forced_wall.is_empty() else {"type": "pass"}
 
-	var best_move: Dictionary = _best_move(moves, cpu_distance, level)
+	var best_move: Dictionary = _best_move(game, moves, cpu_distance, level)
 	if level == 1 or game.quo_walls_left[1] <= 0:
 		return best_move
 	if level == 2 and human_distance > 3:
@@ -71,17 +74,50 @@ func _choose_master_grandmaster(game) -> Dictionary:
 		return forced_wall if not forced_wall.is_empty() else {"type": "pass"}
 	var best_action: Dictionary = actions[0]
 	var best_score: float = -INF
-	var alpha: float = -INF
+	var root_distance: int = _distance(game, 1, game.quo_pawns[1])
 	for action in actions:
 		var snapshot: Dictionary = _save_search_state(game)
 		_apply_search_action(game, 1, action)
-		var score: float = _minimax(game, 0, MASTER_SEARCH_DEPTH - 1, alpha, INF)
+		# Use a full window for every root action: the history penalty is applied
+		# after minimax, so sharing an alpha adjusted for another root action could
+		# prune a move whose anti-repetition bonus makes it the better choice.
+		var score: float = _minimax(game, 0, MASTER_SEARCH_DEPTH - 1, -INF, INF)
 		_restore_search_state(game, snapshot)
+		# The search evaluates a finite horizon and can tie strategically similar
+		# positions. Penalize repeated pawn positions at the root so the CPU
+		# cannot get trapped in a two-square ping-pong loop across real turns.
+		score += _master_root_preference(game, action, root_distance)
 		if score > best_score:
 			best_score = score
 			best_action = action
-		alpha = maxf(alpha, best_score)
 	return best_action
+
+func _master_root_preference(game, action: Dictionary, root_distance: int) -> float:
+	if str(action.get("type", "move")) != "move":
+		return float(action.get("order_score", 0.0)) * 0.01
+	var target: Vector2i = action.get("to", game.quo_pawns[1])
+	var target_distance: int = _distance(game, 1, target)
+	var progress: int = root_distance - target_distance
+	var preference: float = float(progress) * 12.0
+	preference -= _move_repetition_penalty(game, target)
+	return preference
+
+func _move_repetition_penalty(game, target: Vector2i) -> float:
+	var history: Array[Vector2i] = game.quo_cpu_position_history
+	if history.is_empty():
+		return 0.0
+	var penalty: float = 0.0
+	# A -> B -> A is the exact oscillation seen in the report. Do not forbid
+	# it absolutely (a newly placed wall can make it tactically necessary),
+	# but make another legal route preferable whenever scores are close.
+	if history.size() >= 2 and target == history[history.size() - 2]:
+		penalty += IMMEDIATE_REVERSAL_PENALTY
+	var first_recent: int = maxi(0, history.size() - HISTORY_LOOKBACK)
+	for index in range(first_recent, history.size() - 1):
+		if history[index] == target:
+			var age: int = (history.size() - 2) - index
+			penalty += RECENT_REVISIT_PENALTY + maxf(0.0, 4.0 - float(age)) * 6.0
+	return penalty
 
 func _minimax(game, player: int, depth: int, alpha: float, beta: float) -> float:
 	# Player 1 is the computer and maximizes the evaluation; player 0 minimizes it.
@@ -237,7 +273,7 @@ func _apply_search_action(game, player: int, action: Dictionary) -> void:
 		game.quo_walls[key] = true
 		game.quo_walls_left[player] = maxi(0, int(game.quo_walls_left[player]) - 1)
 
-func _best_move(moves: Array[Dictionary], current_distance: int, level: int) -> Dictionary:
+func _best_move(game, moves: Array[Dictionary], current_distance: int, level: int) -> Dictionary:
 	if level == 1:
 		var shortest: int = 999
 		for move in moves:
@@ -256,6 +292,9 @@ func _best_move(moves: Array[Dictionary], current_distance: int, level: int) -> 
 		var target: Vector2i = move.to
 		var centrality: float = -absf(float(target.x) - 4.0)
 		var quality: float = float(progress) * 100.0 + (centrality * float(level) * 0.25)
+		# Stronger profiles remember recent CPU squares; this stabilizes play
+		# even below grandmaster without making beginner play deterministic.
+		quality -= _move_repetition_penalty(game, target) * (float(level - 1) / 5.0)
 		if quality > best_quality + 0.01:
 			best_quality = quality
 			best.clear()

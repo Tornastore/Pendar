@@ -481,6 +481,11 @@ var quo_walls: Dictionary:
 		return _game_modules["quoridor"].quo_walls
 	set(value):
 		_game_modules["quoridor"].quo_walls = value
+var quo_cpu_position_history: Array[Vector2i]:
+	get:
+		return _game_modules["quoridor"].quo_cpu_position_history
+	set(value):
+		_game_modules["quoridor"].quo_cpu_position_history = value
 var quo_difficulty: int:
 	get:
 		return _game_modules["quoridor"].quo_difficulty

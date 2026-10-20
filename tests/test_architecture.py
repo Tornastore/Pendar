@@ -273,3 +273,24 @@ def test_gobblet_and_abalone_have_six_ai_difficulty_levels():
     assert "func _aba_simulate_move_for_ai(move: Dictionary, player: int) -> void:" in abalone
     assert "if level == 1:" in abalone and "if level >= 5:" in abalone
     assert "_aba_cpu_move_score(reply, 1)" in abalone
+
+
+def test_quoridor_master_ai_penalizes_repeated_cpu_pawn_positions() -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    ai = (project_root / "games" / "quoridor" / "ai.gd").read_text(encoding="utf-8")
+    rules = (project_root / "games" / "quoridor" / "rules.gd").read_text(encoding="utf-8")
+
+    # Real CPU positions are retained across turns and bounded to recent history.
+    assert "var quo_cpu_position_history: Array[Vector2i] = []" in rules
+    assert "quo_cpu_position_history.append(quo_pawns[1])" in rules
+    assert "quo_cpu_position_history.append(step)" in rules
+    assert "while quo_cpu_position_history.size() > 12:" in rules
+
+    # Root search and other non-random profiles penalize reversals/revisits.
+    assert "func _master_root_preference(" in ai
+    assert "func _move_repetition_penalty(" in ai
+    assert "IMMEDIATE_REVERSAL_PENALTY: float = 175.0" in ai
+    assert "RECENT_REVISIT_PENALTY: float = 42.0" in ai
+    assert "score += _master_root_preference(game, action, root_distance)" in ai
+    assert "quality -= _move_repetition_penalty(game, target)" in ai
+    assert "_minimax(game, 0, MASTER_SEARCH_DEPTH - 1, -INF, INF)" in ai
