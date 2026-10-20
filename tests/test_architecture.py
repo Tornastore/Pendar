@@ -248,3 +248,28 @@ def test_abalone_has_standard_hex_board_sumito_and_six_marble_win() -> None:
     top = [(q, -4) for q in range(0, 5)] + [(q, -3) for q in range(-1, 5)] + [(q, -2) for q in range(0, 3)]
     bottom = [(q, 4) for q in range(-4, 1)] + [(q, 3) for q in range(-4, 2)] + [(q, 2) for q in range(-2, 1)]
     assert len(top) == 14 and len(bottom) == 14
+
+
+def test_gobblet_and_abalone_have_six_ai_difficulty_levels():
+    project_root = Path(__file__).resolve().parents[1]
+    main = (project_root / "main.gd").read_text(encoding="utf-8")
+    gobblet = (project_root / "games" / "gobblet" / "rules.gd").read_text(encoding="utf-8")
+    abalone = (project_root / "games" / "abalone" / "rules.gd").read_text(encoding="utf-8")
+
+    for game_id, setter, field, rules in (
+        ("gobblet", "_set_gobblet_difficulty", "gob_difficulty", gobblet),
+        ("abalone", "_set_abalone_difficulty", "aba_difficulty", abalone),
+    ):
+        assert f'elif selected_game == "{game_id}":' in main
+        assert f'"{game_id}_difficulty_%d"' in main
+        assert f"{setter}.bind(i + 1)" in main
+        assert f'_game_modules["{game_id}"].{field} = clampi(level, 1, 6)' in main
+        assert f"var {field}: int = 3" in rules
+        assert (f"app._draw_ai_difficulty_chip({field})" in rules) or (f"app._draw_ai_difficulty_chip_at({field}" in rules)
+
+    assert "func _gob_generate_actions(player: int) -> Array:" in gobblet
+    assert "if level == 1:" in gobblet and "if level >= 5:" in gobblet
+    assert "strongest_reply" in gobblet and "_gob_action_score(reply, 1)" in gobblet
+    assert "func _aba_simulate_move_for_ai(move: Dictionary, player: int) -> void:" in abalone
+    assert "if level == 1:" in abalone and "if level >= 5:" in abalone
+    assert "_aba_cpu_move_score(reply, 1)" in abalone

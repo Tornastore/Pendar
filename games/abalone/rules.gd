@@ -14,6 +14,7 @@ var aba_selection: Array = []
 var aba_out: Array = [0, 0] # number of each player's marbles pushed off the board
 var aba_game_over: bool = false
 var aba_winner: int = 0
+var aba_difficulty: int = 3 # 1 random .. 6 opponent-reply search
 
 func reset_game() -> void:
 	_reset_abalone()
@@ -254,21 +255,56 @@ func _aba_apply_group_move(raw_cells: Array, dx: int, dy: int, player: int) -> b
 		aba_turn = opponent
 	return true
 
-func _aba_cpu_move_score(move: Dictionary) -> float:
-	var score: float = float(move.push) * 14.0 + float(move.out) * 120.0
+func _aba_cpu_move_score(move: Dictionary, player: int = 2) -> float:
+	var level: int = clampi(aba_difficulty, 1, 6)
+	var push_weights: Array[float] = [5.0, 8.0, 12.0, 16.0, 20.0, 24.0]
+	var out_weights: Array[float] = [80.0, 105.0, 130.0, 155.0, 180.0, 210.0]
+	var edge_weights: Array[float] = [0.35, 0.65, 1.0, 1.4, 1.8, 2.2]
+	var cohesion_weights: Array[float] = [0.35, 0.6, 0.95, 1.25, 1.6, 1.9]
+	var score: float = float(move.push) * push_weights[level - 1] + float(move.out) * out_weights[level - 1]
 	var direction := Vector2i(int(move.dx), int(move.dy))
-	for raw_cell in move.cells:
+	var moved_cells: Array = move.cells
+	for raw_cell in moved_cells:
 		var cell: Vector2i = raw_cell
 		var target: Vector2i = cell + direction
 		var margin: int = mini(4 - absi(target.x), mini(4 - absi(target.y), 4 - absi(target.x + target.y)))
-		score += float(margin) * 1.2
-		# Small preference for keeping friendly marbles in contact.
+		score += float(margin) * edge_weights[level - 1]
+		# Prefer cohesive groups, but avoid measuring the selected group's old positions as support.
 		var adjacent_friends: int = 0
 		for d in ABA_DIRECTIONS:
-			if _aba_value(target.x + d.x, target.y + d.y) == 2:
+			var neighbor: Vector2i = target + d
+			if moved_cells.has(neighbor):
+				continue
+			if _aba_value(neighbor.x, neighbor.y) == player:
 				adjacent_friends += 1
-		score += float(adjacent_friends) * 1.4
-	return score + randf() * 0.5
+		score += float(adjacent_friends) * cohesion_weights[level - 1]
+	var noise_by_level: Array[float] = [0.0, 18.0, 8.0, 3.5, 1.4, 0.25]
+	var noise: float = noise_by_level[level - 1]
+	return score + randf_range(-noise, noise)
+
+func _aba_simulate_move_for_ai(move: Dictionary, player: int) -> void:
+	var cells: Array = _aba_normalize_group(move.cells)
+	var direction := Vector2i(int(move.dx), int(move.dy))
+	var opponent: int = 3 - player
+	var pushed: int = int(move.push)
+	if pushed > 0:
+		var front: Vector2i = _aba_front_cell(cells, direction)
+		for index in range(pushed - 1, -1, -1):
+			var source: Vector2i = front + direction * (index + 1)
+			var target: Vector2i = source + direction
+			if not _aba_valid_cell(target.x, target.y):
+				_aba_set(source.x, source.y, 0)
+				aba_out[opponent - 1] += 1
+			else:
+				_aba_set(target.x, target.y, opponent)
+				_aba_set(source.x, source.y, 0)
+	for raw_source in cells:
+		var source_cell: Vector2i = raw_source
+		_aba_set(source_cell.x, source_cell.y, 0)
+	for raw_source in cells:
+		var from_cell: Vector2i = raw_source
+		var to_cell: Vector2i = from_cell + direction
+		_aba_set(to_cell.x, to_cell.y, player)
 
 func _aba_cpu() -> void:
 	if aba_game_over or aba_turn != 2:
@@ -277,16 +313,47 @@ func _aba_cpu() -> void:
 	if moves.is_empty():
 		aba_turn = 1
 		return
-	var best_score: float = -INF
-	var best_moves: Array = []
+	var level: int = clampi(aba_difficulty, 1, 6)
+	if level == 1:
+		var random_move: Dictionary = moves[randi() % moves.size()]
+		_aba_apply_group_move(random_move.cells, int(random_move.dx), int(random_move.dy), 2)
+		return
+	var ranked: Array = []
 	for move in moves:
-		var score: float = _aba_cpu_move_score(move)
-		if score > best_score + 0.001:
-			best_score = score
-			best_moves = [move]
-		elif absf(score - best_score) <= 0.001:
-			best_moves.append(move)
-	var chosen: Dictionary = best_moves[randi() % best_moves.size()]
+		ranked.append({"move": move, "score": _aba_cpu_move_score(move, 2)})
+	ranked.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a.score) > float(b.score)
+	)
+	var chosen: Dictionary = ranked[0].move
+	if level >= 5:
+		var search_count: int = mini(ranked.size(), 10 if level == 5 else 18)
+		var saved_board: Array = aba_board.duplicate(true)
+		var saved_out: Array = aba_out.duplicate()
+		var saved_turn: int = aba_turn
+		var best_score: float = -INF
+		for index in range(search_count):
+			var candidate: Dictionary = ranked[index].move
+			aba_board = saved_board.duplicate(true)
+			aba_out = saved_out.duplicate()
+			aba_turn = saved_turn
+			_aba_simulate_move_for_ai(candidate, 2)
+			var score: float = float(ranked[index].score)
+			if aba_out[0] >= 6:
+				score += 100000.0
+			else:
+				aba_turn = 1
+				var replies: Array = _aba_generate_all_moves(1)
+				var strongest_reply: float = -INF
+				for reply in replies:
+					strongest_reply = maxf(strongest_reply, _aba_cpu_move_score(reply, 1))
+				if strongest_reply > -INF:
+					score -= strongest_reply * (0.82 if level == 5 else 1.12)
+			if score > best_score:
+				best_score = score
+				chosen = candidate
+		aba_board = saved_board
+		aba_out = saved_out
+		aba_turn = saved_turn
 	_aba_apply_group_move(chosen.cells, int(chosen.dx), int(chosen.dy), 2)
 
 func _aba_me() -> int:
@@ -364,6 +431,7 @@ func _draw_abalone() -> void:
 	var pa: Dictionary = app._pl("شما", white_col if me == 1 else black_col, app._fa(aba_out[me - 1]), aba_turn == me and not aba_game_over, true, "مهره‌ی خارج‌شده", 1 if me == 1 else 0)
 	var pb: Dictionary = app._pl("حریف", black_col if me == 1 else white_col, app._fa(aba_out[2 - me]), aba_turn == 3 - me and not aba_game_over, false, "مهره‌ی خارج‌شده", 0 if me == 1 else 1)
 	app._draw_hud("ابلون", pa, pb)
+	app._draw_ai_difficulty_chip(aba_difficulty)
 	var o: Vector2 = app.ABA_ORIGIN
 	var cs: float = app.ABA_CELL
 	app._panel(Rect2(o - Vector2(cs * 4.9, cs * 4.05), Vector2(cs * 9.8, cs * 8.1)), Color(0.10, 0.12, 0.23), 30, Color(0.55, 0.5, 0.95, 0.40), 1.5, 22, 8)

@@ -2664,6 +2664,20 @@ func _btns_mode() -> void:
 			var color: Color = GREEN if active else ACCENT
 			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_hokm_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "hokm_difficulty_%d" % (i + 1))
 		option_y = 398.0
+	elif selected_game == "gobblet":
+		var gobmod = _game_modules["gobblet"]
+		for i in range(6):
+			var active: bool = int(gobmod.gob_difficulty) == i + 1
+			var color: Color = GREEN if active else ACCENT
+			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_gobblet_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "gobblet_difficulty_%d" % (i + 1))
+		option_y = 398.0
+	elif selected_game == "abalone":
+		var abamod = _game_modules["abalone"]
+		for i in range(6):
+			var active: bool = int(abamod.aba_difficulty) == i + 1
+			var color: Color = GREEN if active else ACCENT
+			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_abalone_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "abalone_difficulty_%d" % (i + 1))
+		option_y = 398.0
 	_add_btn(Rect2(24, option_y, 492, 84), "بازی با کامپیوتر", _start_vs_cpu, true, GREEN, "option", "cpu", "m_cpu", "تک‌نفره · بدون نیاز به اینترنت")
 	_add_btn(Rect2(24, option_y + 98, 492, 84), "میزبانی روی وای‌فای", _start_host, net, BLUE, "option", "wifi", "m_host", "شما میزبان باشید، دوستتان با IP وصل می‌شود")
 	_add_btn(Rect2(24, option_y + 196, 492, 84), "اتصال با IP", _go_ip_entry, net, ACCENT, "option", "keypad", "m_join", "به بازی میزبانِ دیگر بپیوندید")
@@ -2712,6 +2726,14 @@ func _set_hokm_difficulty(level: int) -> void:
 	_game_modules["hokm"].hokm_difficulty = clampi(level, 1, 6)
 	_rebuild_buttons()
 
+func _set_gobblet_difficulty(level: int) -> void:
+	_game_modules["gobblet"].gob_difficulty = clampi(level, 1, 6)
+	_rebuild_buttons()
+
+func _set_abalone_difficulty(level: int) -> void:
+	_game_modules["abalone"].aba_difficulty = clampi(level, 1, 6)
+	_rebuild_buttons()
+
 func _draw_mode() -> void:
 	var info: Dictionary = _game_info(selected_game)
 	var col: Color = info.get("icon_col", ACCENT)
@@ -2747,7 +2769,7 @@ func _draw_mode() -> void:
 	if selected_game == "quoridor":
 		_txt_r("سطح هوش کامپیوتر را انتخاب کنید", VIEW_W - 28, 333, 13, TEXT_DIM, true, 310)
 		_txt_r("روش بازی", VIEW_W - 28, 389, 13, TEXT_DIM, true, 180)
-	elif selected_game in ["othello", "othello12", "pentago", "domino"]:
+	elif selected_game in ["othello", "othello12", "pentago", "domino", "gobblet", "abalone"]:
 		_txt_r("سطح هوش کامپیوتر را انتخاب کنید", VIEW_W - 28, 333, 13, TEXT_DIM, true, 310)
 		_txt_r("روش بازی", VIEW_W - 28, 389, 13, TEXT_DIM, true, 180)
 	else:
@@ -3042,13 +3064,15 @@ func _hint(text: String, y: float, col: Color = TEXT_DIM) -> void:
 	_txt_c(text, r, 14, col)
 
 func _draw_ai_difficulty_chip(level: int) -> void:
-	# Keep the selected AI profile visible in these two games, so players can
-	# confirm that the level chosen on the mode screen is the one being used.
+	_draw_ai_difficulty_chip_at(level, 151.0)
+
+func _draw_ai_difficulty_chip_at(level: int, chip_y: float) -> void:
+	# Keep the selected AI profile visible so the active level is clear in-game.
 	if not vs_cpu:
 		return
 	var labels: Array[String] = ["خیلی آسان", "آسان", "متوسط", "سخت", "استاد", "استادتمام"]
 	var safe_level: int = clampi(level, 1, 6)
-	var chip := Rect2(VIEW_W - 188.0, 151.0, 172.0, 32.0)
+	var chip := Rect2(VIEW_W - 188.0, chip_y, 172.0, 32.0)
 	_panel(chip, Color(ACCENT.r * 0.20, ACCENT.g * 0.20, ACCENT.b * 0.20, 0.96), 16, Color(ACCENT.r, ACCENT.g, ACCENT.b, 0.72), 1.0)
 	_txt_c("هوش CPU: " + labels[safe_level - 1], chip, 12, TEXT, true)
 

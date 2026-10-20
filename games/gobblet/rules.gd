@@ -10,6 +10,7 @@ var gob_sel_size: int = -1
 var gob_sel_from: Vector2i = Vector2i(-1, -1)
 var gob_game_over: bool = false
 var gob_winner: int = 0
+var gob_difficulty: int = 3 # 1 random .. 6 tactical one-ply search
 
 func reset_game() -> void:
 	_reset_gobblet()
@@ -187,55 +188,110 @@ func _gob_action_score(action: Dictionary, player: int) -> float:
 						enemy_count += 1
 			if enemy_count == 0:
 				if own_count == 3:
-					score += 24.0
+					score += 12.0 + float(gob_difficulty) * 4.0
 				elif own_count == 2:
-					score += 5.0
+					score += 2.0 + float(gob_difficulty) * 1.4
 			if own_count == 0 and enemy_count >= 3:
-				score -= 80.0
+				score -= 28.0 + float(gob_difficulty) * 18.0
 		if str(action.kind) == "place":
-			score += float(action.size) * 0.4
+			score += float(action.size) * (0.15 + float(gob_difficulty) * 0.12)
 		else:
 			var dest: Vector2i = action.to
-			score += 2.0 - Vector2(dest.x, dest.y).distance_to(Vector2(1.5, 1.5)) * 0.4
+			score += (0.8 + float(gob_difficulty) * 0.25) - Vector2(dest.x, dest.y).distance_to(Vector2(1.5, 1.5)) * (0.15 + float(gob_difficulty) * 0.07)
 	gob_board = saved_board
 	gob_hand = saved_hand
-	return score + randf() * 0.1
+	var noise_by_level: Array[float] = [0.0, 19.0, 10.0, 4.0, 1.2, 0.2]
+	var noise: float = noise_by_level[clampi(gob_difficulty, 1, 6) - 1]
+	return score + randf_range(-noise, noise)
 
-func _gob_cpu() -> void:
-	if gob_game_over or gob_turn != 2:
-		return
+func _gob_generate_actions(player: int) -> Array:
 	var actions: Array = []
+	if gob_game_over:
+		return actions
+	var previous_turn: int = gob_turn
+	gob_turn = player
 	for size in [4, 3, 2, 1]:
-		if gob_hand[1][size - 1] <= 0:
+		if gob_hand[player - 1][size - 1] <= 0:
 			continue
 		for y in range(4):
 			for x in range(4):
-				if _gob_can_place(x, y, size, 2):
+				if _gob_can_place(x, y, size, player):
 					actions.append({"kind": "place", "x": x, "y": y, "size": size})
 	for y in range(4):
 		for x in range(4):
 			var top: Dictionary = _gob_top(x, y)
-			if top.is_empty() or int(top.o) != 2:
+			if top.is_empty() or int(top.o) != player:
 				continue
 			for ty in range(4):
 				for tx in range(4):
 					var from := Vector2i(x, y)
 					var to := Vector2i(tx, ty)
-					if _gob_can_move(from, to, 2):
+					if _gob_can_move(from, to, player):
 						actions.append({"kind": "move", "from": from, "to": to})
+	gob_turn = previous_turn
+	return actions
+
+func _gob_simulate_action(action: Dictionary, player: int) -> void:
+	if str(action.kind) == "place":
+		var size: int = int(action.size)
+		gob_hand[player - 1][size - 1] -= 1
+		gob_board[int(action.y)][int(action.x)].append({"o": player, "s": size})
+	else:
+		var source: Vector2i = action.from
+		var target: Vector2i = action.to
+		var stack: Array = gob_board[source.y][source.x]
+		var piece: Dictionary = stack.pop_back()
+		gob_board[target.y][target.x].append(piece)
+
+func _gob_cpu() -> void:
+	if gob_game_over or gob_turn != 2:
+		return
+	var actions: Array = _gob_generate_actions(2)
 	if actions.is_empty():
 		gob_turn = 1
 		return
-	var best_score: float = -INF
-	var best_actions: Array = []
+	var level: int = clampi(gob_difficulty, 1, 6)
+	if level == 1:
+		var random_action: Dictionary = actions[randi() % actions.size()]
+		if str(random_action.kind) == "place":
+			_gob_place(int(random_action.x), int(random_action.y), int(random_action.size), 2)
+		else:
+			_gob_move(random_action.from, random_action.to, 2)
+		return
+	var ranked: Array = []
 	for action in actions:
-		var score: float = _gob_action_score(action, 2)
-		if score > best_score + 0.001:
-			best_score = score
-			best_actions = [action]
-		elif absf(score - best_score) <= 0.001:
-			best_actions.append(action)
-	var chosen: Dictionary = best_actions[randi() % best_actions.size()]
+		ranked.append({"action": action, "score": _gob_action_score(action, 2)})
+	ranked.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a.score) > float(b.score)
+	)
+	var chosen: Dictionary = ranked[0].action
+	if level >= 5:
+		var search_count: int = mini(ranked.size(), 10 if level == 5 else 18)
+		var saved_board: Array = gob_board.duplicate(true)
+		var saved_hand: Array = gob_hand.duplicate(true)
+		var best_score: float = -INF
+		for index in range(search_count):
+			var candidate: Dictionary = ranked[index].action
+			gob_board = saved_board.duplicate(true)
+			gob_hand = saved_hand.duplicate(true)
+			_gob_simulate_action(candidate, 2)
+			var score: float = float(ranked[index].score)
+			if _gob_check_win(2):
+				score += 100000.0
+			elif _gob_check_win(1):
+				score -= 200000.0
+			else:
+				var replies: Array = _gob_generate_actions(1)
+				var strongest_reply: float = -INF
+				for reply in replies:
+					strongest_reply = maxf(strongest_reply, _gob_action_score(reply, 1))
+				if strongest_reply > -INF:
+					score -= strongest_reply * (0.72 if level == 5 else 1.0)
+			if score > best_score:
+				best_score = score
+				chosen = candidate
+		gob_board = saved_board
+		gob_hand = saved_hand
 	if str(chosen.kind) == "place":
 		_gob_place(int(chosen.x), int(chosen.y), int(chosen.size), 2)
 	else:
@@ -316,6 +372,7 @@ func _draw_gobblet() -> void:
 	if pa.active:
 		pa.sub = "نوبت شما"
 	app._draw_hud("گابلت", pa, pb)
+	app._draw_ai_difficulty_chip_at(gob_difficulty, 140.0)
 	var flat: Array = []
 	for y in range(4):
 		for x in range(4):
