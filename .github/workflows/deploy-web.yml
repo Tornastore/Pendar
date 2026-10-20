@@ -47,13 +47,22 @@ jobs:
           mkdir -p fonts
           download_font() {
             local filename="$1"
-            curl --fail --location --retry 3 --retry-delay 2 \
-              "https://cdn.jsdelivr.net/npm/vazirmatn@33.0.3/fonts/ttf/${filename}" \
-              --output "fonts/${filename}" \
-              || curl --fail --location --retry 3 --retry-delay 2 \
-                "https://raw.githubusercontent.com/rastikerdar/vazirmatn/v33.003/fonts/ttf/${filename}" \
-                --output "fonts/${filename}"
-            test -s "fonts/${filename}"
+            local destination="fonts/${filename}"
+            local primary_url="https://cdn.jsdelivr.net/npm/vazirmatn@33.0.3/fonts/ttf/${filename}"
+            local fallback_url="https://raw.githubusercontent.com/rastikerdar/vazirmatn/v33.003/fonts/ttf/${filename}"
+
+            if wget --tries=3 --waitretry=2 --timeout=30 --output-document="$destination" "$primary_url"; then
+              :
+            else
+              echo "Primary font URL failed; trying the GitHub mirror for ${filename}." >&2
+              rm -f "$destination"
+              wget --tries=3 --waitretry=2 --timeout=30 --output-document="$destination" "$fallback_url"
+            fi
+
+            if [ ! -s "$destination" ]; then
+              echo "ERROR: Persian font download failed or produced an empty file: ${destination}" >&2
+              return 1
+            fi
           }
           download_font "Vazirmatn-Regular.ttf"
           download_font "Vazirmatn-Bold.ttf"
