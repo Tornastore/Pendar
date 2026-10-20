@@ -2714,7 +2714,7 @@ func _draw_mode() -> void:
 	if selected_game == "quoridor":
 		_txt_r("سطح هوش کامپیوتر را انتخاب کنید", VIEW_W - 28, 333, 13, TEXT_DIM, true, 310)
 		_txt_r("روش بازی", VIEW_W - 28, 389, 13, TEXT_DIM, true, 180)
-	elif selected_game in ["othello", "othello12"]:
+	elif selected_game in ["othello", "othello12", "pentago", "domino"]:
 		_txt_r("سطح هوش کامپیوتر را انتخاب کنید", VIEW_W - 28, 333, 13, TEXT_DIM, true, 310)
 		_txt_r("روش بازی", VIEW_W - 28, 389, 13, TEXT_DIM, true, 180)
 	else:
@@ -3007,6 +3007,17 @@ func _hint(text: String, y: float, col: Color = TEXT_DIM) -> void:
 	var r := Rect2((VIEW_W - w) * 0.5, y, w, 32)
 	_panel(r, Color(0, 0, 0, 0.30), 16)
 	_txt_c(text, r, 14, col)
+
+func _draw_ai_difficulty_chip(level: int) -> void:
+	# Keep the selected AI profile visible in these two games, so players can
+	# confirm that the level chosen on the mode screen is the one being used.
+	if not vs_cpu:
+		return
+	var labels: Array[String] = ["خیلی آسان", "آسان", "متوسط", "سخت", "استاد", "استادتمام"]
+	var safe_level: int = clampi(level, 1, 6)
+	var chip := Rect2(VIEW_W - 188.0, 151.0, 172.0, 32.0)
+	_panel(chip, Color(ACCENT.r * 0.20, ACCENT.g * 0.20, ACCENT.b * 0.20, 0.96), 16, Color(ACCENT.r, ACCENT.g, ACCENT.b, 0.72), 1.0)
+	_txt_c("هوش CPU: " + labels[safe_level - 1], chip, 12, TEXT, true)
 
 func _draw_playing() -> void:
 	match selected_game:

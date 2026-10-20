@@ -132,3 +132,33 @@ def test_backgammon_ai_has_six_levels_and_turn_sequence_search() -> None:
     assert 'elif selected_game == "backgammon":' in main
     assert "_set_backgammon_difficulty.bind(i + 1)" in main
     assert '"backgammon_difficulty_%d"' in main
+
+
+def test_pentago_and_domino_difficulty_selectors_reach_their_ai_and_hud() -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    main = (project_root / "main.gd").read_text(encoding="utf-8")
+    pentago = (project_root / "games" / "pentago" / "rules.gd").read_text(encoding="utf-8")
+    domino = (project_root / "games" / "domino" / "rules.gd").read_text(encoding="utf-8")
+
+    # Both games must expose all six choices and update the module-owned value.
+    assert '"pentago_difficulty_%d"' in main
+    assert '"domino_difficulty_%d"' in main
+    assert "_set_pentago_difficulty.bind(i + 1)" in main
+    assert "_set_domino_difficulty.bind(i + 1)" in main
+    assert '_game_modules["pentago"].pent_difficulty = clampi(level, 1, 6)' in main
+    assert '_game_modules["domino"].dom_difficulty = clampi(level, 1, 6)' in main
+    assert '"pentago", "domino"' in main and "سطح هوش کامپیوتر را انتخاب کنید" in main
+
+    # The selected level must influence decision-making, not just the menu.
+    assert "if pent_difficulty >= 2" in pentago
+    assert "_pent_evaluate_board(2, pent_difficulty)" in pentago
+    assert "if pent_difficulty >= 5" in pentago
+    assert "match dom_difficulty:" in domino
+    for level in ("2:", "3:", "4:", "5:", "6:"):
+        assert f"		{level}" in domino
+    assert "if dom_difficulty <= 1" in domino
+
+    # In-game labels make the effective selected profile visible to the player.
+    assert "func _draw_ai_difficulty_chip(level: int) -> void:" in main
+    assert "app._draw_ai_difficulty_chip(pent_difficulty)" in pentago
+    assert "app._draw_ai_difficulty_chip(dom_difficulty)" in domino

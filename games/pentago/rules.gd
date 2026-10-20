@@ -302,6 +302,7 @@ func _draw_pentago() -> void:
 	else:
 		pb.sub = ph if not pent_game_over else ""
 	app._draw_hud("پنتاگو", pa, pb)
+	app._draw_ai_difficulty_chip(pent_difficulty)
 	var hov: int = -1
 	if app._press_active and app._press_id.begins_with("rot_"):
 		hov = int(app._press_id.substr(4, 1))

@@ -374,6 +374,7 @@ func _draw_domino() -> void:
 	var by := Rect2(16, 152, 94, 34)
 	app._panel(by, Color(0, 0, 0, 0.3), 17)
 	app._txt_c("انبار: " + app._fa(dom_boneyard.size()), by, 13, app.TEXT_DIM, true)
+	app._draw_ai_difficulty_chip(dom_difficulty)
 	# table
 	var table := Rect2(16, 200, app.VIEW_W - 32, 456)
 	app._panel(table, Color(0.07, 0.24, 0.20), 26, Color(0.25, 0.65, 0.5, 0.4), 1.5, 18, 6)
