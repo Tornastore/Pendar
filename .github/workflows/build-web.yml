@@ -1,15 +1,13 @@
-name: Build Web App
+name: Build Web App (artifact only)
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: web-build-${{ github.ref }}
+  group: web-artifact-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -18,14 +16,16 @@ env:
 jobs:
   build-web:
     runs-on: ubuntu-22.04
+    timeout-minutes: 20
     container:
       image: barichello/godot-ci:4.3
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Web export template for this runner
+      - name: Install Web export template
         shell: bash
+        timeout-minutes: 2
         run: |
           SRC="/root/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
           DEST="$HOME/.local/share/godot/export_templates"
@@ -34,13 +34,15 @@ jobs:
             cp -a "$SRC" "$DEST/"
           fi
           test -d "$DEST/${GODOT_VERSION}.stable" || {
-            echo "Missing Godot ${GODOT_VERSION} export templates in the CI image." >&2
+            echo "ERROR: Godot ${GODOT_VERSION} export templates are missing." >&2
             exit 1
           }
 
-      - name: Download embedded Persian fonts (Vazirmatn, OFL-1.1)
+      - name: Download Persian fonts (Vazirmatn)
         shell: bash
+        timeout-minutes: 3
         run: |
+          set -euo pipefail
           mkdir -p fonts
           download_font() {
             local filename="$1"
@@ -48,31 +50,36 @@ jobs:
             local primary_url="https://cdn.jsdelivr.net/npm/vazirmatn@33.0.3/fonts/ttf/${filename}"
             local fallback_url="https://raw.githubusercontent.com/rastikerdar/vazirmatn/v33.003/fonts/ttf/${filename}"
 
-            if wget --tries=3 --waitretry=2 --timeout=30 --output-document="$destination" "$primary_url"; then
-              :
-            else
-              echo "Primary font URL failed; trying the GitHub mirror for ${filename}." >&2
+            if ! wget --tries=2 --waitretry=2 --timeout=20 --output-document="$destination" "$primary_url"; then
+              echo "Primary font URL failed; trying fallback for ${filename}." >&2
               rm -f "$destination"
-              wget --tries=3 --waitretry=2 --timeout=30 --output-document="$destination" "$fallback_url"
+              wget --tries=2 --waitretry=2 --timeout=20 --output-document="$destination" "$fallback_url"
             fi
-
-            if [ ! -s "$destination" ]; then
-              echo "ERROR: Persian font download failed or produced an empty file: ${destination}" >&2
+            test -s "$destination" || {
+              echo "ERROR: Font download failed: ${destination}" >&2
               return 1
-            fi
+            }
           }
           download_font "Vazirmatn-Regular.ttf"
           download_font "Vazirmatn-Bold.ttf"
           ls -lh fonts/Vazirmatn-*.ttf
 
       - name: Import project resources
+        shell: bash
+        timeout-minutes: 8
         run: godot --headless --editor --path . --import
 
       - name: Export Web app
+        shell: bash
+        timeout-minutes: 8
         run: |
+          set -euo pipefail
           mkdir -p build/web
-          godot --headless --path . --export-release "Web" build/web/index.html
-          test -s build/web/index.html
+          godot --headless --verbose --path . --export-release "Web" build/web/index.html
+          test -s build/web/index.html || {
+            echo "ERROR: Web export did not create build/web/index.html." >&2
+            exit 1
+          }
           find build/web -maxdepth 1 -type f -printf '%f %k KB\n' | sort
 
       - name: Upload Web app artifact

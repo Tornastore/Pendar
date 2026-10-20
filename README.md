@@ -59,11 +59,12 @@ Godot 4.3+ → Import → Run
 
 ساختار تفکیک‌شده و راهنمای ادامه توسعه در `ARCHITECTURE.md` قرار دارد. منطق و state بازی‌ها در `games/<game_id>/rules.gd`، کاتالوگ در `core/game_catalog.gd` و امتیازدهی/رتبه‌بندی در `services/` قرار گرفته‌اند. برای کنترل ساختاری سریع، از ریشه پروژه دستور `python tools/verify_structure.py` را اجرا کنید.
 
-## خروجی وب و نصب به شکل اپ (PWA)
-- preset وب با نام `Web` به `export_presets.cfg` اضافه شده و خروجی آن در `build/web/index.html` قرار می‌گیرد.
-- Workflow با نام **Build Web App** در هر push به شاخه `main` خروجی وب می‌سازد. از بخش **Actions**، اجرای موفق را باز کنید و artifact با نام `MindBastion-Web` را دانلود کنید؛ فایل دانلودشده شامل `index.html`، فایل‌های JavaScript/WebAssembly و بسته بازی است.
-- برای انتشار خودکار روی GitHub Pages، در **Settings → Pages** منبع را روی **GitHub Actions** بگذارید، سپس در **Actions → Deploy Web App to GitHub Pages → Run workflow** اجرا کنید. لینک سایت در خروجی همان اجرا نمایش داده می‌شود.
-- خروجی Web به صورت PWA تنظیم شده و در مرورگر پشتیبانی‌شده امکان نصب روی صفحه اصلی و کش آفلاین دارد. برای اجرای محلی، فایل‌ها را از طریق وب‌سرور باز کنید (مثلاً `python -m http.server 8000` در پوشه خروجی)؛ بازکردن مستقیم `index.html` با `file://` روش قابل اتکایی نیست.
+## خروجی وب و انتشار روی GitHub Pages
+- با هر push به شاخه `main`، workflow با نام **Deploy Web App to GitHub Pages** به‌طور خودکار خروجی وب را می‌سازد و منتشر می‌کند؛ اجرای دستی از **Actions → Deploy Web App to GitHub Pages → Run workflow** هم پشتیبانی می‌شود.
+- قبل از اولین انتشار، در **Settings → Pages → Build and deployment**، گزینه **Source** را روی **GitHub Actions** بگذارید.
+- برای ساخت فایل وب بدون انتشار، از **Actions → Build Web App (artifact only) → Run workflow** استفاده کنید و artifact با نام `MindBastion-Web` را دانلود کنید.
+- برای خروجی Android، از **Actions → Build Android APK → Run workflow** استفاده کنید؛ این workflow دیگر با هر push وب هم‌زمان اجرا نمی‌شود.
+- خروجی وب با PWA تنظیم شده و در مرورگرهای پشتیبانی‌شده امکان نصب روی صفحه اصلی و کش آفلاین دارد. برای اجرای محلی، فایل‌ها را از طریق وب‌سرور باز کنید (مثلاً `python -m http.server 8000` در پوشه خروجی)؛ بازکردن مستقیم `index.html` با `file://` قابل اتکا نیست.
 - **محدودیت شبکه:** مرورگرها از ENet/UDP سطح پایین پشتیبانی نمی‌کنند. بنابراین در نسخه وب، میزبانی روی Wi‑Fi، ورود با IP و ساخت اتاق غیرفعال است؛ بازی با کامپیوتر و حالت‌های محلی قابل استفاده‌اند. برای آنلاین واقعی باید ارتباط به WebSocket یا WebRTC و یک سرور سازگار منتقل شود.
 - آمار و رتبه‌بندی محلی در مرورگر به مجوز ذخیره‌سازی مرورگر وابسته است؛ در حالت ناشناس یا با مسدودکردن IndexedDB ممکن است ماندگار نباشد.
 
