@@ -14,6 +14,9 @@ var hokm_dealer: int = 0
 var hokm_last: Array = []
 var hokm_last_winner: int = -1
 var hokm_last_t: float = -10.0
+var hokm_difficulty: int = 3 # 1 random .. 6 tactical trick play, suit planning, and void tracking
+var hokm_voids: Array = [[], []] # suits each player has shown void in
+var hokm_seen_cards: Array = []
 
 func reset_game() -> void:
 	_reset_hokm()
@@ -35,6 +38,11 @@ func _reset_hokm() -> void:
 	hokm_led_suit = -1
 	hokm_game_over = false
 	hokm_winner = -1
+	hokm_voids = [[], []]
+	hokm_seen_cards = []
+	hokm_last = []
+	hokm_last_winner = -1
+	hokm_last_t = -10.0
 
 func _hk_rank(r: int) -> int:
 	return 14 if r == 1 else r
@@ -59,10 +67,17 @@ func _hokm_legal(p: int, card: Dictionary) -> bool:
 	return true
 
 func _hokm_play(p: int, idx: int) -> void:
+	if p < 0 or p >= hokm_hands.size() or idx < 0 or idx >= hokm_hands[p].size():
+		return
 	var card: Dictionary = hokm_hands[p][idx]
 	if not _hokm_legal(p, card):
 		return
+	if hokm_trick.size() == 1:
+		var led_card: Dictionary = hokm_trick[0].c
+		if int(card.s) != int(led_card.s) and not hokm_voids[p].has(int(led_card.s)):
+			hokm_voids[p].append(int(led_card.s))
 	hokm_hands[p].remove_at(idx)
+	hokm_seen_cards.append(card.duplicate())
 	if hokm_trick.size() == 0:
 		hokm_led_suit = card.s
 	hokm_trick.append({"p": p, "c": card})
@@ -87,15 +102,115 @@ func _hokm_play(p: int, idx: int) -> void:
 	else:
 		hokm_turn = 1 - p
 
+func _hokm_rank_value(card: Dictionary) -> int:
+	return _hk_rank(int(card.r))
+
+func _hokm_suit_count(cards: Array, suit: int) -> int:
+	var count: int = 0
+	for c in cards:
+		if int(c.s) == suit:
+			count += 1
+	return count
+
+func _hokm_high_cards_in_suit(cards: Array, suit: int) -> int:
+	var count: int = 0
+	for c in cards:
+		if int(c.s) == suit and _hokm_rank_value(c) >= 11:
+			count += 1
+	return count
+
+func _hokm_lead_score(card: Dictionary, level: int) -> float:
+	var suit: int = int(card.s)
+	var rank: int = _hokm_rank_value(card)
+	var own_hand: Array = hokm_hands[1]
+	var length: int = _hokm_suit_count(own_hand, suit)
+	var strong_count: int = _hokm_high_cards_in_suit(own_hand, suit)
+	var higher_in_hand: int = 0
+	for other in own_hand:
+		if int(other.s) == suit and _hokm_rank_value(other) > rank:
+			higher_in_hand += 1
+	var score: float = 0.0
+	match level:
+		2:
+			score = -float(rank) + (2.0 if suit != hokm_trump else -5.0)
+		3:
+			score = float(length) * 5.0 - float(rank) * 0.65 + (3.0 if suit != hokm_trump else -5.0)
+		4:
+			score = float(length) * 4.5 + float(strong_count) * 2.5 - float(higher_in_hand) * 3.0
+			score += 7.0 if higher_in_hand == 0 else 0.0
+			score += -10.0 if suit == hokm_trump and length <= 2 else 0.0
+		5, 6:
+			# سطح‌های بالا کارت‌های برتر و طول خال را نگه می‌دارند و از خالِ بدون‌کارت حریف آگاه‌اند.
+			score = float(length) * (4.0 + float(level) * 0.35) + float(strong_count) * 3.5
+			score -= float(higher_in_hand) * (2.0 + float(level) * 0.35)
+			if higher_in_hand == 0:
+				score += 11.0 + float(level)
+			if suit == hokm_trump:
+				score -= 9.0 if length < 3 else 2.0
+			if hokm_voids[0].has(suit) and suit != hokm_trump:
+				score -= 10.0 + float(level) * 1.5 # حریف ممکن است حکم ببُرد
+			if level >= 6 and suit != hokm_trump and length >= 4 and strong_count >= 2:
+				score += 8.0 # ادامه‌ی خال قوی برای بیرون کشیدن حکم
+		_:
+			score = float(length) - float(rank) * 0.1
+	return score
+
+func _hokm_response_score(card: Dictionary, led_card: Dictionary, level: int) -> float:
+	var wins: bool = _hokm_card_beats(card, led_card, hokm_led_suit, hokm_trump)
+	var rank: int = _hokm_rank_value(card)
+	var is_trump: bool = int(card.s) == hokm_trump
+	var score: float = 0.0
+	if wins:
+		# بردن دست را ترجیح بده، ولی در صورت امکان حکم و کارت‌های بزرگ را حفظ کن.
+		score = 120.0 - float(rank) * 2.0
+		if is_trump:
+			score -= 9.0 + float(level) * 2.0
+		if int(card.s) == int(led_card.s):
+			score += 5.0
+	else:
+		# اگر دست را نمی‌توان برد، ارزان‌ترین کارت را دور بریز؛ حکم را بی‌دلیل خرج نکن.
+		score = -float(rank) * 1.8
+		if is_trump:
+			score -= 12.0 + float(level) * 2.5
+		if int(card.s) == int(led_card.s):
+			score += 3.0
+	if level >= 5 and hokm_voids[0].has(int(card.s)) and is_trump:
+		score -= 3.0 # حکم را برای خال‌بُری‌های مهم‌تر حفظ کن
+	if level >= 6 and wins and int(card.s) == int(led_card.s) and rank >= 12:
+		score -= 2.0 # در صورت امکان با کارت برنده‌ی ارزان‌تر، آس/شاه را نسوزان
+	return score
+
 func _hokm_cpu() -> void:
-	if hokm_hands[1].size() == 0 or hokm_game_over or hokm_turn != 1:
+	if hokm_hands[1].is_empty() or hokm_game_over or hokm_turn != 1:
 		return
-	var idx: int = 0
+	var level: int = clampi(hokm_difficulty, 1, 6)
+	var legal_indices: Array[int] = []
 	for i in hokm_hands[1].size():
 		if _hokm_legal(1, hokm_hands[1][i]):
-			idx = i
-			break
-	_hokm_play(1, idx)
+			legal_indices.append(i)
+	if legal_indices.is_empty():
+		return
+	if level <= 1:
+		_hokm_play(1, legal_indices[randi_range(0, legal_indices.size() - 1)])
+		return
+	var best_idx: int = legal_indices[0]
+	var best_score: float = -INF
+	var led_card: Dictionary = {}
+	if hokm_trick.size() == 1:
+		led_card = hokm_trick[0].c
+	for i in legal_indices:
+		var card: Dictionary = hokm_hands[1][i]
+		var score: float
+		if hokm_trick.size() == 1:
+			score = _hokm_response_score(card, led_card, level)
+		else:
+			score = _hokm_lead_score(card, level)
+		var noise: float = [0.0, 7.0, 4.5, 2.5, 1.1, 0.35][level - 1]
+		score += randf_range(-noise, noise)
+		if score > best_score:
+			best_score = score
+			best_idx = i
+	_hokm_play(1, best_idx)
 
 func _hokm_me() -> int:
 	return app._my_seat()
@@ -126,10 +241,11 @@ func _draw_hokm() -> void:
 	if pa.active:
 		pa.sub = "نوبت شما"
 	app._draw_hud("حکم", pa, pb)
+	app._draw_ai_difficulty_chip(hokm_difficulty)
 	var orr: Array = app._fan_rects(hokm_hands[1 - me].size(), 36.0, 52.0, 150.0, 240.0, 4.0)
 	for r in orr:
 		app._draw_card_back(r)
-	var badge := Rect2(app.VIEW_W - 16 - 118, 150, 118, 40)
+	var badge := Rect2(16, 150, 118, 40)
 	app._panel(badge, Color(1, 1, 1, 0.07), 20, app.ACCENT, 1.2)
 	app._txt_r("حکم", badge.end.x - 14, badge.position.y + 26, 15, app.TEXT, true, 60)
 	var sc: Color = Color(0.9, 0.25, 0.3) if (hokm_trump == 1 or hokm_trump == 2) else Color(0.95, 0.96, 1.0)

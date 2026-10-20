@@ -626,6 +626,16 @@ var hokm_last_t: float:
 		return _game_modules["hokm"].hokm_last_t
 	set(value):
 		_game_modules["hokm"].hokm_last_t = value
+var hokm_voids: Array:
+	get:
+		return _game_modules["hokm"].hokm_voids
+	set(value):
+		_game_modules["hokm"].hokm_voids = value
+var hokm_seen_cards: Array:
+	get:
+		return _game_modules["hokm"].hokm_seen_cards
+	set(value):
+		_game_modules["hokm"].hokm_seen_cards = value
 var blk_rot: int:
 	get:
 		return _game_modules["blockace"].blk_rot
@@ -2639,6 +2649,20 @@ func _btns_mode() -> void:
 			var color: Color = GREEN if active else ACCENT
 			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_domino_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "domino_difficulty_%d" % (i + 1))
 		option_y = 398.0
+	elif selected_game == "pasoor":
+		var pasmod = _game_modules["pasoor"]
+		for i in range(6):
+			var active: bool = int(pasmod.pas_difficulty) == i + 1
+			var color: Color = GREEN if active else ACCENT
+			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_pasoor_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "pasoor_difficulty_%d" % (i + 1))
+		option_y = 398.0
+	elif selected_game == "hokm":
+		var hmod = _game_modules["hokm"]
+		for i in range(6):
+			var active: bool = int(hmod.hokm_difficulty) == i + 1
+			var color: Color = GREEN if active else ACCENT
+			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_hokm_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "hokm_difficulty_%d" % (i + 1))
+		option_y = 398.0
 	_add_btn(Rect2(24, option_y, 492, 84), "بازی با کامپیوتر", _start_vs_cpu, true, GREEN, "option", "cpu", "m_cpu", "تک‌نفره · بدون نیاز به اینترنت")
 	_add_btn(Rect2(24, option_y + 98, 492, 84), "میزبانی روی وای‌فای", _start_host, net, BLUE, "option", "wifi", "m_host", "شما میزبان باشید، دوستتان با IP وصل می‌شود")
 	_add_btn(Rect2(24, option_y + 196, 492, 84), "اتصال با IP", _go_ip_entry, net, ACCENT, "option", "keypad", "m_join", "به بازی میزبانِ دیگر بپیوندید")
@@ -2677,6 +2701,14 @@ func _set_pentago_difficulty(level: int) -> void:
 
 func _set_domino_difficulty(level: int) -> void:
 	_game_modules["domino"].dom_difficulty = clampi(level, 1, 6)
+	_rebuild_buttons()
+
+func _set_pasoor_difficulty(level: int) -> void:
+	_game_modules["pasoor"].pas_difficulty = clampi(level, 1, 6)
+	_rebuild_buttons()
+
+func _set_hokm_difficulty(level: int) -> void:
+	_game_modules["hokm"].hokm_difficulty = clampi(level, 1, 6)
 	_rebuild_buttons()
 
 func _draw_mode() -> void:

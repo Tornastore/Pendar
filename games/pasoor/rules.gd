@@ -16,6 +16,7 @@ var pas_surs: Array = [0, 0]
 var pas_last_capturer: int = -1
 var pas_deals_done: int = 0
 var pas_is_last_deal: bool = false
+var pas_difficulty: int = 3 # 1 random .. 6 tactical capture and exposure evaluation
 
 func reset_game() -> void:
 	_reset_pasoor()
@@ -256,31 +257,75 @@ func _pas_end_hand() -> void:
 	app.state = State.RESULT
 	app._build_result_buttons()
 
+func _pas_card_point_value(card: Dictionary) -> float:
+	# ارزش تقریبی امتیازی کارت در چهاربرگ.
+	var value: float = 0.0
+	if int(card.r) == 1 or int(card.r) == 11:
+		value += 1.0
+	if int(card.r) == 10 and int(card.s) == 2:
+		value += 3.0
+	if int(card.r) == 2 and int(card.s) == 0:
+		value += 2.0
+	if int(card.s) == 0:
+		value += 0.25
+	return value
+
+func _pas_exposure_cost(card: Dictionary) -> float:
+	# برای کارت دورریختنی، تخمین می‌زند چند رتبه‌ی احتمالی می‌توانند از میز بگیرند.
+	# این محاسبه از کارت‌های مخفی حریف استفاده نمی‌کند.
+	pas_table.append(card)
+	var risk: float = 0.0
+	for rank in range(1, 14):
+		var candidate: Dictionary = {"r": rank, "s": 1}
+		var captures: Array = _pas_find_captures(candidate)
+		if captures.size() > 0:
+			var max_taken: int = 0
+			for cap in captures:
+				max_taken = maxi(max_taken, cap.size())
+			risk += 1.0 + minf(float(max_taken), 5.0) * 0.15
+	pas_table.pop_back()
+	return risk
+
 func _pas_cpu_move() -> void:
-	var best_idx := 0
-	var best_cap: Array = []
-	var best_sc := -9999
+	if pas_hands[1].is_empty() or pas_game_over:
+		return
+	var level: int = clampi(pas_difficulty, 1, 6)
+	var best_idx: int = randi_range(0, pas_hands[1].size() - 1)
+	var best_cap: Array = _pas_best_capture(pas_hands[1][best_idx])
+	if level <= 1:
+		# سطح خیلی آسان، حرکت را عمداً تصادفی انتخاب می‌کند.
+		_pas_play(1, best_idx, best_cap)
+		return
+
+	var best_score: float = -INF
 	for i in pas_hands[1].size():
 		var card: Dictionary = pas_hands[1][i]
 		var cap: Array = _pas_best_capture(card)
-		var sc: int = 0
+		var score: float = 0.0
 		if cap.size() > 0:
-			sc = cap.size() * 5
+			# گرفتن کارت‌ها، گرفتن کارت‌های امتیازی و ساختن سور ارزشمند است.
+			score += float(cap.size()) * (2.5 + float(level) * 0.65)
 			for idx in cap:
-				var c: Dictionary = pas_table[idx]
-				if c.r == 10 and c.s == 2:
-					sc += 10
-				if c.r == 1 or c.r == 11:
-					sc += 4
-				if c.s == 0:
-					sc += 2
-			# سور احتمالی
+				if idx >= 0 and idx < pas_table.size():
+					score += _pas_card_point_value(pas_table[idx]) * (1.0 + float(level) * 0.3)
+			score += _pas_card_point_value(card) * (1.0 + float(level) * 0.35)
 			if cap.size() == pas_table.size() and not _pas_is_jack(card) and not pas_is_last_deal:
-				sc += 15
+				score += 7.0 + float(level) * 2.0 # سور
+			# در سطوح بالاتر، کارت‌های ارزشمند را فقط وقتی خرج کن که بازدهی داشته باشند.
+			if level >= 5 and card.r == 11 and cap.size() < 2:
+				score -= 1.5
 		else:
-			sc = -1  # ترجیح نده روی میز بگذارد مگر مجبور
-		if sc > best_sc:
-			best_sc = sc
+			# دورریختن کارتِ امتیازی یا کارتِ آسان‌گرفتنی برای حریف بد است.
+			score = -0.5 - _pas_card_point_value(card) * (0.6 + float(level) * 0.25)
+			if level >= 4:
+				score -= _pas_exposure_cost(card) * (0.45 + float(level) * 0.42)
+			if level >= 6 and card.s == 0:
+				score -= 0.8 # حفظ کنترل خاج برای امتیاز هفت خاج
+		# سطوح آسان خطای بیشتری دارند؛ سطح استادتمام تقریباً بدون نویز انتخاب می‌کند.
+		var noise: float = [0.0, 16.0, 9.0, 5.0, 2.5, 1.0][level - 1]
+		score += randf_range(-noise, noise)
+		if score > best_score:
+			best_score = score
 			best_idx = i
 			best_cap = cap
 	_pas_play(1, best_idx, best_cap)
@@ -354,6 +399,7 @@ func _draw_pasoor() -> void:
 	if pas_turn == opp and not pas_game_over:
 		pb.sub = "نوبت حریف"
 	app._draw_hud("پاسور (چهاربرگ)", pa, pb)
+	app._draw_ai_difficulty_chip(pas_difficulty)
 	var orr: Array = app._fan_rects(pas_hands[opp].size(), 40.0, 58.0, 150.0, 300.0, 6.0)
 	for r in orr:
 		app._draw_card_back(r)

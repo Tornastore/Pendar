@@ -162,3 +162,33 @@ def test_pentago_and_domino_difficulty_selectors_reach_their_ai_and_hud() -> Non
     assert "func _draw_ai_difficulty_chip(level: int) -> void:" in main
     assert "app._draw_ai_difficulty_chip(pent_difficulty)" in pentago
     assert "app._draw_ai_difficulty_chip(dom_difficulty)" in domino
+
+
+def test_pasoor_and_hokm_difficulty_profiles_reach_ai_and_hud() -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    main = (project_root / "main.gd").read_text(encoding="utf-8")
+    pasoor = (project_root / "games" / "pasoor" / "rules.gd").read_text(encoding="utf-8")
+    hokm = (project_root / "games" / "hokm" / "rules.gd").read_text(encoding="utf-8")
+
+    for game_id, setter, profile_var in (("pasoor", "_set_pasoor_difficulty", "pas_difficulty"),
+                                         ("hokm", "_set_hokm_difficulty", "hokm_difficulty")):
+        assert f'elif selected_game == "{game_id}":' in main
+        assert f'"{game_id}_difficulty_%d"' in main
+        assert f"{setter}.bind(i + 1)" in main
+        assert f'_game_modules["{game_id}"].{profile_var} = clampi(level, 1, 6)' in main
+        assert f"app._draw_ai_difficulty_chip({profile_var})" in (pasoor if game_id == "pasoor" else hokm)
+
+    # Four Cards evaluates captures, card points, sweeps, and exposed table risk.
+    assert "func _pas_exposure_cost(card: Dictionary) -> float:" in pasoor
+    assert "func _pas_cpu_move() -> void:" in pasoor
+    assert "if level <= 1:" in pasoor
+    assert "_pas_exposure_cost(card)" in pasoor
+    assert "pas_difficulty" in pasoor
+
+    # Hokm uses six decision profiles and records public void/trick information.
+    assert "func _hokm_lead_score(card: Dictionary, level: int) -> float:" in hokm
+    assert "func _hokm_response_score(card: Dictionary, led_card: Dictionary, level: int) -> float:" in hokm
+    assert "if level <= 1:" in hokm
+    assert "hokm_voids[p].append(int(led_card.s))" in hokm
+    assert "hokm_seen_cards.append(card.duplicate())" in hokm
+    assert "hokm_difficulty" in hokm
