@@ -78,3 +78,25 @@ def test_othello_ai_has_six_levels_and_supports_twelve_by_twelve() -> None:
     assert "_set_othello_difficulty.bind(i + 1)" in main
     assert '"oth_difficulty_%d"' in main
     assert 'oth_size = 12' in main
+
+
+def test_web_export_preset_and_github_workflows_are_present() -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    presets = (project_root / "export_presets.cfg").read_text(encoding="utf-8")
+    build_workflow = (project_root / ".github" / "workflows" / "build-web.yml").read_text(encoding="utf-8")
+    deploy_workflow = (project_root / ".github" / "workflows" / "deploy-web.yml").read_text(encoding="utf-8")
+    main = (project_root / "main.gd").read_text(encoding="utf-8")
+    readme = (project_root / "README.md").read_text(encoding="utf-8")
+
+    assert 'name="Web"' in presets
+    assert 'platform="Web"' in presets
+    assert 'export_path="build/web/index.html"' in presets
+    assert 'progressive_web_app/enabled=true' in presets
+    assert 'variant/thread_support=false' in presets
+    assert 'actions/upload-artifact@v4' in build_workflow
+    assert 'actions/deploy-pages@v4' in deploy_workflow
+    assert 'OS.has_feature("web")' in main
+    assert 'info.get("net", false) and not web_build' in main
+    assert 'not web_build, GREEN' in main
+    assert 'نسخه وب از اتصال شبکه‌ای ENet پشتیبانی نمی‌کند' in main
+    assert 'ENet/UDP' in readme

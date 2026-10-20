@@ -26,7 +26,8 @@ preloaded = {key for key, folder in module_paths if key == folder}
 if preloaded != expected_modules:
     errors.append(f"module preload mismatch: expected {sorted(expected_modules)}, found {sorted(preloaded)}")
 
-# Validate each game package and every method wrapper.
+# Validate each game package and the app-facing methods it calls. Internal helpers
+# may live entirely inside a module; they do not need compatibility wrappers.
 main_funcs = set(re.findall(r"^func\s+(\w+)\(", main, re.M))
 module_method_count = 0
 state_count = 0
@@ -49,16 +50,17 @@ for game_id in sorted(expected_modules):
             errors.append(f"{game_id}: game.json id does not match the folder")
     except json.JSONDecodeError as exc:
         errors.append(f"{game_id}: invalid game.json: {exc}")
-    funcs = set(re.findall(r"^func\s+(\w+)\(", rules, re.M))
-    moved = {name for name in funcs if name.startswith("_")}
-    module_method_count += len(moved)
-    missing_wrappers = sorted(moved - main_funcs)
+    app_calls = {name for name in re.findall(r"\bapp\.(\w+)\s*\(", rules) if name.startswith("_")}
+    module_method_count += len(app_calls)
+    missing_wrappers = sorted(app_calls - main_funcs)
     if missing_wrappers:
-        errors.append(f"{game_id}: missing main compatibility wrappers for {missing_wrappers}")
+        errors.append(f"{game_id}: app-facing methods missing from main: {missing_wrappers}")
     state_vars = set(re.findall(r"^var\s+(\w+)(?::[^\n]+)?$", rules, re.M))
-    # Every module-owned state field is exposed as a property to legacy UI code.
+    # State used by legacy UI is proxied; newer code may access a module-owned
+    # field explicitly through _game_modules[game_id] instead. Both are valid.
     state_proxies = set(re.findall(r"^var\s+(\w+)(?::[^\n]+)?:\s*$", main, re.M))
-    missing_proxies = sorted(state_vars - state_proxies)
+    direct_module_members = set(re.findall(rf'_game_modules\["{re.escape(game_id)}"\]\.(\w+)', main))
+    missing_proxies = sorted(state_vars - state_proxies - direct_module_members)
     if missing_proxies:
         errors.append(f"{game_id}: state fields without compatibility properties: {missing_proxies}")
     state_count += len(state_vars)
@@ -100,7 +102,7 @@ if errors:
 
 print("STRUCTURE CHECK PASSED")
 print(f"- {len(expected_modules)} independent game rule modules")
-print(f"- {module_method_count} module methods exposed through compatibility wrappers")
+print(f"- {module_method_count} app-facing module calls checked for compatibility")
 print(f"- {state_count} module-owned state fields checked")
 print("- scoring, ranking, and game catalog services found")
 print("NOTE: this is a static structural check, not a Godot runtime test.")

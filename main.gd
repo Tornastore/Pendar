@@ -731,6 +731,9 @@ func _get_local_ips() -> Array:
 	return ips
 
 func _start_host() -> void:
+	if OS.has_feature("web"):
+		_show_toast("نسخه وب از اتصال شبکه‌ای ENet پشتیبانی نمی‌کند؛ بازی محلی را انتخاب کنید.")
+		return
 	vs_cpu = false
 	is_host = true
 	_cleanup_network()
@@ -773,6 +776,9 @@ func _ip_key(k: String) -> void:
 	_build_ip_buttons()
 
 func _do_join() -> void:
+	if OS.has_feature("web"):
+		_show_toast("اتصال با IP در نسخه وب پشتیبانی نمی‌شود؛ بازی محلی را انتخاب کنید.")
+		return
 	if join_ip.length() < 7:
 		_show_toast("IP معتبر وارد کنید")
 		return
@@ -2577,7 +2583,9 @@ func _open_rules() -> void:
 
 func _btns_mode() -> void:
 	var info: Dictionary = _game_info(selected_game)
-	var net: bool = info.get("net", false)
+	var web_build: bool = OS.has_feature("web")
+	# Godot Web does not support low-level ENet/UDP networking in browsers.
+	var net: bool = info.get("net", false) and not web_build
 	var option_y: float = 346.0
 	var difficulty_labels: Array[String] = ["خیلی آسان", "آسان", "متوسط", "سخت", "استاد", "استادتمام"]
 	_back_btn()
@@ -2599,7 +2607,10 @@ func _btns_mode() -> void:
 	_add_btn(Rect2(24, option_y + 98, 492, 84), "میزبانی روی وای‌فای", _start_host, net, BLUE, "option", "wifi", "m_host", "شما میزبان باشید، دوستتان با IP وصل می‌شود")
 	_add_btn(Rect2(24, option_y + 196, 492, 84), "اتصال با IP", _go_ip_entry, net, ACCENT, "option", "keypad", "m_join", "به بازی میزبانِ دیگر بپیوندید")
 	_add_btn(Rect2(24, option_y + 294, 492, 84), "بازی آنلاین", _open_online_for_game, net, PINK, "option", "globe", "m_online", "ساخت اتاق و دعوت دوست")
-	if not net:
+	if web_build:
+		for i in range(buttons.size() - 3, buttons.size()):
+			buttons[i].hint = "اتصال شبکه‌ای ENet در نسخه وب پشتیبانی نمی‌شود؛ بازی با کامپیوتر قابل اجراست."
+	elif not net:
 		for i in range(buttons.size() - 3, buttons.size()):
 			buttons[i].hint = "این بازی فعلاً فقط با کامپیوتر قابل بازی است."
 	if selected_game == "quoridor":
@@ -2630,7 +2641,9 @@ func _draw_mode() -> void:
 	var chip_y: float = hero.position.y + 150
 	var cx: float = rx
 	var chips: Array = [str(info.get("players", "2 نفره"))]
-	if info.get("net", false):
+	if OS.has_feature("web"):
+		chips.append("نسخه وب · بازی محلی")
+	elif info.get("net", false):
 		chips.append("چندنفره شبکه‌ای")
 	else:
 		chips.append("فقط آفلاین")
@@ -2686,6 +2699,7 @@ func _online_extra() -> float:
 	return maxf(0.0, end_y - 254.0)
 
 func _btns_online() -> void:
+	var web_build: bool = OS.has_feature("web")
 	_scroll_top = 76.0
 	_scroll_bottom = 868.0
 	_content_h = 0.0
@@ -2700,8 +2714,12 @@ func _btns_online() -> void:
 		_add_btn(Rect2(x, y, w, 38), nm, _pick_online_game.bind(id), true, _game_info(id).icon_col, "seg_on" if id == online_game else "ghost", "", "og_" + id)
 		i += 1
 	var ex: float = _online_extra()
-	_add_btn(Rect2(24, 292 + ex, 492, 84), "ساخت اتاق", _create_online_room, true, GREEN, "option", "plus", "o_create", "کد اتاق ۶ رقمی می‌گیرید و میزبان می‌شوید")
-	_add_btn(Rect2(24, 390 + ex, 492, 84), "ورود با IP میزبان", _join_online_room_ui, true, BLUE, "option", "keypad", "o_join", "IP را با صفحه‌کلید وارد کنید")
+	_add_btn(Rect2(24, 292 + ex, 492, 84), "ساخت اتاق", _create_online_room, not web_build, GREEN, "option", "plus", "o_create", "کد اتاق ۶ رقمی می‌گیرید و میزبان می‌شوید")
+	if web_build:
+		_last_btn().hint = "نسخه وب هنوز از ENet/UDP پشتیبانی نمی‌کند."
+	_add_btn(Rect2(24, 390 + ex, 492, 84), "ورود با IP میزبان", _join_online_room_ui, not web_build, BLUE, "option", "keypad", "o_join", "IP را با صفحه‌کلید وارد کنید")
+	if web_build:
+		_last_btn().hint = "برای بازی شبکه‌ای نسخه وب باید به WebSocket یا WebRTC منتقل شود."
 	_add_btn(Rect2(24, 488 + ex, 492, 84), "جستجوی سریع هم‌بازی", _quick_match_search, false, PINK, "option", "globe", "o_quick", "به‌زودی · نیازمند سرور آنلاین")
 	_last_btn().hint = "جستجوی سریع به سرور آنلاین نیاز دارد و هنوز فعال نیست."
 	_btns_nav()
@@ -2714,8 +2732,12 @@ func _draw_online() -> void:
 	var note := Rect2(24, 592 + ex, 492, 120)
 	_panel(note, Color(0.38, 0.62, 1.0, 0.10), 18, Color(0.38, 0.62, 1.0, 0.35), 1.0)
 	_draw_icon("info", Vector2(note.end.x - 28, note.position.y + 30), 22, BLUE, 2.0)
-	_wrap("اتصال فعلی روی همان وای‌فای (یا با IP عمومی و پورت‌فوروارد) کار می‌کند.", note.position.x + 18, note.position.y + 34, note.size.x - 76, 14, TEXT, HORIZONTAL_ALIGNMENT_RIGHT)
-	_wrap("بازی با هم‌بازی تصادفی در اینترنت به یک سرور میانی نیاز دارد که هنوز اضافه نشده است.", note.position.x + 18, note.position.y + 80, note.size.x - 36, 13, TEXT_DIM, HORIZONTAL_ALIGNMENT_RIGHT)
+	if OS.has_feature("web"):
+		_wrap("مرورگرها از اتصال سطح پایین ENet/UDP پشتیبانی نمی‌کنند؛ ساخت اتاق و اتصال با IP در نسخه وب غیرفعال است.", note.position.x + 18, note.position.y + 34, note.size.x - 76, 14, TEXT, HORIZONTAL_ALIGNMENT_RIGHT)
+		_wrap("بازی با کامپیوتر و بازی محلی تک‌دستگاه در دسترس است. برای چندنفره وب باید WebSocket/WebRTC و سرور سازگار پیاده‌سازی شود.", note.position.x + 18, note.position.y + 80, note.size.x - 36, 13, TEXT_DIM, HORIZONTAL_ALIGNMENT_RIGHT)
+	else:
+		_wrap("اتصال فعلی روی همان وای‌فای (یا با IP عمومی و پورت‌فوروارد) کار می‌کند.", note.position.x + 18, note.position.y + 34, note.size.x - 76, 14, TEXT, HORIZONTAL_ALIGNMENT_RIGHT)
+		_wrap("بازی با هم‌بازی تصادفی در اینترنت به یک سرور میانی نیاز دارد که هنوز اضافه نشده است.", note.position.x + 18, note.position.y + 80, note.size.x - 36, 13, TEXT_DIM, HORIZONTAL_ALIGNMENT_RIGHT)
 	_draw_bottom_nav()
 
 # ---------------- LOBBY ----------------

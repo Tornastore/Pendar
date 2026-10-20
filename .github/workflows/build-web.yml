@@ -1,0 +1,57 @@
+name: Build Web App
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: "4.3"
+
+jobs:
+  build-web:
+    runs-on: ubuntu-22.04
+    container:
+      image: barichello/godot-ci:4.3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Web export template for this runner
+        shell: bash
+        run: |
+          SRC="/root/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          DEST="$HOME/.local/share/godot/export_templates"
+          mkdir -p "$DEST"
+          if [ -d "$SRC" ] && [ "$SRC" != "$DEST/${GODOT_VERSION}.stable" ]; then
+            cp -a "$SRC" "$DEST/"
+          fi
+          test -d "$DEST/${GODOT_VERSION}.stable" || {
+            echo "Missing Godot ${GODOT_VERSION} export templates in the CI image." >&2
+            exit 1
+          }
+
+      - name: Import project resources
+        run: godot --headless --editor --path . --import
+
+      - name: Export Web app
+        run: |
+          mkdir -p build/web
+          godot --headless --path . --export-release "Web" build/web/index.html
+          test -s build/web/index.html
+          find build/web -maxdepth 1 -type f -printf '%f %k KB\n' | sort
+
+      - name: Upload Web app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MindBastion-Web
+          path: build/web/
+          if-no-files-found: error
+          retention-days: 30
