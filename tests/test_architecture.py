@@ -203,7 +203,48 @@ def test_gobblet_has_four_piece_sizes_in_rules_and_ui() -> None:
     assert "gob_hand = [[3, 3, 3, 3], [3, 3, 3, 3]]" in gobblet
     assert "for size in [4, 3, 2, 1]:" in gobblet
     assert "func _gob_hand_rect(index: int) -> Rect2:" in gobblet
-    assert gobblet.count("for s in 4:") >= 3
+    assert gobblet.count("for s in range(4):") >= 3
     assert '["کوچک", "متوسط", "بزرگ", "خیلی بزرگ"]' in gobblet
     assert "size < 1 or size > 4" in gobblet
-    assert "خیلی بزرگ" in main
+    assert "خیلی بزرگ" in gobblet
+
+
+
+def test_gobblet_supports_board_moves_and_reveal_loss_rule() -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    gobblet = (project_root / "games" / "gobblet" / "rules.gd").read_text(encoding="utf-8")
+    main = (project_root / "main.gd").read_text(encoding="utf-8")
+
+    assert "var gob_sel_from: Vector2i" in gobblet
+    assert "func _gob_can_move(" in gobblet
+    assert "func _gob_move(" in gobblet
+    assert "if _gob_check_win(3 - player):" in gobblet
+    assert "_gob_move(gob_sel_from, destination, me)" in gobblet
+    assert 'func _rpc_gob_move(fx: int, fy: int, tx: int, ty: int, player: int)' in main
+    assert "_gob_cpu()" in gobblet
+
+
+def test_abalone_has_standard_hex_board_sumito_and_six_marble_win() -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    abalone = (project_root / "games" / "abalone" / "rules.gd").read_text(encoding="utf-8")
+    main = (project_root / "main.gd").read_text(encoding="utf-8")
+    readme = (project_root / "games" / "abalone" / "README.md").read_text(encoding="utf-8")
+    catalog = (project_root / "core" / "game_catalog.gd").read_text(encoding="utf-8")
+
+    assert '"id": "abalone"' in catalog and '"beta": false' in catalog.split('"id": "abalone"', 1)[1].split("},", 1)[0]
+    assert "Vector2i(1, -1)" in abalone and "Vector2i(-1, 1)" in abalone
+    assert "func _aba_valid_cell(q: int, r: int) -> bool:" in abalone
+    assert "var enemy_count: int = 0" in abalone
+    assert "enemy_count < cells.size() and enemy_count <= 2" in abalone
+    assert "aba_out[opponent - 1] >= 6" in abalone
+    assert "func _aba_generate_all_moves(player: int) -> Array:" in abalone
+    assert "func _aba_apply_group_move(raw_cells: Array, dx: int, dy: int, player: int) -> bool:" in abalone
+    assert "ابلون (آزمایشی)" not in abalone
+    assert "نسخه آزمایشی" not in main
+    assert "۶۱ خانه" in readme and "۱۴ مهره" in readme and "بیرون‌راندن ۶ مهره" in readme
+    # The conventional axial-coordinate hex has 61 valid cells and the opening has 14 per side.
+    cells = [(q, r) for r in range(-4, 5) for q in range(-4, 5) if abs(q) <= 4 and abs(r) <= 4 and abs(q + r) <= 4]
+    assert len(cells) == 61
+    top = [(q, -4) for q in range(0, 5)] + [(q, -3) for q in range(-1, 5)] + [(q, -2) for q in range(0, 3)]
+    bottom = [(q, 4) for q in range(-4, 1)] + [(q, 3) for q in range(-4, 2)] + [(q, 2) for q in range(-2, 1)]
+    assert len(top) == 14 and len(bottom) == 14

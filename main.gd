@@ -1185,9 +1185,9 @@ const RULES := {
 		"نسخه ساده: انتخاب دستی مهره هنوز پیاده‌سازی نشده است.",
 	],
 	"gobblet": [
-		"هر بازیکن از هر اندازه (کوچک، متوسط، بزرگ، خیلی بزرگ) سه مهره دارد.",
-		"مهره بزرگ‌تر می‌تواند روی مهره کوچک‌تر (حتی مهره حریف) بنشیند.",
-		"۴ مهره هم‌رنگ در یک ردیف، ستون یا قطر = برد.",
+		"هر بازیکن ۱۲ مهره دارد: سه مهره از هر یک از چهار اندازه.",
+		"در هر نوبت می‌توانید مهره تازه را در خانه خالی بگذارید یا بالاترین مهره خود روی صفحه را حرکت دهید؛ مهره بزرگ‌تر روی مهره کوچک‌تر می‌نشیند.",
+		"اگر با برداشتن یک مهره، ردیف چهار‌تاییِ نمایان حریف باقی بماند، می‌بازید؛ مگر اینکه همان حرکت ردیف را بپوشاند.",
 	],
 	"mastermind": [
 		"یک کد مخفی ۴ رنگی ساخته شده است؛ رنگ‌ها می‌توانند تکراری باشند.",
@@ -1195,8 +1195,9 @@ const RULES := {
 		"حداکثر ۱۰ تلاش دارید.",
 	],
 	"abalone": [
-		"نسخه آزمایشی: مهره خود را انتخاب کنید و به خانه خالیِ کناری ببرید.",
-		"قوانین هل‌دادن و برد کامل هنوز اضافه نشده است.",
+		"هر بازیکن ۱۴ مهره دارد؛ با بیرون‌راندن ۶ مهره حریف از صفحه برنده می‌شوید.",
+		"یک تا سه مهره هم‌رنگ و هم‌راستا را انتخاب کنید؛ گروه می‌تواند در امتداد خط یا به پهلو یک خانه حرکت کند.",
+		"هل‌دادن فقط در حرکت مستقیم و با برتری عددی مجاز است: دو به یک، سه به یک یا سه به دو. حرکت پهلو مهره حریف را هل نمی‌دهد.",
 	],
 	"blockace": [
 		"قطعه را از پایین انتخاب کنید (با دکمه چرخش می‌توانید بچرخانید).",
@@ -2287,11 +2288,11 @@ func _ui_sig() -> String:
 			"domino": s += "|%d|%d|%d|%d|%d|%d" % [dom_turn, dom_selected, dom_boneyard.size(), dom_hands[0].size(), dom_hands[1].size(), dom_chain.size()]
 			"pasoor": s += "|%d|%d|%d|%d" % [pas_turn, pas_selected, pas_table.size(), pas_hands[0].size() + pas_hands[1].size()]
 			"mastermind": s += "|%d|%s|%d|%d" % [mm_slot, str(mm_filled), int(_game_modules["mastermind"].mm_turn), mm_guesses.size()]
-			"gobblet": s += "|%d|%d" % [gob_sel_size, gob_turn]
+			"gobblet": s += "|%d|%d|%d|%d" % [gob_sel_size, gob_turn, _game_modules["gobblet"].gob_sel_from.x, _game_modules["gobblet"].gob_sel_from.y]
 			"backgammon": s += "|%d|%d" % [bg_turn, bg_moves_left.size()]
 			"blockace": s += "|%d|%d|%d|%d|%d" % [blk_sel, blk_rot, blk_turn, blk_prev.x, blk_prev.y]
 			"hokm": s += "|%d|%d" % [hokm_turn, hokm_hands[0].size()]
-			"abalone": s += "|%d" % aba_turn
+			"abalone": s += "|%d|%d|%d|%d" % [aba_turn, _game_modules["abalone"].aba_selection.size(), aba_out[0], aba_out[1]]
 			"chess": s += "|%d" % chess_turn
 			"othello", "othello12": s += "|%d" % othello_turn
 	return s
@@ -3111,6 +3112,9 @@ func _result_info() -> Dictionary:
 		"backgammon":
 			rows.append(["خارج‌شده شما", _fa(bg_off[_my_seat()])])
 			rows.append(["خارج‌شده حریف", _fa(bg_off[1 - _my_seat()])])
+		"abalone":
+			rows.append(["مهره‌های خارج‌شده شما", _fa(aba_out[_my_seat()])])
+			rows.append(["مهره‌های خارج‌شده حریف", _fa(aba_out[1 - _my_seat()])])
 		"blockace":
 			var c0: int = 0
 			var c1: int = 0
@@ -3859,9 +3863,18 @@ func _rpc_gob_place(x: int, y: int, size: int, player: int) -> void:
 		_game_modules["gobblet"]._gob_place(x, y, size, player)
 
 @rpc("any_peer", "call_local", "reliable")
-func _rpc_aba_move(fx: int, fy: int, tx: int, ty: int) -> void:
-	if selected_game == "abalone" and state == State.PLAYING:
-		_game_modules["abalone"]._aba_apply_move(Vector2i(fx, fy), Vector2i(tx, ty))
+func _rpc_gob_move(fx: int, fy: int, tx: int, ty: int, player: int) -> void:
+	if selected_game == "gobblet" and state == State.PLAYING:
+		_game_modules["gobblet"]._gob_move(Vector2i(fx, fy), Vector2i(tx, ty), player)
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_aba_move(encoded_sources: PackedInt32Array, dx: int, dy: int, player: int) -> void:
+	if selected_game != "abalone" or state != State.PLAYING or encoded_sources.size() < 2 or encoded_sources.size() > 6 or encoded_sources.size() % 2 != 0:
+		return
+	var sources: Array = []
+	for i in range(0, encoded_sources.size(), 2):
+		sources.append(Vector2i(encoded_sources[i], encoded_sources[i + 1]))
+	_game_modules["abalone"]._aba_apply_group_move(sources, dx, dy, player)
 
 @rpc("any_peer", "call_local", "reliable")
 func _rpc_blk_place(px: int, py: int, sel: int, rot: int, player: int) -> void:
@@ -4039,10 +4052,10 @@ func _draw_backgammon() -> void:
 	_game_modules["backgammon"]._draw_backgammon()
 
 # ======================================================================
-#  ABALONE (simplified)
+#  ABALONE (standard rules)
 # ======================================================================
-const ABA_CELL := 48.0
-const ABA_ORIGIN := Vector2(54, 196)
+const ABA_CELL := 44.0
+const ABA_ORIGIN := Vector2(270, 408)
 
 func _aba_tap(p: Vector2) -> void:
 	_game_modules["abalone"]._aba_tap(p)

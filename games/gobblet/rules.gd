@@ -1,11 +1,13 @@
 extends "res://core/game_module.gd"
-## Rule engine and authoritative state for gobblet.
+## Rule engine and authoritative state for Gobblet.
+## Board pieces may move to any legal square. Revealing an opponent's four-in-a-row
+## during a move loses unless the move itself covers that exposed line.
 
-# ---------- Game-owned state ----------
-var gob_board: Array = []  # 4x4 stacks of {owner, size}
+var gob_board: Array = []  # 4x4 stacks of {o: owner, s: size}; last element is visible
 var gob_turn: int = 1
-var gob_hand: Array = [[3, 3, 3, 3], [3, 3, 3, 3]]  # three pieces of each of four sizes per player
+var gob_hand: Array = [[3, 3, 3, 3], [3, 3, 3, 3]]
 var gob_sel_size: int = -1
+var gob_sel_from: Vector2i = Vector2i(-1, -1)
 var gob_game_over: bool = false
 var gob_winner: int = 0
 
@@ -14,96 +16,230 @@ func reset_game() -> void:
 
 func _reset_gobblet() -> void:
 	gob_board = []
-	for y in 4:
+	for y in range(4):
 		var row: Array = []
-		for x in 4:
-			row.append([])  # stack of {o, s}
+		for x in range(4):
+			row.append([])
 		gob_board.append(row)
 	gob_turn = 1
 	gob_hand = [[3, 3, 3, 3], [3, 3, 3, 3]]
 	gob_sel_size = -1
+	gob_sel_from = Vector2i(-1, -1)
 	gob_game_over = false
 	gob_winner = 0
 
 func _gob_top(x: int, y: int) -> Dictionary:
+	if x < 0 or x >= 4 or y < 0 or y >= 4:
+		return {}
 	var st: Array = gob_board[y][x]
-	if st.size() == 0:
+	if st.is_empty():
 		return {}
 	return st[st.size() - 1]
 
-func _gob_check_win(p: int) -> bool:
-	# rows cols diags of top owner
-	for y in 4:
-		var ok := true
-		for x in 4:
-			var t: Dictionary = _gob_top(x, y)
-			if t.is_empty() or int(t.o) != p:
-				ok = false
-				break
-		if ok:
-			return true
-	for x in 4:
-		var ok2 := true
-		for y in 4:
-			var t2: Dictionary = _gob_top(x, y)
-			if t2.is_empty() or int(t2.o) != p:
-				ok2 = false
-				break
-		if ok2:
-			return true
-	var okd := true
-	for i in 4:
-		var t3: Dictionary = _gob_top(i, i)
-		if t3.is_empty() or int(t3.o) != p:
-			okd = false
-			break
-	if okd:
-		return true
-	okd = true
-	for i in 4:
-		var t4: Dictionary = _gob_top(i, 3 - i)
-		if t4.is_empty() or int(t4.o) != p:
-			okd = false
-			break
-	return okd
+func _gob_lines() -> Array:
+	var lines: Array = []
+	for y in range(4):
+		var row: Array = []
+		for x in range(4):
+			row.append(Vector2i(x, y))
+		lines.append(row)
+	for x in range(4):
+		var col: Array = []
+		for y in range(4):
+			col.append(Vector2i(x, y))
+		lines.append(col)
+	var diag_a: Array = []
+	var diag_b: Array = []
+	for i in range(4):
+		diag_a.append(Vector2i(i, i))
+		diag_b.append(Vector2i(3 - i, i))
+	lines.append(diag_a)
+	lines.append(diag_b)
+	return lines
 
-func _gob_place(x: int, y: int, size: int, player: int) -> bool:
-	if size < 1 or size > 4 or player < 1 or player > 2:
+func _gob_check_win(p: int) -> bool:
+	for line in _gob_lines():
+		var complete: bool = true
+		for cell in line:
+			var top: Dictionary = _gob_top(cell.x, cell.y)
+			if top.is_empty() or int(top.o) != p:
+				complete = false
+				break
+		if complete:
+			return true
+	return false
+
+func _gob_opponent_three_at(x: int, y: int, player: int) -> bool:
+	var opponent: int = 3 - player
+	for line in _gob_lines():
+		var opponent_count: int = 0
+		var target_is_opponent: bool = false
+		for cell in line:
+			var top: Dictionary = _gob_top(cell.x, cell.y)
+			if not top.is_empty() and int(top.o) == opponent:
+				opponent_count += 1
+				if cell == Vector2i(x, y):
+					target_is_opponent = true
+		if opponent_count >= 3 and target_is_opponent:
+			return true
+	return false
+
+func _gob_can_place(x: int, y: int, size: int, player: int) -> bool:
+	if gob_game_over or player < 1 or player > 2 or player != gob_turn:
+		return false
+	if x < 0 or x >= 4 or y < 0 or y >= 4 or size < 1 or size > 4:
+		return false
+	if gob_hand[player - 1][size - 1] <= 0:
 		return false
 	var top: Dictionary = _gob_top(x, y)
-	if not top.is_empty() and int(top.s) >= size:
-		return false
-	var hand_idx: int = size - 1
-	if gob_hand[player - 1][hand_idx] <= 0:
-		return false
-	gob_hand[player - 1][hand_idx] -= 1
-	gob_board[y][x].append({"o": player, "s": size})
-	if _gob_check_win(player):
-		gob_game_over = true
-		gob_winner = player
-		app.state = State.RESULT
-		app._build_result_buttons()
+	if top.is_empty():
 		return true
-	gob_turn = 3 - gob_turn
+	if int(top.s) >= size:
+		return false
+	# Rule: an off-board Gobblet normally enters an empty square. It may cover
+	# an opponent's visible piece only to break that opponent's three-in-a-row.
+	return int(top.o) == 3 - player and _gob_opponent_three_at(x, y, player)
+
+func _gob_can_move(from: Vector2i, to: Vector2i, player: int) -> bool:
+	if gob_game_over or player < 1 or player > 2 or player != gob_turn:
+		return false
+	if from.x < 0 or from.x >= 4 or from.y < 0 or from.y >= 4:
+		return false
+	if to.x < 0 or to.x >= 4 or to.y < 0 or to.y >= 4 or from == to:
+		return false
+	var source_top: Dictionary = _gob_top(from.x, from.y)
+	if source_top.is_empty() or int(source_top.o) != player:
+		return false
+	var target_top: Dictionary = _gob_top(to.x, to.y)
+	return target_top.is_empty() or int(source_top.s) > int(target_top.s)
+
+func _gob_finish(winner: int) -> void:
+	gob_game_over = true
+	gob_winner = winner
 	gob_sel_size = -1
+	gob_sel_from = Vector2i(-1, -1)
+	app.state = app.State.RESULT
+	app._build_result_buttons()
+
+func _gob_place(x: int, y: int, size: int, player: int) -> bool:
+	if not _gob_can_place(x, y, size, player):
+		return false
+	gob_hand[player - 1][size - 1] -= 1
+	gob_board[y][x].append({"o": player, "s": size})
+	gob_sel_size = -1
+	gob_sel_from = Vector2i(-1, -1)
+	if _gob_check_win(3 - player):
+		# A covered piece cannot be part of a visible line, so this is defensive.
+		_gob_finish(3 - player)
+		return true
+	if _gob_check_win(player):
+		_gob_finish(player)
+		return true
+	gob_turn = 3 - player
 	return true
+
+func _gob_move(from: Vector2i, to: Vector2i, player: int) -> bool:
+	if not _gob_can_move(from, to, player):
+		return false
+	var source_stack: Array = gob_board[from.y][from.x]
+	var piece: Dictionary = source_stack.pop_back()
+	gob_board[to.y][to.x].append(piece)
+	gob_sel_size = -1
+	gob_sel_from = Vector2i(-1, -1)
+	# The whole move is evaluated atomically. If lifting the piece exposes four
+	# of the opponent's visible pieces and this move doesn't cover the line, mover loses.
+	if _gob_check_win(3 - player):
+		_gob_finish(3 - player)
+		return true
+	if _gob_check_win(player):
+		_gob_finish(player)
+		return true
+	gob_turn = 3 - player
+	return true
+
+func _gob_action_score(action: Dictionary, player: int) -> float:
+	var saved_board: Array = gob_board.duplicate(true)
+	var saved_hand: Array = gob_hand.duplicate(true)
+	if str(action.kind) == "place":
+		gob_hand[player - 1][int(action.size) - 1] -= 1
+		gob_board[int(action.y)][int(action.x)].append({"o": player, "s": int(action.size)})
+	else:
+		var source: Vector2i = action.from
+		var target: Vector2i = action.to
+		var stack: Array = gob_board[source.y][source.x]
+		var pc: Dictionary = stack.pop_back()
+		gob_board[target.y][target.x].append(pc)
+	var score: float = 0.0
+	if _gob_check_win(3 - player):
+		score = -100000.0
+	elif _gob_check_win(player):
+		score = 100000.0
+	else:
+		for line in _gob_lines():
+			var own_count: int = 0
+			var enemy_count: int = 0
+			for cell in line:
+				var top: Dictionary = _gob_top(cell.x, cell.y)
+				if not top.is_empty():
+					if int(top.o) == player:
+						own_count += 1
+					else:
+						enemy_count += 1
+			if enemy_count == 0:
+				if own_count == 3:
+					score += 24.0
+				elif own_count == 2:
+					score += 5.0
+			if own_count == 0 and enemy_count >= 3:
+				score -= 80.0
+		if str(action.kind) == "place":
+			score += float(action.size) * 0.4
+		else:
+			var dest: Vector2i = action.to
+			score += 2.0 - Vector2(dest.x, dest.y).distance_to(Vector2(1.5, 1.5)) * 0.4
+	gob_board = saved_board
+	gob_hand = saved_hand
+	return score + randf() * 0.1
 
 func _gob_cpu() -> void:
 	if gob_game_over or gob_turn != 2:
 		return
+	var actions: Array = []
 	for size in [4, 3, 2, 1]:
 		if gob_hand[1][size - 1] <= 0:
 			continue
-		var cells: Array = []
-		for y in 4:
-			for x in 4:
-				var top: Dictionary = _gob_top(x, y)
-				if top.is_empty() or int(top.s) < size:
-					cells.append(Vector2i(x, y))
-		if cells.size() > 0:
-			var c: Vector2i = cells[randi() % cells.size()]
-			_gob_place(c.x, c.y, size, 2)
-			return
+		for y in range(4):
+			for x in range(4):
+				if _gob_can_place(x, y, size, 2):
+					actions.append({"kind": "place", "x": x, "y": y, "size": size})
+	for y in range(4):
+		for x in range(4):
+			var top: Dictionary = _gob_top(x, y)
+			if top.is_empty() or int(top.o) != 2:
+				continue
+			for ty in range(4):
+				for tx in range(4):
+					var from := Vector2i(x, y)
+					var to := Vector2i(tx, ty)
+					if _gob_can_move(from, to, 2):
+						actions.append({"kind": "move", "from": from, "to": to})
+	if actions.is_empty():
+		gob_turn = 1
+		return
+	var best_score: float = -INF
+	var best_actions: Array = []
+	for action in actions:
+		var score: float = _gob_action_score(action, 2)
+		if score > best_score + 0.001:
+			best_score = score
+			best_actions = [action]
+		elif absf(score - best_score) <= 0.001:
+			best_actions.append(action)
+	var chosen: Dictionary = best_actions[randi() % best_actions.size()]
+	if str(chosen.kind) == "place":
+		_gob_place(int(chosen.x), int(chosen.y), int(chosen.size), 2)
+	else:
+		_gob_move(chosen.from, chosen.to, 2)
 
 func _gob_me() -> int:
 	return app._my_seat() + 1
@@ -111,39 +247,55 @@ func _gob_me() -> int:
 func _gob_my_turn() -> bool:
 	return gob_turn == _gob_me() and not gob_game_over
 
-func _gob_can_place(x: int, y: int, size: int, player: int) -> bool:
-	if size < 1 or size > 4 or player < 1 or player > 2:
-		return false
-	var top: Dictionary = _gob_top(x, y)
-	if not top.is_empty() and int(top.s) >= size:
-		return false
-	return gob_hand[player - 1][size - 1] > 0
+func _gob_pick(s: int) -> void:
+	if not _gob_my_turn():
+		return
+	gob_sel_size = s if gob_sel_size != s else -1
+	gob_sel_from = Vector2i(-1, -1)
 
 func _gob_tap(p: Vector2) -> void:
-	if not _gob_my_turn() or gob_sel_size < 1:
+	if not _gob_my_turn():
 		return
 	var gx: int = int(floor((p.x - app.GOB_ORIGIN.x) / app.GOB_CELL))
 	var gy: int = int(floor((p.y - app.GOB_ORIGIN.y) / app.GOB_CELL))
-	if gx >= 0 and gx < 4 and gy >= 0 and gy < 4:
-		var me: int = _gob_me()
+	if gx < 0 or gx >= 4 or gy < 0 or gy >= 4:
+		return
+	var me: int = _gob_me()
+	if gob_sel_size > 0:
 		if not _gob_can_place(gx, gy, gob_sel_size, me):
-			app._show_toast("این مهره روی این خانه نمی‌نشیند؛ باید از مهره موجود بزرگ‌تر باشد.")
+			app._show_toast("مهره‌ی تازه معمولاً روی خانه‌ی خالی قرار می‌گیرد؛ فقط برای شکستن ردیف سه‌تایی حریف می‌توان روی مهره‌ی او گذاشت.")
 		elif app._net_on():
 			app.rpc("_rpc_gob_place", gx, gy, gob_sel_size, me)
 		else:
 			_gob_place(gx, gy, gob_sel_size, me)
-
-func _gob_pick(s: int) -> void:
-	gob_sel_size = s if gob_sel_size != s else -1
+		return
+	var tapped_top: Dictionary = _gob_top(gx, gy)
+	if gob_sel_from.x >= 0:
+		var destination := Vector2i(gx, gy)
+		if _gob_can_move(gob_sel_from, destination, me):
+			if app._net_on():
+				app.rpc("_rpc_gob_move", gob_sel_from.x, gob_sel_from.y, gx, gy, me)
+			else:
+				_gob_move(gob_sel_from, destination, me)
+			return
+		if not tapped_top.is_empty() and int(tapped_top.o) == me:
+			gob_sel_from = destination
+			return
+		app._show_toast("خانه‌ی مقصد باید خالی باشد یا مهره‌ی روی آن کوچک‌تر باشد.")
+		return
+	if not tapped_top.is_empty() and int(tapped_top.o) == me:
+		gob_sel_from = Vector2i(gx, gy)
+		gob_sel_size = -1
+		return
+	app._show_toast("از پایین یک اندازه انتخاب کنید، یا یکی از مهره‌های روی صفحه را برای جابه‌جایی بزنید.")
 
 func _gob_hand_rect(index: int) -> Rect2:
-	# Four sizes fit as a 2x2 grid on the portrait mobile layout.
 	var col: int = index % 2
 	var row: int = int(index / 2)
 	return Rect2(20.0 + col * 260.0, 612.0 + row * 92.0, 240.0, 80.0)
 
 func _btns_gobblet() -> void:
-	for s in 4:
+	for s in range(4):
 		var r: Rect2 = _gob_hand_rect(s)
 		var ok: bool = _gob_my_turn() and gob_hand[_gob_me() - 1][s] > 0
 		app._add_hit(r, _gob_pick.bind(s + 1), "gob_%d" % s, false, ok)
@@ -152,7 +304,7 @@ func _draw_gobblet() -> void:
 	var me: int = _gob_me()
 	var tot0: int = 0
 	var tot1: int = 0
-	for s in 4:
+	for s in range(4):
 		tot0 += gob_hand[me - 1][s]
 		tot1 += gob_hand[2 - me][s]
 	var c_p1 := Color(1.0, 0.45, 0.35)
@@ -165,27 +317,29 @@ func _draw_gobblet() -> void:
 		pa.sub = "نوبت شما"
 	app._draw_hud("گابلت", pa, pb)
 	var flat: Array = []
-	for y in 4:
-		for x in 4:
+	for y in range(4):
+		for x in range(4):
 			var st: Array = gob_board[y][x]
 			flat.append(st.size() * 10 + (int(st[st.size() - 1].s) + int(st[st.size() - 1].o) * 100 if st.size() > 0 else 0))
 	app._track_board("gob", flat)
 	var o: Vector2 = app.GOB_ORIGIN
 	app._panel(Rect2(o - Vector2(10, 10), Vector2(app.GOB_CELL * 4 + 20, app.GOB_CELL * 4 + 20)), Color(0.16, 0.12, 0.10), 24, Color(0.9, 0.6, 0.3, 0.4), 1.5, 22, 8)
-	for y in 4:
-		for x in 4:
+	for y in range(4):
+		for x in range(4):
 			var r := Rect2(o.x + x * app.GOB_CELL + 3, o.y + y * app.GOB_CELL + 3, app.GOB_CELL - 6, app.GOB_CELL - 6)
 			app._panel(r, Color(0.27, 0.21, 0.17), 14)
+			var cell := Vector2i(x, y)
 			var ok_cell: bool = false
 			if _gob_my_turn() and gob_sel_size > 0:
-				var tp: Dictionary = _gob_top(x, y)
-				ok_cell = tp.is_empty() or int(tp.s) < gob_sel_size
-				if ok_cell:
-					app._panel(r, Color(app.ACCENT.r, app.ACCENT.g, app.ACCENT.b, 0.10), 14, Color(app.ACCENT.r, app.ACCENT.g, app.ACCENT.b, 0.45), 1.5)
+				ok_cell = _gob_can_place(x, y, gob_sel_size, me)
+			elif _gob_my_turn() and gob_sel_from.x >= 0:
+				ok_cell = _gob_can_move(gob_sel_from, cell, me)
+			if ok_cell:
+				app._panel(r, Color(app.ACCENT.r, app.ACCENT.g, app.ACCENT.b, 0.12), 14, Color(app.ACCENT.r, app.ACCENT.g, app.ACCENT.b, 0.50), 1.5)
 			var cc: Vector2 = r.get_center()
 			var st2: Array = gob_board[y][x]
 			var t: float = app._cell_t("gob", y * 4 + x)[0]
-			for k in st2.size():
+			for k in range(st2.size()):
 				var pc: Dictionary = st2[k]
 				var col: Color = c0 if int(pc.o) == me else c1
 				var rad: float = 11.0 + int(pc.s) * 10.0
@@ -196,8 +350,10 @@ func _draw_gobblet() -> void:
 				app.draw_circle(cc + Vector2(0, -1), rad - 3.5, col)
 				if k == st2.size() - 1:
 					app.draw_circle(cc + Vector2(-rad * 0.3, -rad * 0.36), rad * 0.2, Color(1, 1, 1, 0.4))
+			if gob_sel_from == cell:
+				app._ring(cc, app.GOB_CELL * 0.43, app.ACCENT, 3.0)
 	var size_names: Array[String] = ["کوچک", "متوسط", "بزرگ", "خیلی بزرگ"]
-	for s in 4:
+	for s in range(4):
 		var r: Rect2 = _gob_hand_rect(s)
 		var n: int = gob_hand[me - 1][s]
 		var sel: bool = (gob_sel_size == s + 1)
@@ -211,6 +367,11 @@ func _draw_gobblet() -> void:
 		app._txt_c("× " + app._fa(n), Rect2(r.position.x + 8, r.position.y + 40, r.size.x - 76, 26), 18, app.ACCENT if can else app.TEXT_FAINT, true)
 	if not gob_game_over:
 		if _gob_my_turn():
-			app._hint("اندازه مهره را انتخاب و روی صفحه بگذارید" if gob_sel_size < 1 else "یکی از خانه‌های مجاز را بزنید", 804, app.TEXT_DIM)
+			if gob_sel_size > 0:
+				app._hint("مهره‌ی تازه را روی خانه‌ی مجاز قرار دهید", 804, app.TEXT_DIM)
+			elif gob_sel_from.x >= 0:
+				app._hint("مهره‌ی انتخاب‌شده را به خانه‌ی علامت‌خورده ببرید", 804, app.TEXT_DIM)
+			else:
+				app._hint("اندازه‌ی تازه را انتخاب کنید یا مهره‌ی روی صفحه را برای جابه‌جایی بزنید", 804, app.TEXT_DIM)
 		else:
 			app._hint("حریف در حال بازی…", 804, app.TEXT_DIM)
