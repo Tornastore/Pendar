@@ -16,6 +16,31 @@ MAIN_PATH = ROOT / "main.gd"
 main = MAIN_PATH.read_text(encoding="utf-8")
 errors: list[str] = []
 
+# Catch malformed GDScript blocks early. A line ending in ':' starts a block,
+# so the next nonblank, noncomment line must be more deeply indented. This
+# specifically prevents a parse error from making the web canvas stay blank.
+def _leading_indent(line: str) -> int:
+    return len(line) - len(line.lstrip("\t "))
+
+for script_path in sorted(ROOT.rglob("*.gd")):
+    script_lines = script_path.read_text(encoding="utf-8").splitlines()
+    for index, line in enumerate(script_lines):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or not stripped.endswith(":"):
+            continue
+        indent = _leading_indent(line)
+        for next_index in range(index + 1, len(script_lines)):
+            next_line = script_lines[next_index]
+            next_stripped = next_line.strip()
+            if not next_stripped or next_stripped.startswith("#"):
+                continue
+            if _leading_indent(next_line) <= indent:
+                errors.append(
+                    f"{script_path.relative_to(ROOT)}:{index + 1}: block body must be indented "
+                    f"more than its header (next code line {next_index + 1})"
+                )
+            break
+
 # The shipped app currently has 12 independent rule modules; Othello 8x8 and 12x12 share one engine.
 expected_modules = {
     "othello", "pentago", "quoridor", "domino", "chess", "pasoor",

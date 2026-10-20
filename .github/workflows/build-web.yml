@@ -69,6 +69,18 @@ jobs:
         timeout-minutes: 8
         run: godot --headless --editor --path . --import
 
+      - name: Smoke-test game startup
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          LOG_FILE="/tmp/mind-bastion-godot-startup.log"
+          godot --headless --verbose --path . --quit-after 2 2>&1 | tee "$LOG_FILE"
+          if grep -E 'SCRIPT ERROR|Parse Error|Parser Error|Failed loading resource|Failed to load script|Cannot load script' "$LOG_FILE"; then
+            echo "ERROR: Godot reported script or resource loading errors during startup." >&2
+            exit 1
+          fi
+
       - name: Export Web app
         shell: bash
         timeout-minutes: 8

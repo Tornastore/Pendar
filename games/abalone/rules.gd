@@ -205,8 +205,8 @@ func _aba_generate_all_moves(player: int) -> Array:
 					for move in _aba_moves_for_selection(group, player):
 						var key: String = _aba_move_key(move.cells, int(move.dx), int(move.dy))
 						if not seen.has(key):
-						seen[key] = true
-						moves.append(move)
+							seen[key] = true
+							moves.append(move)
 	return moves
 
 func _aba_apply_group_move(raw_cells: Array, dx: int, dy: int, player: int) -> bool:
