@@ -38,6 +38,24 @@ jobs:
             exit 1
           }
 
+      - name: Download embedded Persian fonts (Vazirmatn, OFL-1.1)
+        shell: bash
+        run: |
+          mkdir -p fonts
+          download_font() {
+            local filename="$1"
+            curl --fail --location --retry 3 --retry-delay 2 \
+              "https://cdn.jsdelivr.net/npm/vazirmatn@33.0.3/fonts/ttf/${filename}" \
+              --output "fonts/${filename}" \
+              || curl --fail --location --retry 3 --retry-delay 2 \
+                "https://raw.githubusercontent.com/rastikerdar/vazirmatn/v33.003/fonts/ttf/${filename}" \
+                --output "fonts/${filename}"
+            test -s "fonts/${filename}"
+          }
+          download_font "Vazirmatn-Regular.ttf"
+          download_font "Vazirmatn-Bold.ttf"
+          ls -lh fonts/Vazirmatn-*.ttf
+
       - name: Import project resources
         run: godot --headless --editor --path . --import
 
