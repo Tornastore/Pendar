@@ -1,5 +1,12 @@
 {
   "id": "blockace",
   "name": "بلاک‌آس",
-  "category": "strategy"
+  "category": "strategy",
+  "variant": "Blokus Duo",
+  "players": 2,
+  "board_size": 14,
+  "piece_count_per_player": 21,
+  "network": "LAN IP / ENet on native exports",
+  "difficulty_levels": 6,
+  "beta": false
 }

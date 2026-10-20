@@ -141,6 +141,11 @@ var mm_code_len: int:
 		return _game_modules["mastermind"].mm_code_len
 	set(value):
 		_game_modules["mastermind"].mm_code_len = value
+var mm_color_count: int:
+	get:
+		return _game_modules["mastermind"].mm_color_count
+	set(value):
+		_game_modules["mastermind"].mm_color_count = value
 var mm_local_two_player: bool:
 	get:
 		return _game_modules["mastermind"].mm_local_two_player
@@ -286,6 +291,31 @@ var blk_pieces: Array:
 		return _game_modules["blockace"].blk_pieces
 	set(value):
 		_game_modules["blockace"].blk_pieces = value
+var blk_used: Array:
+	get:
+		return _game_modules["blockace"].blk_used
+	set(value):
+		_game_modules["blockace"].blk_used = value
+var blk_difficulty: int:
+	get:
+		return _game_modules["blockace"].blk_difficulty
+	set(value):
+		_game_modules["blockace"].blk_difficulty = value
+var blk_flip: bool:
+	get:
+		return _game_modules["blockace"].blk_flip
+	set(value):
+		_game_modules["blockace"].blk_flip = value
+var blk_scores: Array:
+	get:
+		return _game_modules["blockace"].blk_scores
+	set(value):
+		_game_modules["blockace"].blk_scores = value
+var blk_last_piece_size: Array:
+	get:
+		return _game_modules["blockace"].blk_last_piece_size
+	set(value):
+		_game_modules["blockace"].blk_last_piece_size = value
 var blk_sel: int:
 	get:
 		return _game_modules["blockace"].blk_sel
@@ -752,16 +782,6 @@ func _start_vs_cpu() -> void:
 		_game_modules["quoridor"].quo_local_multiplayer = false
 	_start_game()
 
-func _start_mastermind_local_two_player() -> void:
-	# Local hot-seat: player 1 creates a hidden code; player 2 gets ten attempts.
-	_cleanup_network()
-	vs_cpu = false
-	is_host = true
-	local_seat = 0
-	local_player_id = 1
-	mm_local_two_player = true
-	_start_game()
-
 func _start_quoridor_local_four_player() -> void:
 	# Hot-seat mode: four people share one device; no network session is started.
 	vs_cpu = false
@@ -900,11 +920,12 @@ func _start_network_game() -> void:
 		return
 	var rng_seed: int = randi()
 	var selected_mm_level: int = mm_difficulty if selected_game == "mastermind" else -1
-	rpc("_rpc_start_game", selected_game, rng_seed, selected_mm_level)
+	var selected_blk_level: int = blk_difficulty if selected_game == "blockace" else -1
+	rpc("_rpc_start_game", selected_game, rng_seed, selected_mm_level, selected_blk_level)
 	# call_local will also run on host
 
 @rpc("authority", "call_local", "reliable")
-func _rpc_start_game(game_id: String, rng_seed: int = 0, mastermind_level: int = -1) -> void:
+func _rpc_start_game(game_id: String, rng_seed: int = 0, mastermind_level: int = -1, blockace_level: int = -1) -> void:
 	selected_game = game_id
 	vs_cpu = false
 	if game_id == "mastermind":
@@ -912,6 +933,9 @@ func _rpc_start_game(game_id: String, rng_seed: int = 0, mastermind_level: int =
 		if mastermind_level >= 1:
 			mm_difficulty = clampi(mastermind_level, 1, 6)
 			mm_code_len = 3 + mm_difficulty
+			mm_color_count = 3 + mm_difficulty
+	if game_id == "blockace" and blockace_level >= 1:
+		blk_difficulty = clampi(blockace_level, 1, 6)
 	if game_id == "quoridor":
 		_game_modules["quoridor"].quo_player_count = 2
 		_game_modules["quoridor"].quo_local_multiplayer = false
@@ -1232,8 +1256,9 @@ const RULES := {
 		"اگر با برداشتن یک مهره، ردیف چهار‌تاییِ نمایان حریف باقی بماند، می‌بازید؛ مگر اینکه همان حرکت ردیف را بپوشاند.",
 	],
 	"mastermind": [
-		"یک کد مخفی ۴ رنگی ساخته شده است؛ رنگ‌ها می‌توانند تکراری باشند.",
-		"هر حدس را ثبت کنید: مهره سیاه = رنگ و جای درست، سفید = رنگ درست در جای نادرست.",
+		"با اتصال IP، میزبان کد مخفی را می‌سازد و دستگاه مهمان آن را حدس می‌زند؛ خود کد از میزبان خارج نمی‌شود.",
+		"در هر درجه، هم طول کد و هم تعداد رنگ‌های مجاز یکی بیشتر می‌شود؛ تکرار رنگ مجاز است.",
+		"مهره‌ی بازخورد دقیقاً زیر همان جای حدس چیده می‌شود: سیاه = رنگ و جای درست، سفید = رنگ درست در جای دیگر.",
 		"حداکثر ۱۰ تلاش دارید.",
 	],
 	"abalone": [
@@ -1242,14 +1267,19 @@ const RULES := {
 		"هل‌دادن فقط در حرکت مستقیم و با برتری عددی مجاز است: دو به یک، سه به یک یا سه به دو. حرکت پهلو مهره حریف را هل نمی‌دهد.",
 	],
 	"blockace": [
-		"قطعه را از پایین انتخاب کنید (با دکمه چرخش می‌توانید بچرخانید).",
-		"یک بار روی صفحه ضربه بزنید تا پیش‌نمایش ببینید، دوباره ضربه بزنید یا «قراردادن» را بزنید.",
-		"اگر کسی نتواند قطعه‌ای بگذارد نوبتش رد می‌شود؛ وقتی هیچ‌کس نتواند، صاحب خانه‌های بیشتر برنده است.",
+		"نسخه‌ی کامل دو نفره: صفحه‌ی ۱۴×۱۴ و ۲۱ قطعه‌ی استاندارد برای هر بازیکن.",
+		"قطعه‌ی اول باید خانه‌ی شروع شما را بپوشاند؛ قطعات بعدی باید از گوشه با قطعه‌ی خودتان تماس داشته باشند، اما نباید از ضلع به آن بچسبند.",
+		"قطعات می‌توانند از ضلع یا گوشه با مهره‌های حریف تماس داشته باشند. قطعات را بچرخانید یا وارونه کنید تا حرکت مجاز پیدا شود.",
+		"بازی با نداشتن حرکت برای هر دو بازیکن تمام می‌شود. هر خانه‌ی قطعه‌ی باقی‌مانده یک امتیاز منفی دارد؛ استفاده از همه‌ی قطعات ۱۵ امتیاز پاداش و گذاشتن تک‌خانه‌ای در آخر ۵ امتیاز دیگر دارد.",
 	],
 }
 
 const CAT_LABELS := {"all": "همه", "strategy": "استراتژی", "cards": "کارتی", "classic": "کلاسیک"}
-const MM_COLORS := [Color(1.0, 0.36, 0.42), Color(0.24, 0.86, 0.60), Color(0.30, 0.55, 1.0), Color(1.0, 0.82, 0.30), Color(0.71, 0.48, 1.0), Color(1.0, 0.62, 0.26)]
+const MM_COLORS := [
+	Color(1.0, 0.36, 0.42), Color(0.24, 0.86, 0.60), Color(0.30, 0.55, 1.0),
+	Color(1.0, 0.82, 0.30), Color(0.71, 0.48, 1.0), Color(1.0, 0.62, 0.26),
+	Color(0.20, 0.82, 0.84), Color(1.0, 0.42, 0.73), Color(0.72, 0.80, 0.91)
+]
 
 # ---------- UI state ----------
 var _result_logged: bool = false
@@ -2107,9 +2137,8 @@ func _build_result_buttons() -> void:
 		var won: bool = _player_won_current()
 		_result_delta = 0
 		var shared_device_four_player: bool = selected_game == "quoridor" and bool(_game_modules["quoridor"].quo_local_multiplayer)
-		var shared_device_two_player: bool = selected_game == "mastermind" and mm_local_two_player
-		# Shared-device matches are for fun; do not attribute both players' result to one account.
-		if not shared_device_four_player and not shared_device_two_player and not _result_draw and _result_counts():
+		# Shared-device four-player matches do not count toward one account's ranked results.
+		if not shared_device_four_player and not _result_draw and _result_counts():
 			_result_delta = scoring_service.WIN_PTS if won else scoring_service.LOSS_PTS
 			_record_match_result(won)
 		_result_t0 = _time
@@ -2147,8 +2176,6 @@ func _player_won_current() -> bool:
 		"mastermind":
 			if vs_cpu:
 				return mm_won
-			if mm_local_two_player:
-				return int(_game_modules["mastermind"].mm_winner) == 1
 			return int(_game_modules["mastermind"].mm_winner) == seat
 		"gobblet": return gob_winner == seat + 1
 		"hokm": return hokm_winner == seat
@@ -2276,7 +2303,8 @@ func _restart_current() -> void:
 		if is_host:
 			var rng_seed: int = randi()
 			var selected_mm_level: int = mm_difficulty if selected_game == "mastermind" else -1
-			rpc("_rpc_start_game", selected_game, rng_seed, selected_mm_level)
+			var selected_blk_level: int = blk_difficulty if selected_game == "blockace" else -1
+			rpc("_rpc_start_game", selected_game, rng_seed, selected_mm_level, selected_blk_level)
 	else:
 		_start_game()
 
@@ -2339,7 +2367,7 @@ func _ui_sig() -> String:
 			"mastermind": s += "|%d|%s|%d|%d" % [mm_slot, str(mm_filled), int(_game_modules["mastermind"].mm_turn), mm_guesses.size()]
 			"gobblet": s += "|%d|%d|%d|%d" % [gob_sel_size, gob_turn, _game_modules["gobblet"].gob_sel_from.x, _game_modules["gobblet"].gob_sel_from.y]
 			"backgammon": s += "|%d|%d" % [bg_turn, bg_moves_left.size()]
-			"blockace": s += "|%d|%d|%d|%d|%d" % [blk_sel, blk_rot, blk_turn, blk_prev.x, blk_prev.y]
+			"blockace": s += "|%d|%d|%d|%d|%d|%d|%d|%d" % [blk_sel, blk_rot, int(blk_flip), blk_turn, blk_prev.x, blk_prev.y, _game_modules["blockace"]._blk_used_count(0), _game_modules["blockace"]._blk_used_count(1)]
 			"hokm": s += "|%d|%d" % [hokm_turn, hokm_hands[0].size()]
 			"abalone": s += "|%d|%d|%d|%d" % [aba_turn, _game_modules["abalone"].aba_selection.size(), aba_out[0], aba_out[1]]
 			"chess": s += "|%d" % chess_turn
@@ -2733,11 +2761,15 @@ func _btns_mode() -> void:
 			var color: Color = GREEN if active else ACCENT
 			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_abalone_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "abalone_difficulty_%d" % (i + 1))
 		option_y = 398.0
+	elif selected_game == "blockace":
+		var blkmod = _game_modules["blockace"]
+		for i in range(6):
+			var active: bool = int(blkmod.blk_difficulty) == i + 1
+			var color: Color = GREEN if active else ACCENT
+			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_blockace_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "blockace_difficulty_%d" % (i + 1))
+		option_y = 398.0
 	_add_btn(Rect2(24, option_y, 492, 84), "بازی با کامپیوتر", _start_vs_cpu, true, GREEN, "option", "cpu", "m_cpu", "تک‌نفره · بدون نیاز به اینترنت")
 	var network_y: float = option_y + 98.0
-	if selected_game == "mastermind":
-		_add_btn(Rect2(24, option_y + 98, 492, 84), "دو نفره روی یک دستگاه", _start_mastermind_local_two_player, true, BLUE, "option", "users", "m_mm_local2", "بازیکن اول کد مخفی را می‌سازد؛ بازیکن دوم حدس می‌زند")
-		network_y += 98.0
 	_add_btn(Rect2(24, network_y, 492, 84), "میزبانی روی وای‌فای", _start_host, net, BLUE, "option", "wifi", "m_host", "شما میزبان باشید، دوستتان با IP وصل می‌شود")
 	_add_btn(Rect2(24, network_y + 98, 492, 84), "اتصال با IP", _go_ip_entry, net, ACCENT, "option", "keypad", "m_join", "به بازی میزبانِ دیگر بپیوندید")
 	_add_btn(Rect2(24, network_y + 196, 492, 84), "بازی آنلاین", _open_online_for_game, net, PINK, "option", "globe", "m_online", "ساخت اتاق و دعوت دوست")
@@ -2793,9 +2825,14 @@ func _set_abalone_difficulty(level: int) -> void:
 	_game_modules["abalone"].aba_difficulty = clampi(level, 1, 6)
 	_rebuild_buttons()
 
+func _set_blockace_difficulty(level: int) -> void:
+	blk_difficulty = clampi(level, 1, 6)
+	_rebuild_buttons()
+
 func _set_mastermind_difficulty(level: int) -> void:
 	mm_difficulty = clampi(level, 1, 6)
 	mm_code_len = 3 + mm_difficulty
+	mm_color_count = 3 + mm_difficulty
 	_rebuild_buttons()
 
 func _draw_mode() -> void:
@@ -2833,10 +2870,10 @@ func _draw_mode() -> void:
 	if selected_game == "quoridor":
 		_txt_r("سطح هوش کامپیوتر را انتخاب کنید", VIEW_W - 28, 333, 13, TEXT_DIM, true, 310)
 		_txt_r("روش بازی", VIEW_W - 28, 389, 13, TEXT_DIM, true, 180)
-	elif selected_game in ["othello", "othello12", "pentago", "domino", "gobblet", "abalone", "mastermind"]:
-		var difficulty_prompt: String = "درجه سختی و تعداد مهره‌ها را انتخاب کنید" if selected_game == "mastermind" else "سطح هوش کامپیوتر را انتخاب کنید"
+	elif selected_game in ["othello", "othello12", "pentago", "domino", "gobblet", "abalone", "mastermind", "blockace"]:
+		var difficulty_prompt: String = "درجه سختی، طول کد و تعداد رنگ‌ها" if selected_game == "mastermind" else "سطح هوش کامپیوتر را انتخاب کنید"
 		_txt_r(difficulty_prompt, VIEW_W - 28, 333, 13, TEXT_DIM, true, 310)
-		var mode_prompt: String = "طول کد: %s مهره" % _fa(3 + mm_difficulty) if selected_game == "mastermind" else "روش بازی"
+		var mode_prompt: String = "کد: %s خانه · %s رنگ" % [_fa(3 + mm_difficulty), _fa(3 + mm_difficulty)] if selected_game == "mastermind" else "روش بازی"
 		_txt_r(mode_prompt, VIEW_W - 28, 389, 13, TEXT_DIM, true, 180)
 	else:
 		_txt_r("روش بازی را انتخاب کنید", VIEW_W - 28, 336, 15, TEXT_DIM, true, 300)
@@ -3192,13 +3229,11 @@ func _result_info() -> Dictionary:
 			rows.append(["دست‌های شما", _fa(hokm_scores[_my_seat()])])
 			rows.append(["دست‌های حریف", _fa(hokm_scores[1 - _my_seat()])])
 		"mastermind":
-			if mm_local_two_player:
-				title = "بازیکن دوم کد را شکست!" if int(_game_modules["mastermind"].mm_winner) == 1 else "بازیکن اول برنده شد!"
-			elif vs_cpu:
+			if vs_cpu:
 				title = "کد را شکستید!" if mm_won else "کد شکسته نشد"
 			elif _result_draw:
 				title = "کد شکسته نشد"
-			sub = "تعداد تلاش: %s از ۱۰ · طول کد: %s" % [_fa(mm_guesses.size()), _fa(mm_code_len)]
+			sub = "تعداد تلاش: %s از ۱۰ · طول کد: %s · رنگ‌ها: %s" % [_fa(mm_guesses.size()), _fa(mm_code_len), _fa(mm_color_count)]
 		"gobblet":
 			sub = "۴ مهره هم‌رنگ در یک خط"
 		"backgammon":
@@ -3208,16 +3243,11 @@ func _result_info() -> Dictionary:
 			rows.append(["مهره‌های خارج‌شده شما", _fa(aba_out[_my_seat()])])
 			rows.append(["مهره‌های خارج‌شده حریف", _fa(aba_out[1 - _my_seat()])])
 		"blockace":
-			var c0: int = 0
-			var c1: int = 0
-			for row in blk_grid:
-				for v in row:
-					if v == 1:
-						c0 += 1
-					elif v == 2:
-						c1 += 1
-			rows.append(["خانه‌های شما", _fa(c1 if _my_seat() == 1 else c0)])
-			rows.append(["خانه‌های حریف", _fa(c0 if _my_seat() == 1 else c1)])
+			var seat: int = 0 if vs_cpu else local_seat
+			rows.append(["امتیاز شما", _fa(int(blk_scores[seat]))])
+			rows.append(["امتیاز حریف", _fa(int(blk_scores[1 - seat]))])
+			rows.append(["خانه‌های باقیمانده شما", _fa(_game_modules["blockace"]._blk_remaining_points(seat))])
+			rows.append(["خانه‌های باقیمانده حریف", _fa(_game_modules["blockace"]._blk_remaining_points(1 - seat))])
 	return {"title": title, "sub": sub, "rows": rows}
 
 func _btns_result() -> void:
@@ -3283,12 +3313,15 @@ func _draw_result() -> void:
 		var sy: float = maxf(y, 440.0)
 		_txt_c("کد مخفی", Rect2(0, sy, VIEW_W, 24), 14, TEXT_DIM)
 		var result_gap: float = minf(56.0, float(VIEW_W - 56) / float(maxi(1, mm_code_len)))
-		for i in range(mm_code_len):
-			var mc: Color = MM_COLORS[mm_secret[i]]
-			var sc := Vector2(VIEW_W * 0.5 + (float(mm_code_len - 1) * 0.5 - float(i)) * result_gap, sy + 54)
-			draw_circle(sc, 22 if mm_code_len <= 7 else 17, mc.darkened(0.3))
-			draw_circle(sc + Vector2(0, -1), 19 if mm_code_len <= 7 else 14, mc)
-			draw_circle(sc + Vector2(-6, -8), 5 if mm_code_len <= 7 else 4, Color(1, 1, 1, 0.35))
+		if mm_secret.size() == mm_code_len:
+			for i in range(mm_code_len):
+				var mc: Color = MM_COLORS[mm_secret[i]]
+				var sc := Vector2(VIEW_W * 0.5 + (float(i) - float(mm_code_len - 1) * 0.5) * result_gap, sy + 54)
+				draw_circle(sc, 22 if mm_code_len <= 7 else 17, mc.darkened(0.3))
+				draw_circle(sc + Vector2(0, -1), 19 if mm_code_len <= 7 else 14, mc)
+				draw_circle(sc + Vector2(-6, -8), 5 if mm_code_len <= 7 else 4, Color(1, 1, 1, 0.35))
+		else:
+			_txt_c("کد مخفی روی دستگاه میزبان نگهداری شد", Rect2(20, sy + 30, VIEW_W - 40, 40), 15, TEXT_DIM, true)
 		y = sy + 96.0
 	# delta chip
 	var dtxt: String
@@ -3970,9 +4003,18 @@ func _rpc_aba_move(encoded_sources: PackedInt32Array, dx: int, dy: int, player: 
 	_game_modules["abalone"]._aba_apply_group_move(sources, dx, dy, player)
 
 @rpc("any_peer", "call_local", "reliable")
-func _rpc_blk_place(px: int, py: int, sel: int, rot: int, player: int) -> void:
-	if selected_game == "blockace" and state == State.PLAYING:
-		_game_modules["blockace"]._blk_apply_net(px, py, sel, rot, player)
+func _rpc_blk_place(px: int, py: int, sel: int, rot: int, flipped: bool, player: int) -> void:
+	if selected_game != "blockace" or state != State.PLAYING or not _net_on():
+		return
+	# Validate which network seat may submit a move. Call-local invocations use sender 0.
+	var sender_id: int = multiplayer.get_remote_sender_id()
+	if sender_id != 0:
+		if is_host:
+			if not peer_to_seat.has(sender_id) or int(peer_to_seat[sender_id]) != player:
+				return
+		elif sender_id != 1 or player != 0:
+			return
+	_game_modules["blockace"]._blk_apply_net(px, py, sel, rot, flipped, player)
 
 @rpc("any_peer", "call_local", "reliable")
 func _rpc_bg_step(d1: int, d2: int) -> void:
@@ -3984,10 +4026,49 @@ func _rpc_hokm_play(p: int, idx: int) -> void:
 	if selected_game == "hokm" and state == State.PLAYING:
 		_game_modules["hokm"]._hokm_play(p, idx)
 
-@rpc("any_peer", "call_local", "reliable")
-func _rpc_mm_submit(g: Array, player: int) -> void:
-	if selected_game == "mastermind" and state == State.PLAYING:
-		_game_modules["mastermind"]._mm_apply(g, player)
+@rpc("any_peer", "reliable")
+func _rpc_mm_submit(g: Array, _player: int) -> void:
+	# Host is authoritative: only the connected guesser may submit; secret never leaves host.
+	if selected_game != "mastermind" or state != State.PLAYING or not is_host or not _net_on():
+		return
+	var sender: int = multiplayer.get_remote_sender_id()
+	if not peer_to_seat.has(sender) or int(peer_to_seat[sender]) != 1:
+		return
+	if int(_game_modules["mastermind"].mm_phase) != 3:
+		return
+	_game_modules["mastermind"]._mm_apply(g, 1)
+
+@rpc("authority", "reliable")
+func _rpc_mm_secret_ready(code_length: int, color_count: int) -> void:
+	if selected_game != "mastermind" or state != State.PLAYING or is_host:
+		return
+	var mm = _game_modules["mastermind"]
+	mm.mm_code_len = clampi(code_length, 4, 9)
+	mm.mm_color_count = clampi(color_count, 4, 9)
+	mm.mm_secret = []
+	mm.mm_phase = 1
+	mm.mm_cur = mm._mm_blank_code()
+	mm.mm_filled = mm._mm_blank_filled()
+	mm.mm_slot = 0
+	_rebuild_buttons()
+
+@rpc("authority", "reliable")
+func _rpc_mm_sync_state(guesses: Array, is_over: bool, winner: int) -> void:
+	if selected_game != "mastermind" or state != State.PLAYING or is_host:
+		return
+	var mm = _game_modules["mastermind"]
+	mm.mm_guesses = guesses.duplicate(true)
+	mm.mm_game_over = is_over
+	mm.mm_winner = winner
+	mm.mm_won = is_over and winner == local_seat
+	mm.mm_phase = 1
+	mm.mm_cur = mm._mm_blank_code()
+	mm.mm_filled = mm._mm_blank_filled()
+	mm.mm_slot = 0
+	if is_over:
+		_go_result(false)
+	else:
+		_build_playing_buttons()
 
 @rpc("any_peer", "call_local", "reliable")
 func _rpc_quo_action(kind: int, x: int, y: int, vertical: bool) -> void:
@@ -4070,7 +4151,8 @@ func _mm_all_filled() -> bool:
 	return _game_modules["mastermind"]._mm_all_filled()
 
 func _mm_tap(_p: Vector2) -> void:
-	_game_modules["mastermind"]._mm_tap(_p)
+	# Mastermind interaction is handled by its dynamic slot and colour buttons.
+	pass
 
 func _btns_mastermind() -> void:
 	_game_modules["mastermind"]._btns_mastermind()
@@ -4159,17 +4241,17 @@ func _draw_abalone() -> void:
 # ======================================================================
 #  BLOCKACE
 # ======================================================================
-const BLK_CELL := 44.0
-const BLK_ORIGIN := Vector2(50, 168)
+const BLK_CELL := 29.0
+const BLK_ORIGIN := Vector2(67, 155)
 
-func _blk_cells(idx: int, rot: int) -> Array:
-	return _game_modules["blockace"]._blk_cells(idx, rot)
+func _blk_cells(idx: int, rot: int, flipped: bool = false) -> Array:
+	return _game_modules["blockace"]._blk_cells(idx, rot, flipped)
 
 func _blk_has_move(player: int) -> bool:
 	return _game_modules["blockace"]._blk_has_move(player)
 
 func _blk_place(px: int, py: int, piece: Array, player: int) -> void:
-	_game_modules["blockace"]._blk_place(px, py, piece, player)
+	_game_modules["blockace"]._blk_place(px, py, piece, player, blk_sel, blk_rot, blk_flip)
 
 func _blk_cpu() -> void:
 	_game_modules["blockace"]._blk_cpu()

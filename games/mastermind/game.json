@@ -1,5 +1,13 @@
 {
   "id": "mastermind",
   "name": "فکر بکر",
-  "category": "classic"
+  "category": "classic",
+  "players": 2,
+  "network": "LAN IP / ENet on native exports",
+  "difficulty_levels": 6,
+  "min_code_length": 4,
+  "max_code_length": 9,
+  "min_color_count": 4,
+  "max_color_count": 9,
+  "beta": false
 }
