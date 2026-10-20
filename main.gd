@@ -2625,6 +2625,20 @@ func _btns_mode() -> void:
 			var color: Color = GREEN if active else ACCENT
 			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_backgammon_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "backgammon_difficulty_%d" % (i + 1))
 		option_y = 398.0
+	elif selected_game == "pentago":
+		var pmod = _game_modules["pentago"]
+		for i in range(6):
+			var active: bool = int(pmod.pent_difficulty) == i + 1
+			var color: Color = GREEN if active else ACCENT
+			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_pentago_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "pentago_difficulty_%d" % (i + 1))
+		option_y = 398.0
+	elif selected_game == "domino":
+		var dmod = _game_modules["domino"]
+		for i in range(6):
+			var active: bool = int(dmod.dom_difficulty) == i + 1
+			var color: Color = GREEN if active else ACCENT
+			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_domino_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "domino_difficulty_%d" % (i + 1))
+		option_y = 398.0
 	_add_btn(Rect2(24, option_y, 492, 84), "بازی با کامپیوتر", _start_vs_cpu, true, GREEN, "option", "cpu", "m_cpu", "تک‌نفره · بدون نیاز به اینترنت")
 	_add_btn(Rect2(24, option_y + 98, 492, 84), "میزبانی روی وای‌فای", _start_host, net, BLUE, "option", "wifi", "m_host", "شما میزبان باشید، دوستتان با IP وصل می‌شود")
 	_add_btn(Rect2(24, option_y + 196, 492, 84), "اتصال با IP", _go_ip_entry, net, ACCENT, "option", "keypad", "m_join", "به بازی میزبانِ دیگر بپیوندید")
@@ -2652,6 +2666,17 @@ func _set_chess_difficulty(level: int) -> void:
 
 func _set_backgammon_difficulty(level: int) -> void:
 	_game_modules["backgammon"].bg_difficulty = clampi(level, 1, 6)
+	_rebuild_buttons()
+
+func _set_pentago_difficulty(level: int) -> void:
+	_game_modules["pentago"].pent_difficulty = clampi(level, 1, 6)
+	# Discard any cached AI plan when the difficulty selection changes.
+	_game_modules["pentago"].pent_cpu_planned_quad = -1
+	_game_modules["pentago"].pent_cpu_planned_clockwise = true
+	_rebuild_buttons()
+
+func _set_domino_difficulty(level: int) -> void:
+	_game_modules["domino"].dom_difficulty = clampi(level, 1, 6)
 	_rebuild_buttons()
 
 func _draw_mode() -> void:

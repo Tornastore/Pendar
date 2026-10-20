@@ -1,5 +1,6 @@
 {
   "id": "domino",
   "name": "دومینو",
-  "category": "classic"
+  "category": "classic",
+  "difficulty_levels": 6
 }

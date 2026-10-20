@@ -9,6 +9,9 @@ var pent_last: Vector2i = Vector2i(-1, -1)
 var pent_game_over: bool = false
 var pent_winner: int = 0
 var pent_selected_quad: int = -1
+var pent_difficulty: int = 3 # 1 random .. 6 tactical look-ahead
+var pent_cpu_planned_quad: int = -1
+var pent_cpu_planned_clockwise: bool = true
 
 func reset_game() -> void:
 	_reset_pentago()
@@ -26,6 +29,8 @@ func _reset_pentago() -> void:
 	pent_game_over = false
 	pent_winner = 0
 	pent_selected_quad = -1
+	pent_cpu_planned_quad = -1
+	pent_cpu_planned_clockwise = true
 
 func _pent_check_win(color: int) -> bool:
 	# rows
@@ -101,16 +106,136 @@ func _pent_do_rotate(quad: int, clockwise: bool) -> void:
 
 func _pent_cpu_move() -> void:
 	if pent_phase == 0:
-		# random empty
-		var empties: Array = []
-		for y in 6:
-			for x in 6:
+		var empties: Array[Vector2i] = []
+		for y in range(6):
+			for x in range(6):
 				if pent_board[y][x] == 0:
 					empties.append(Vector2i(x, y))
-		if empties.size() > 0:
-			_pent_place(empties[randi() % empties.size()])
+		if empties.is_empty():
+			return
+		var place: Vector2i = empties[randi() % empties.size()]
+		pent_cpu_planned_quad = randi() % 4
+		pent_cpu_planned_clockwise = randi() % 2 == 0
+		if pent_difficulty >= 2:
+			var plan: Dictionary = _pent_choose_cpu_plan()
+			place = plan.get("place", place)
+			pent_cpu_planned_quad = int(plan.get("quad", pent_cpu_planned_quad))
+			pent_cpu_planned_clockwise = bool(plan.get("clockwise", pent_cpu_planned_clockwise))
+		_pent_place(place)
 	else:
-		_pent_do_rotate(randi() % 4, randi() % 2 == 0)
+		var quad: int = randi() % 4
+		var clockwise: bool = randi() % 2 == 0
+		if pent_difficulty >= 2 and pent_cpu_planned_quad >= 0:
+			quad = pent_cpu_planned_quad
+			clockwise = pent_cpu_planned_clockwise
+		_pent_do_rotate(quad, clockwise)
+		pent_cpu_planned_quad = -1
+
+func _pent_choose_cpu_plan() -> Dictionary:
+	var base_board: Array = pent_board.duplicate(true)
+	var plans: Array[Dictionary] = []
+	for y in range(6):
+		for x in range(6):
+			if int(base_board[y][x]) != 0:
+				continue
+			# Placement alone may complete five before a rotation is requested.
+			pent_board = base_board.duplicate(true)
+			pent_board[y][x] = 2
+			if _pent_check_win(2):
+				pent_board = base_board
+				return {"place": Vector2i(x, y), "quad": 0, "clockwise": true}
+			for quad in range(4):
+				for direction in range(2):
+					pent_board = base_board.duplicate(true)
+					pent_board[y][x] = 2
+					var clockwise: bool = direction == 0
+					_pent_rotate(quad, clockwise)
+					var score: float
+					if _pent_check_win(2):
+						score = 1000000.0
+					elif _pent_check_win(1):
+						score = -1000000.0
+					else:
+						score = _pent_evaluate_board(2, pent_difficulty)
+						var centre_bonus: float = 5.0 - abs(float(x) - 2.5) - abs(float(y) - 2.5)
+						score += centre_bonus * float(pent_difficulty) * 0.6
+						# Lower tiers accept more randomness; stronger tiers are more consistent.
+						score += randf_range(-8.0, 8.0) / float(pent_difficulty)
+					plans.append({"place": Vector2i(x, y), "quad": quad, "clockwise": clockwise, "score": score, "board": pent_board.duplicate(true)})
+	pent_board = base_board
+	if plans.is_empty():
+		return {}
+	plans.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a["score"]) > float(b["score"])
+	)
+	var best_plan: Dictionary = plans[0]
+	var best_score: float = -INF
+	var lookahead_count: int = mini(10, plans.size()) if pent_difficulty >= 5 else 0
+	for i in range(plans.size()):
+		var candidate: Dictionary = plans[i]
+		var score: float = float(candidate["score"])
+		if i < lookahead_count and score < 900000.0:
+			pent_board = candidate["board"].duplicate(true)
+			if _pent_opponent_has_winning_turn():
+				score -= 900000.0 if pent_difficulty >= 6 else 350000.0
+		if score > best_score:
+			best_score = score
+			best_plan = candidate
+	pent_board = base_board
+	return best_plan
+
+func _pent_evaluate_board(player: int, level: int) -> float:
+	var weights: Array[float] = [0.0, 1.0, 6.0, 38.0, 260.0, 0.0]
+	match level:
+		2: weights = [0.0, 1.0, 4.0, 20.0, 120.0, 0.0]
+		3: weights = [0.0, 1.5, 8.0, 48.0, 340.0, 0.0]
+		4: weights = [0.0, 2.0, 11.0, 70.0, 480.0, 0.0]
+		5: weights = [0.0, 2.0, 13.0, 85.0, 600.0, 0.0]
+		6: weights = [0.0, 2.5, 16.0, 105.0, 760.0, 0.0]
+	var result: float = 0.0
+	var directions: Array[Vector2i] = [Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1), Vector2i(1, -1)]
+	for y in range(6):
+		for x in range(6):
+			for direction in directions:
+				var end_x: int = x + direction.x * 4
+				var end_y: int = y + direction.y * 4
+				if end_x < 0 or end_x >= 6 or end_y < 0 or end_y >= 6:
+					continue
+				var own_count: int = 0
+				var enemy_count: int = 0
+				for step in range(5):
+					var cell: int = int(pent_board[y + direction.y * step][x + direction.x * step])
+					if cell == player:
+						own_count += 1
+					elif cell == 3 - player:
+						enemy_count += 1
+				if own_count > 0 and enemy_count == 0:
+					result += weights[own_count]
+				elif enemy_count > 0 and own_count == 0:
+					result -= weights[enemy_count] * 1.12
+	return result
+
+func _pent_opponent_has_winning_turn() -> bool:
+	var base_board: Array = pent_board.duplicate(true)
+	for y in range(6):
+		for x in range(6):
+			if int(base_board[y][x]) != 0:
+				continue
+			pent_board = base_board.duplicate(true)
+			pent_board[y][x] = 1
+			if _pent_check_win(1):
+				pent_board = base_board
+				return true
+			for quad in range(4):
+				for direction in range(2):
+					pent_board = base_board.duplicate(true)
+					pent_board[y][x] = 1
+					_pent_rotate(quad, direction == 0)
+					if _pent_check_win(1):
+						pent_board = base_board
+						return true
+	pent_board = base_board
+	return false
 
 func _pent_origin() -> Vector2:
 	return Vector2((app.VIEW_W - (app.PENT_CELL * 6.0 + app.PENT_GAP)) * 0.5, 196.0)

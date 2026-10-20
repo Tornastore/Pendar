@@ -1,5 +1,6 @@
 {
   "id": "pentago",
   "name": "پنتاگو",
-  "category": "strategy"
+  "category": "strategy",
+  "difficulty_levels": 6
 }

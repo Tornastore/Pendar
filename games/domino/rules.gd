@@ -12,6 +12,7 @@ var dom_game_over: bool = false
 var dom_winner: int = -1
 var dom_selected: int = -1        # index in hand
 var dom_scores: Array = [0, 0]
+var dom_difficulty: int = 3 # 1 random .. 6 flexible, blocking play
 
 func reset_game() -> void:
 	_reset_domino()
@@ -131,22 +132,145 @@ func _dom_calc_scores() -> void:
 
 func _dom_cpu_move() -> void:
 	var playable: Array = _dom_playable(1)
-	if playable.size() == 0:
+	if playable.is_empty():
 		if dom_boneyard.size() > 0:
 			_dom_draw(1)
 			playable = _dom_playable(1)
-			if playable.size() == 0:
+			if playable.is_empty():
 				dom_turn = 0
 				return
 		else:
 			dom_turn = 0
 			return
-	var idx: int = playable[0]
-	var tile: Vector2i = dom_hands[1][idx]
-	var end: String = "R"
-	if _dom_can_play(tile, "L"):
-		end = "L"
+	var action: Dictionary = _dom_choose_cpu_action(playable)
+	var idx: int = int(action.get("index", playable[0]))
+	var end: String = str(action.get("end", "R"))
 	_dom_play(1, idx, end)
+
+func _dom_choose_cpu_action(playable: Array) -> Dictionary:
+	var options: Array[Dictionary] = []
+	for raw_idx in playable:
+		var idx: int = int(raw_idx)
+		var tile: Vector2i = dom_hands[1][idx]
+		if _dom_can_play(tile, "L"):
+			options.append(_dom_score_cpu_option(idx, tile, "L"))
+		if _dom_can_play(tile, "R"):
+			options.append(_dom_score_cpu_option(idx, tile, "R"))
+	if options.is_empty():
+		return {"index": int(playable[0]), "end": "R"}
+	if dom_difficulty <= 1:
+		return options[randi() % options.size()]
+	var best: Dictionary = options[0]
+	var best_score: float = -INF
+	for option in options:
+		var score: float = float(option.get("score", 0.0))
+		if dom_difficulty <= 3:
+			score += randf_range(-2.5, 2.5)
+		elif dom_difficulty <= 5:
+			score += randf_range(-0.8, 0.8)
+		if score > best_score:
+			best_score = score
+			best = option
+	return best
+
+func _dom_score_cpu_option(idx: int, tile: Vector2i, end: String) -> Dictionary:
+	var remaining: Array = dom_hands[1].duplicate()
+	remaining.remove_at(idx)
+	var next_left: int = dom_left
+	var next_right: int = dom_right
+	if end == "L":
+		next_left = tile.x if tile.y == dom_left else tile.y
+	else:
+		next_right = tile.y if tile.x == dom_right else tile.x
+	var pips: int = tile.x + tile.y
+	var is_double: bool = tile.x == tile.y
+	var mobility: int = _dom_count_playable_for_ends(remaining, next_left, next_right)
+	var left_matches: int = _dom_count_matching(remaining, next_left)
+	var right_matches: int = _dom_count_matching(remaining, next_right)
+	var score: float = 0.0
+	var unknown_pressure: int = 0
+	var followup: float = 0.0
+	match dom_difficulty:
+		2:
+			score = float(pips) + (0.5 if is_double else 0.0)
+		3:
+			score = float(pips) * 1.5 + (2.0 if is_double else 0.0) + float(mobility) * 0.8
+		4:
+			score = float(pips) * 1.2 + (1.0 if is_double else 0.0) + float(mobility) * 2.4 + float(left_matches + right_matches) * 0.9
+		5:
+			unknown_pressure = _dom_unknown_matches(next_left, remaining, tile) + _dom_unknown_matches(next_right, remaining, tile)
+			score = float(pips) * 1.35 + float(mobility) * 3.0 + float(left_matches + right_matches) * 1.2 - float(unknown_pressure) * 0.32
+		6:
+			unknown_pressure = _dom_unknown_matches(next_left, remaining, tile) + _dom_unknown_matches(next_right, remaining, tile)
+			followup = _dom_followup_potential(remaining, next_left, next_right)
+			score = float(pips) * 1.55 + float(mobility) * 3.6 + float(left_matches + right_matches) * 1.4 - float(unknown_pressure) * 0.58 + followup * 1.25
+		_:
+			score = float(pips) + (1.0 if is_double else 0.0)
+	return {"index": idx, "end": end, "score": score}
+
+func _dom_count_playable_for_ends(hand: Array, left_end: int, right_end: int) -> int:
+	var count: int = 0
+	for raw_tile in hand:
+		var tile: Vector2i = raw_tile
+		if tile.x == left_end or tile.y == left_end or tile.x == right_end or tile.y == right_end:
+			count += 1
+	return count
+
+func _dom_count_matching(hand: Array, pip: int) -> int:
+	var count: int = 0
+	for raw_tile in hand:
+		var tile: Vector2i = raw_tile
+		if tile.x == pip or tile.y == pip:
+			count += 1
+	return count
+
+func _dom_same_tile(a: Vector2i, b: Vector2i) -> bool:
+	return (a.x == b.x and a.y == b.y) or (a.x == b.y and a.y == b.x)
+
+func _dom_contains_tile(hand: Array, target: Vector2i) -> bool:
+	for raw_tile in hand:
+		var tile: Vector2i = raw_tile
+		if _dom_same_tile(tile, target):
+			return true
+	return false
+
+func _dom_unknown_matches(pip: int, own_remaining: Array, just_played: Vector2i) -> int:
+	var unseen: int = 0
+	for a in range(7):
+		for b in range(a, 7):
+			var candidate := Vector2i(a, b)
+			if _dom_contains_tile(dom_chain, candidate) or _dom_contains_tile(own_remaining, candidate) or _dom_same_tile(candidate, just_played):
+				continue
+			if candidate.x == pip or candidate.y == pip:
+				unseen += 1
+	return unseen
+
+func _dom_followup_potential(hand: Array, left_end: int, right_end: int) -> float:
+	var best: float = 0.0
+	for i in range(hand.size()):
+		var tile: Vector2i = hand[i]
+		for end in ["L", "R"]:
+			var playable_here: bool = (tile.x == left_end or tile.y == left_end) if end == "L" else (tile.x == right_end or tile.y == right_end)
+			if not playable_here:
+				continue
+			var next_left: int = left_end
+			var next_right: int = right_end
+			if end == "L":
+				next_left = tile.x if tile.y == left_end else tile.y
+			else:
+				next_right = tile.y if tile.x == right_end else tile.x
+			var continuation_count: int = 0
+			for j in range(hand.size()):
+				if j == i:
+					continue
+				var other: Vector2i = hand[j]
+				if other.x == next_left or other.y == next_left or other.x == next_right or other.y == next_right:
+					continuation_count += 1
+			var candidate_score: float = float(tile.x + tile.y) + float(continuation_count) * 2.0
+			if tile.x == tile.y:
+				candidate_score += 1.0
+			best = maxf(best, candidate_score)
+	return best
 
 func _dom_pass(p: int) -> void:
 	if dom_game_over or dom_turn != p:

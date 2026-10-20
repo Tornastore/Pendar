@@ -1,0 +1,19 @@
+نسخهٔ یکپارچهٔ Mind Bastion — رفع Deploy و افزودن ۶ درجهٔ سختی
+
+این بسته شامل پروژهٔ کامل است. علاوه بر اصلاح Workflowهای انتشار GitHub Pages، شش سطح سختی هم به بازی‌های پنتاگو و دومینو اضافه شده‌اند؛ تغییر سطح روی تصمیم‌های کامپیوتر اثر می‌گذارد و فقط تغییر ظاهری منو نیست.
+
+برای جایگزین‌کردن پروژهٔ فعلی:
+1) از پروژهٔ فعلی یک نسخهٔ پشتیبان بگیر.
+2) ZIP را باز کن و محتویات پوشهٔ MindBastion_Modular را در ریشهٔ پروژهٔ خودت کپی کن و فایل‌های هم‌نام را جایگزین کن.
+3) در Git Bash، از ریشهٔ مخزن اجرا کن:
+
+   git add .github/workflows README.md main.gd games/pentago games/domino APPLY_FIX_FA.txt
+   git commit -m "Add six-level difficulty to Pentago and Domino"
+   git push origin main
+
+4) در GitHub به Settings > Pages > Build and deployment برو و Source را روی GitHub Actions قرار بده.
+5) در Actions اجرای جدید Deploy Web App to GitHub Pages را باز کن. اجرای قدیمیِ گیرکرده را در صورت نیاز با Cancel workflow متوقف کن.
+
+Build Web App (artifact only) و Build Android APK فقط با اجرای دستی کار می‌کنند؛ Deploy وب با Push به main به‌طور خودکار اجرا می‌شود.
+
+تست‌های ساختاری Python پاس شده‌اند. این محیط Godot را برای اجرای کامل بازی در اختیار نداشت، بنابراین اجرای واقعی داخل Godot و Deploy زنده از اینجا تأیید نشده‌اند.
