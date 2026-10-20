@@ -223,13 +223,13 @@ func _draw_mastermind() -> void:
 					var state_value: int = int(feedback[i]) if feedback.size() == mm_code_len else 0
 					var mark := Vector2(peg.x, y + 14.0)
 					if state_value == 2:
-						draw_circle(mark, 5.4, Color(0.04, 0.05, 0.08))
+						app.draw_circle(mark, 5.4, Color(0.04, 0.05, 0.08))
 						app._ring(mark, 5.4, Color(1, 1, 1, 0.48), 0.9)
 					elif state_value == 1:
-						draw_circle(mark, 5.4, Color(0.96, 0.97, 1.0))
+						app.draw_circle(mark, 5.4, Color(0.96, 0.97, 1.0))
 						app._ring(mark, 5.4, Color(0.22, 0.24, 0.30), 0.8)
 					else:
-						draw_circle(mark, 4.6, Color(1, 1, 1, 0.04))
+						app.draw_circle(mark, 4.6, Color(1, 1, 1, 0.04))
 						app._ring(mark, 4.6, Color(1, 1, 1, 0.10), 0.8)
 		app._txt_r("نشان زیر هر مهره متعلق به همان خانه است · سیاه: دقیق · سفید: رنگ درست", app.VIEW_W - 24, 574, 11, app.TEXT_DIM, false, 470)
 
@@ -239,7 +239,7 @@ func _draw_mastermind() -> void:
 		for i in range(mm_code_len):
 			var c2: Vector2 = _mm_slot_pos(i)
 			var sel: bool = (i == mm_slot)
-			draw_circle(c2, 27, Color(1, 1, 1, 0.06))
+			app.draw_circle(c2, 27, Color(1, 1, 1, 0.06))
 			app._ring(c2, 27, app.ACCENT if sel else Color(1, 1, 1, 0.18), 2.5 if sel else 1.2)
 			if mm_filled[i]:
 				app._draw_marble(c2, 22 if mm_code_len >= 8 else 25, app.MM_COLORS[mm_cur[i]])

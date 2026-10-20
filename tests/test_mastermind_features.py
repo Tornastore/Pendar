@@ -42,6 +42,17 @@ class MastermindFeatureTests(unittest.TestCase):
         self.assertEqual(indent(lines[if_line]), indent(lines[elif_line]))
         self.assertEqual(indent(lines[feedback_if]), indent(lines[if_line]))
 
+    def test_canvas_draw_commands_are_delegated_to_main_node(self):
+        # Rule modules are RefCounted objects, not CanvasItems. Drawing calls
+        # must go through app (the Node2D currently executing _draw()).
+        for line_no, line in enumerate(RULES.splitlines(), 1):
+            stripped = line.lstrip("\t ")
+            self.assertFalse(
+                stripped.startswith("draw_circle("),
+                f"Bare draw_circle call at games/mastermind/rules.gd:{line_no}; use app.draw_circle().",
+            )
+        self.assertEqual(RULES.count("app.draw_circle("), 5)
+
     def test_guess_slots_and_color_controls_are_dynamic(self):
         self.assertIn("for i in range(mm_code_len):", RULES)
         self.assertIn("for i in range(mm_color_count):", RULES)

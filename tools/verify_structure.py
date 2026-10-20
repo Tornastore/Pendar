@@ -71,6 +71,21 @@ for script_path in sorted(ROOT.rglob("*.gd")):
                 "must align with its matching if/elif branch"
             )
 
+# Game rule modules extend RefCounted, not CanvasItem. Canvas drawing commands
+# must be delegated to the main Node2D (app.draw_circle, app.draw_line, etc.).
+_canvas_draw_methods = (
+    "draw_circle", "draw_line", "draw_rect", "draw_arc", "draw_polyline",
+    "draw_polygon", "draw_colored_polygon", "draw_string", "draw_texture",
+    "draw_texture_rect", "draw_texture_rect_region",
+)
+for script_path in sorted((ROOT / "games").rglob("rules.gd")):
+    for index, line in enumerate(script_path.read_text(encoding="utf-8").splitlines(), 1):
+        stripped = line.lstrip("\t ")
+        if any(re.match(rf"{re.escape(method)}\s*\(", stripped) for method in _canvas_draw_methods):
+            errors.append(
+                f"{script_path.relative_to(ROOT)}:{index}: CanvasItem draw command must be called through app."
+            )
+
 # The shipped app currently has 12 independent rule modules; Othello 8x8 and 12x12 share one engine.
 expected_modules = {
     "othello", "pentago", "quoridor", "domino", "chess", "pasoor",
