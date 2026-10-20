@@ -192,3 +192,18 @@ def test_pasoor_and_hokm_difficulty_profiles_reach_ai_and_hud() -> None:
     assert "hokm_voids[p].append(int(led_card.s))" in hokm
     assert "hokm_seen_cards.append(card.duplicate())" in hokm
     assert "hokm_difficulty" in hokm
+
+
+def test_gobblet_has_four_piece_sizes_in_rules_and_ui() -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    gobblet = (project_root / "games" / "gobblet" / "rules.gd").read_text(encoding="utf-8")
+    main = (project_root / "main.gd").read_text(encoding="utf-8")
+
+    assert "var gob_hand: Array = [[3, 3, 3, 3], [3, 3, 3, 3]]" in gobblet
+    assert "gob_hand = [[3, 3, 3, 3], [3, 3, 3, 3]]" in gobblet
+    assert "for size in [4, 3, 2, 1]:" in gobblet
+    assert "func _gob_hand_rect(index: int) -> Rect2:" in gobblet
+    assert gobblet.count("for s in 4:") >= 3
+    assert '["کوچک", "متوسط", "بزرگ", "خیلی بزرگ"]' in gobblet
+    assert "size < 1 or size > 4" in gobblet
+    assert "خیلی بزرگ" in main

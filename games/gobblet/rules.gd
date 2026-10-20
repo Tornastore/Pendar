@@ -4,7 +4,7 @@ extends "res://core/game_module.gd"
 # ---------- Game-owned state ----------
 var gob_board: Array = []  # 4x4 stacks of {owner, size}
 var gob_turn: int = 1
-var gob_hand: Array = [[3,3,3], [3,3,3]]  # count of sizes 1,2,3 per player
+var gob_hand: Array = [[3, 3, 3, 3], [3, 3, 3, 3]]  # three pieces of each of four sizes per player
 var gob_sel_size: int = -1
 var gob_game_over: bool = false
 var gob_winner: int = 0
@@ -20,7 +20,7 @@ func _reset_gobblet() -> void:
 			row.append([])  # stack of {o, s}
 		gob_board.append(row)
 	gob_turn = 1
-	gob_hand = [[3, 3, 3], [3, 3, 3]]
+	gob_hand = [[3, 3, 3, 3], [3, 3, 3, 3]]
 	gob_sel_size = -1
 	gob_game_over = false
 	gob_winner = 0
@@ -68,6 +68,8 @@ func _gob_check_win(p: int) -> bool:
 	return okd
 
 func _gob_place(x: int, y: int, size: int, player: int) -> bool:
+	if size < 1 or size > 4 or player < 1 or player > 2:
+		return false
 	var top: Dictionary = _gob_top(x, y)
 	if not top.is_empty() and int(top.s) >= size:
 		return false
@@ -89,7 +91,7 @@ func _gob_place(x: int, y: int, size: int, player: int) -> bool:
 func _gob_cpu() -> void:
 	if gob_game_over or gob_turn != 2:
 		return
-	for size in [3, 2, 1]:
+	for size in [4, 3, 2, 1]:
 		if gob_hand[1][size - 1] <= 0:
 			continue
 		var cells: Array = []
@@ -110,6 +112,8 @@ func _gob_my_turn() -> bool:
 	return gob_turn == _gob_me() and not gob_game_over
 
 func _gob_can_place(x: int, y: int, size: int, player: int) -> bool:
+	if size < 1 or size > 4 or player < 1 or player > 2:
+		return false
 	var top: Dictionary = _gob_top(x, y)
 	if not top.is_empty() and int(top.s) >= size:
 		return false
@@ -132,9 +136,15 @@ func _gob_tap(p: Vector2) -> void:
 func _gob_pick(s: int) -> void:
 	gob_sel_size = s if gob_sel_size != s else -1
 
+func _gob_hand_rect(index: int) -> Rect2:
+	# Four sizes fit as a 2x2 grid on the portrait mobile layout.
+	var col: int = index % 2
+	var row: int = int(index / 2)
+	return Rect2(20.0 + col * 260.0, 612.0 + row * 92.0, 240.0, 80.0)
+
 func _btns_gobblet() -> void:
-	for s in 3:
-		var r := Rect2(app.VIEW_W - 16 - 160 - s * 170, 640, 160, 92)
+	for s in 4:
+		var r: Rect2 = _gob_hand_rect(s)
 		var ok: bool = _gob_my_turn() and gob_hand[_gob_me() - 1][s] > 0
 		app._add_hit(r, _gob_pick.bind(s + 1), "gob_%d" % s, false, ok)
 
@@ -142,7 +152,7 @@ func _draw_gobblet() -> void:
 	var me: int = _gob_me()
 	var tot0: int = 0
 	var tot1: int = 0
-	for s in 3:
+	for s in 4:
 		tot0 += gob_hand[me - 1][s]
 		tot1 += gob_hand[2 - me][s]
 	var c_p1 := Color(1.0, 0.45, 0.35)
@@ -178,7 +188,7 @@ func _draw_gobblet() -> void:
 			for k in st2.size():
 				var pc: Dictionary = st2[k]
 				var col: Color = c0 if int(pc.o) == me else c1
-				var rad: float = 14.0 + int(pc.s) * 11.0
+				var rad: float = 11.0 + int(pc.s) * 10.0
 				if k == st2.size() - 1 and t < 1.0:
 					rad *= app._ease_back(t)
 				app.draw_circle(cc + Vector2(0, 2), rad, Color(0, 0, 0, 0.30))
@@ -186,20 +196,21 @@ func _draw_gobblet() -> void:
 				app.draw_circle(cc + Vector2(0, -1), rad - 3.5, col)
 				if k == st2.size() - 1:
 					app.draw_circle(cc + Vector2(-rad * 0.3, -rad * 0.36), rad * 0.2, Color(1, 1, 1, 0.4))
-	for s in 3:
-		var r := Rect2(app.VIEW_W - 16 - 160 - s * 170, 640, 160, 92)
+	var size_names: Array[String] = ["کوچک", "متوسط", "بزرگ", "خیلی بزرگ"]
+	for s in 4:
+		var r: Rect2 = _gob_hand_rect(s)
 		var n: int = gob_hand[me - 1][s]
 		var sel: bool = (gob_sel_size == s + 1)
 		var can: bool = _gob_my_turn() and n > 0
-		app._panel(r, app.CARD_H if sel else app.CARD, 20, app.ACCENT if sel else app.LINE_STRONG, 2.5 if sel else 1.0, 8, 3)
-		var rad2: float = 14.0 + (s + 1) * 11.0
-		var cc2 := Vector2(r.end.x - 52, r.get_center().y)
-		app.draw_circle(cc2, rad2, (c0 if can else Color(0.4, 0.4, 0.45)).darkened(0.35))
-		app.draw_circle(cc2, rad2 - 3.5, c0 if can else Color(0.45, 0.45, 0.5))
-		app._txt_c(["کوچک", "متوسط", "بزرگ"][s], Rect2(r.position.x, r.position.y + 14, r.size.x - 100, 28), 15, app.TEXT if can else app.TEXT_FAINT, true)
-		app._txt_c("× " + app._fa(n), Rect2(r.position.x, r.position.y + 46, r.size.x - 100, 28), 18, app.ACCENT if can else app.TEXT_FAINT, true)
+		app._panel(r, app.CARD_H if sel else app.CARD, 18, app.ACCENT if sel else app.LINE_STRONG, 2.5 if sel else 1.0, 8, 3)
+		var rad2: float = 10.0 + (s + 1) * 5.0
+		var cc2 := Vector2(r.end.x - 48, r.get_center().y)
+		app.draw_circle(cc2 + Vector2(0, 2), rad2, (c0 if can else Color(0.4, 0.4, 0.45)).darkened(0.35))
+		app.draw_circle(cc2, rad2 - 2.5, c0 if can else Color(0.45, 0.45, 0.5))
+		app._txt_c(size_names[s], Rect2(r.position.x + 8, r.position.y + 10, r.size.x - 76, 26), 15, app.TEXT if can else app.TEXT_FAINT, true)
+		app._txt_c("× " + app._fa(n), Rect2(r.position.x + 8, r.position.y + 40, r.size.x - 76, 26), 18, app.ACCENT if can else app.TEXT_FAINT, true)
 	if not gob_game_over:
 		if _gob_my_turn():
-			app._hint("اندازه مهره را انتخاب و روی صفحه بگذارید" if gob_sel_size < 1 else "یکی از خانه‌های مجاز را بزنید", 590, app.TEXT_DIM)
+			app._hint("اندازه مهره را انتخاب و روی صفحه بگذارید" if gob_sel_size < 1 else "یکی از خانه‌های مجاز را بزنید", 804, app.TEXT_DIM)
 		else:
-			app._hint("حریف در حال بازی…", 590, app.TEXT_DIM)
+			app._hint("حریف در حال بازی…", 804, app.TEXT_DIM)
