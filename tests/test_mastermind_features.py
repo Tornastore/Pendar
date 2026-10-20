@@ -33,6 +33,15 @@ class MastermindFeatureTests(unittest.TestCase):
         self.assertIn('var state_value: int = int(feedback[i])', RULES)
         self.assertIn('"f": feedback', RULES)
 
+    def test_render_feedback_branches_are_aligned(self):
+        lines = RULES.splitlines()
+        if_line = next(i for i, line in enumerate(lines) if line.strip() == "if gi < used:")
+        elif_line = next(i for i, line in enumerate(lines) if line.strip() == "elif active and mm_filled[i]:")
+        feedback_if = next(i for i, line in enumerate(lines) if line.strip() == "if gi < used:" and i > elif_line)
+        indent = lambda line: len(line) - len(line.lstrip("\t"))
+        self.assertEqual(indent(lines[if_line]), indent(lines[elif_line]))
+        self.assertEqual(indent(lines[feedback_if]), indent(lines[if_line]))
+
     def test_guess_slots_and_color_controls_are_dynamic(self):
         self.assertIn("for i in range(mm_code_len):", RULES)
         self.assertIn("for i in range(mm_color_count):", RULES)

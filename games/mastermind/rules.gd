@@ -213,24 +213,24 @@ func _draw_mastermind() -> void:
 				if gi < used:
 					var guess_row: Dictionary = mm_guesses[gi]
 					app._draw_marble(peg, peg_radius, app.MM_COLORS[int(guess_row.g[i])])
-			elif active and mm_filled[i]:
-				app._draw_marble(peg, peg_radius, app.MM_COLORS[mm_cur[i]])
-			else:
-				app.draw_circle(peg, peg_radius, Color(1, 1, 1, 0.06))
-				app._ring(peg, peg_radius, Color(1, 1, 1, 0.14), 1.0)
-			if gi < used:
-				var feedback: Array = mm_guesses[gi].get("f", [])
-				var state_value: int = int(feedback[i]) if feedback.size() == mm_code_len else 0
-				var mark := Vector2(peg.x, y + 14.0)
-				if state_value == 2:
-					draw_circle(mark, 5.4, Color(0.04, 0.05, 0.08))
-					app._ring(mark, 5.4, Color(1, 1, 1, 0.48), 0.9)
-				elif state_value == 1:
-					draw_circle(mark, 5.4, Color(0.96, 0.97, 1.0))
-					app._ring(mark, 5.4, Color(0.22, 0.24, 0.30), 0.8)
+				elif active and mm_filled[i]:
+					app._draw_marble(peg, peg_radius, app.MM_COLORS[mm_cur[i]])
 				else:
-					draw_circle(mark, 4.6, Color(1, 1, 1, 0.04))
-					app._ring(mark, 4.6, Color(1, 1, 1, 0.10), 0.8)
+					app.draw_circle(peg, peg_radius, Color(1, 1, 1, 0.06))
+					app._ring(peg, peg_radius, Color(1, 1, 1, 0.14), 1.0)
+				if gi < used:
+					var feedback: Array = mm_guesses[gi].get("f", [])
+					var state_value: int = int(feedback[i]) if feedback.size() == mm_code_len else 0
+					var mark := Vector2(peg.x, y + 14.0)
+					if state_value == 2:
+						draw_circle(mark, 5.4, Color(0.04, 0.05, 0.08))
+						app._ring(mark, 5.4, Color(1, 1, 1, 0.48), 0.9)
+					elif state_value == 1:
+						draw_circle(mark, 5.4, Color(0.96, 0.97, 1.0))
+						app._ring(mark, 5.4, Color(0.22, 0.24, 0.30), 0.8)
+					else:
+						draw_circle(mark, 4.6, Color(1, 1, 1, 0.04))
+						app._ring(mark, 4.6, Color(1, 1, 1, 0.10), 0.8)
 		app._txt_r("نشان زیر هر مهره متعلق به همان خانه است · سیاه: دقیق · سفید: رنگ درست", app.VIEW_W - 24, 574, 11, app.TEXT_DIM, false, 470)
 
 	if _mm_my_turn():

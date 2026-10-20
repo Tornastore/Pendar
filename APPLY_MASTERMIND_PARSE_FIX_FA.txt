@@ -1,0 +1,16 @@
+رفع خطای Parse Error در فکر بکر (Mastermind)
+
+علت:
+در games/mastermind/rules.gd تورفتگی `elif active and mm_filled[i]:` با شرط `if gi < used:` هم‌سطح نبود. همچنین شرط نمایش نشان‌های بازخورد، بیرون از حلقه‌ی خانه‌ها قرار گرفته بود. این خطا باعث می‌شد Godot نتواند rules.gd را بارگذاری کند و main.gd هنگام preload متوقف شود.
+
+اصلاح:
+- هم‌سطح کردن if/elif/else داخل حلقه‌ی هر خانه
+- قراردادن نشان سیاه/سفید در حلقه‌ی همان خانه، برای نمایش و محاسبه‌ی درست
+- افزودن تست بازگشتی برای تورفتگی و بررسی ساختاری if/elif/else در tools/verify_structure.py
+
+برای اعمال در مخزن:
+  git add games/mastermind/rules.gd tools/verify_structure.py tests/test_mastermind_features.py APPLY_MASTERMIND_PARSE_FIX_FA.txt
+  git commit -m "Fix Mastermind GDScript parse error"
+  git push origin main
+
+تست‌های پایتون و بررسی ساختار اجرا شده‌اند. برای تأیید نهایی، Godot 4.3 headless export/build را در GitHub Actions اجرا کنید.

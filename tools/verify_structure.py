@@ -41,6 +41,36 @@ for script_path in sorted(ROOT.rglob("*.gd")):
                 )
             break
 
+# Branch keywords must align with the `if`/`elif` they continue. A single outdented
+# `elif` can make a preloaded module fail to parse and leave the web canvas blank.
+for script_path in sorted(ROOT.rglob("*.gd")):
+    script_lines = script_path.read_text(encoding="utf-8").splitlines()
+    for index, line in enumerate(script_lines):
+        stripped = line.lstrip("\t ")
+        if not (stripped.startswith("elif ") or stripped == "else:"):
+            continue
+        indent = _leading_indent(line)
+        previous_branch = None
+        for previous_index in range(index - 1, -1, -1):
+            previous_line = script_lines[previous_index]
+            previous_stripped = previous_line.lstrip("\t ")
+            if not previous_stripped or previous_stripped.startswith("#"):
+                continue
+            previous_indent = _leading_indent(previous_line)
+            if previous_indent > indent:
+                continue
+            previous_branch = (previous_index + 1, previous_indent, previous_stripped)
+            break
+        if (
+            previous_branch is None
+            or previous_branch[1] != indent
+            or not (previous_branch[2].startswith("if ") or previous_branch[2].startswith("elif "))
+        ):
+            errors.append(
+                f"{script_path.relative_to(ROOT)}:{index + 1}: {stripped.split(':', 1)[0]} "
+                "must align with its matching if/elif branch"
+            )
+
 # The shipped app currently has 12 independent rule modules; Othello 8x8 and 12x12 share one engine.
 expected_modules = {
     "othello", "pentago", "quoridor", "domino", "chess", "pasoor",
