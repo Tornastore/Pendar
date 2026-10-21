@@ -9,6 +9,7 @@ const VIEW_H := 960.0
 const GameCatalogScript = preload("res://core/game_catalog.gd")
 const ScoringServiceScript = preload("res://services/scoring_service.gd")
 const RankingServiceScript = preload("res://services/ranking_service.gd")
+const OnlineClientScript = preload("res://services/online_client.gd")
 const UIContentScript = preload("res://core/ui_content.gd")
 const IllustrationRendererScript = preload("res://ui/illustration_renderer.gd")
 const TabletopArtRendererScript = preload("res://ui/tabletop_art_renderer.gd")
@@ -29,6 +30,7 @@ const GAME_MODULE_SCRIPTS := {
 	"uno": preload("res://games/uno/rules.gd"),
 }
 var scoring_service = ScoringServiceScript.new()
+var _online_client = OnlineClientScript.new()
 var _illustration_renderer = IllustrationRendererScript.new()
 var _tabletop_art_renderer = TabletopArtRendererScript.new()
 var _game_modules: Dictionary = {}
@@ -69,9 +71,8 @@ var host_ips: Array = []              # local IPs shown to host
 var join_ip: String = ""              # IP typed by client
 var max_players_for_game: int = 2
 
-# WebSocket matchmaking for browser and cross-network online play. ENet/UDP stays
-# available for native APK/LAN sessions; this transport is independent of ENet.
-var ws_socket: WebSocketPeer
+# Online matchmaking state stays in the controller; the WebSocket transport lives
+# in services/online_client.gd. ENet/UDP remains the native LAN transport.
 var ws_match_active: bool = false
 var online_player_roster: Array = []
 var _result_popup_open: bool = false
@@ -2983,13 +2984,10 @@ func _quick_match_search() -> void:
 		_show_toast("نشانی سرور آنلاین هنوز تنظیم نشده است.")
 		_rebuild_buttons()
 		return
-	if ws_socket != null:
-		ws_socket.close()
-		ws_socket = null
-	ws_socket = WebSocketPeer.new()
-	var err: Error = ws_socket.connect_to_url(endpoint)
+	if _online_client.has_socket():
+		_online_client.close()
+	var err: Error = _online_client.connect_to_url(endpoint)
 	if err != OK:
-		ws_socket = null
 		ws_state = "idle"
 		_show_toast("اتصال به سرور بازی آغاز نشد: %s" % error_string(err))
 		return
@@ -3002,10 +3000,9 @@ func _quick_match_search() -> void:
 	_rebuild_buttons()
 
 func _cancel_online_search() -> void:
-	if ws_socket != null:
+	if _online_client.has_socket():
 		_ws_send_json({"type": "leave_queue"})
-		ws_socket.close()
-		ws_socket = null
+		_online_client.close()
 	ws_queue_join_sent = false
 	online_searching = false
 	ws_match_active = false
@@ -4990,15 +4987,15 @@ func _online_queue_search() -> void:
 	_quick_match_search()
 
 func _ws_send_json(payload: Dictionary) -> bool:
-	if ws_socket == null or ws_socket.get_ready_state() != WebSocketPeer.STATE_OPEN:
-		return false
-	return ws_socket.send_text(JSON.stringify(payload)) == OK
+	# Keep this adapter so existing game actions can send messages without knowing
+	# how the WebSocket transport is implemented.
+	return _online_client.send_json(payload)
 
 func _ws_poll(_delta: float) -> void:
-	if ws_socket == null:
+	if not _online_client.has_socket():
 		return
-	ws_socket.poll()
-	if ws_socket.get_ready_state() == WebSocketPeer.STATE_OPEN and online_searching and not ws_queue_join_sent:
+	_online_client.poll()
+	if _online_client.is_open() and online_searching and not ws_queue_join_sent:
 		var mm_level: int = int(_game_modules["mastermind"].mm_difficulty)
 		var blk_level: int = int(_game_modules["blockace"].blk_difficulty)
 		if _ws_send_json({"type": "join_queue", "game": online_game, "username": online_username, "mastermind_difficulty": mm_level, "blockace_difficulty": blk_level}):
@@ -5006,15 +5003,14 @@ func _ws_poll(_delta: float) -> void:
 			ws_state = "queued"
 			online_status = "در صف انتظار برای «%s»…" % str(_game_info(online_game).get("name", online_game))
 			_rebuild_buttons()
-	while ws_socket != null and ws_socket.get_available_packet_count() > 0:
-		var text_packet: String = ws_socket.get_packet().get_string_from_utf8()
-		var decoded: Variant = JSON.parse_string(text_packet)
+	while _online_client.has_socket() and _online_client.has_available_packets():
+		var decoded: Variant = _online_client.receive_next_message()
 		if decoded is Dictionary:
 			_ws_handle_server_message(decoded)
-	if ws_socket != null and ws_socket.get_ready_state() == WebSocketPeer.STATE_CLOSED and ws_state not in ["idle", "closing"]:
+	if _online_client.is_closed() and ws_state not in ["idle", "closing"]:
 		var was_waiting: bool = online_searching
 		var was_matched: bool = ws_match_active
-		ws_socket = null
+		_online_client.close()
 		ws_queue_join_sent = false
 		ws_match_active = false
 		ws_state = "idle"
@@ -5324,11 +5320,10 @@ func _save_scores() -> void:
 	scoring_service.save_scores()
 
 func _cleanup_network() -> void:
-	if ws_socket != null:
-		if ws_socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
+	if _online_client.has_socket():
+		if _online_client.is_open():
 			_ws_send_json({"type": "leave_match" if ws_match_active else "leave_queue"})
-			ws_socket.close()
-		ws_socket = null
+		_online_client.close()
 	ws_match_active = false
 	ws_queue_join_sent = false
 	ws_emoji_picker_open = false

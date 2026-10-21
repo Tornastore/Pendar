@@ -152,7 +152,7 @@ for game_id in sorted(expected_modules):
 
 # Verify standalone service separation and backwards-compatible persistence.
 for required in (
-    "services/scoring_service.gd", "services/ranking_service.gd",
+    "services/online_client.gd", "services/scoring_service.gd", "services/ranking_service.gd",
     "core/game_catalog.gd", "core/game_module.gd",
 ):
     if not (ROOT / required).is_file():
@@ -178,6 +178,19 @@ if "scoring_service.record_result" not in main or "RankingServiceScript.build_ga
     errors.append("main.gd is not delegating result recording and ranking to separate services")
 if "GAMES = GameCatalogScript.all_games()" not in main:
     errors.append("main.gd does not initialize its catalogue from GameCatalog")
+
+# WebSocket transport is isolated from the game controller; matchmaking policy and
+# game-level message handling are intentionally kept in main.gd.
+online_client_path = ROOT / "services" / "online_client.gd"
+if online_client_path.is_file():
+    online_client = online_client_path.read_text(encoding="utf-8")
+    if "ws_socket" in main or "WebSocketPeer.new()" in main:
+        errors.append("main.gd should delegate the concrete WebSocketPeer to OnlineClient")
+    for method in ("connect_to_url", "poll", "send_json", "receive_next_message", "close"):
+        if not re.search(rf"^func\s+{method}\(", online_client, re.M):
+            errors.append(f"OnlineClient is missing {method}()")
+    if 'preload("res://services/online_client.gd")' not in main:
+        errors.append("main.gd does not preload OnlineClient")
 
 if errors:
     print("STRUCTURE CHECK FAILED")

@@ -31,8 +31,10 @@ def test_endpoint_is_configurable_and_native_networking_is_preserved():
     project = (ROOT / "project.godot").read_text(encoding="utf-8")
     main = (ROOT / "main.gd").read_text(encoding="utf-8")
     assert "matchmaking_url=\"wss://REPLACE-WITH-YOUR-PENDAR-APP-DOMAIN/ws\"" in project
+    client = (ROOT / "services" / "online_client.gd").read_text(encoding="utf-8")
     assert "ENetMultiplayerPeer" in main
-    assert "WebSocketPeer.new()" in main
+    assert 'preload("res://services/online_client.gd")' in main
+    assert "WebSocketPeer.new()" in client
     assert "_send_game_action" in main
 
 
