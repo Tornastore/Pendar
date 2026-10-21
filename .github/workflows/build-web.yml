@@ -62,7 +62,11 @@ jobs:
           }
           download_font "Vazirmatn-Regular.ttf"
           download_font "Vazirmatn-Bold.ttf"
-          ls -lh fonts/Vazirmatn-*.ttf
+          if ! wget --tries=2 --waitretry=2 --timeout=20 --output-document=fonts/OFL.txt "https://raw.githubusercontent.com/rastikerdar/vazirmatn/v33.003/OFL.txt"; then
+            wget --tries=2 --waitretry=2 --timeout=20 --output-document=fonts/OFL.txt "https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/OFL.txt"
+          fi
+          test -s fonts/OFL.txt
+          ls -lh fonts/Vazirmatn-*.ttf fonts/OFL.txt
 
       - name: Import project resources
         shell: bash

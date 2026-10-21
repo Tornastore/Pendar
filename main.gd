@@ -1316,75 +1316,122 @@ func _blk_can_place(px: int, py: int, piece: Array, player: int) -> bool:
 # ======================================================================
 const RULES := {
 	"othello": [
-		"هر نوبت یک مهره روی خانه‌ای بگذارید که حداقل یک مهره حریف را بین دو مهره شما محصور کند.",
-		"مهره‌های محصورشده به رنگ شما درمی‌آیند.",
-		"اگر حرکتی نداشته باشید، نوبت خودکار به حریف می‌رسد.",
-		"وقتی هیچ‌کس حرکتی نداشت، مهره بیشتر = برنده.",
-		"نقطه‌های روشن روی صفحه، حرکت‌های مجاز را نشان می‌دهند.",
+		"هدف: در پایان بازی بیشترین مهره‌ی هم‌رنگ را روی صفحه داشته باشید.",
+		"روی خانه‌ای بازی کنید که حداقل یک مهره‌ی حریف را بین مهره‌ی تازه و یکی از مهره‌های خودتان محصور کند؛ مهره‌های محصورشده برمی‌گردند.",
+		"نقطه‌های روشن حرکت‌های مجازند. اگر حرکتی ندارید، نوبت خودکار رد می‌شود؛ وقتی هیچ‌کس حرکت ندارد، بازی تمام است.",
+		"این نسخه روی صفحه‌ی ۸×۸ یا ۱۲×۱۲ اجرا می‌شود. در بازی شبکه‌ای، حریف رنگ مقابل را دارد.",
+		"نکته: گوشه‌ها معمولاً بسیار ارزشمندند؛ مهره‌های کناری را بی‌دلیل در معرض محاصره قرار ندهید.",
+	],
+	"othello12": [
+		"هدف: در پایان بازی بیشترین مهره‌ی هم‌رنگ را روی صفحه‌ی ۱۲×۱۲ داشته باشید.",
+		"روی خانه‌ای بازی کنید که حداقل یک مهره‌ی حریف را بین مهره‌ی تازه و یکی از مهره‌های خودتان محصور کند؛ مهره‌های محصورشده برمی‌گردند.",
+		"نقطه‌های روشن حرکت‌های مجازند. اگر حرکتی ندارید، نوبت خودکار رد می‌شود؛ وقتی هیچ‌کس حرکت ندارد، بازی تمام است.",
+		"گوشه‌ها را برای خود نگه دارید و پیش از گذاشتن مهره بررسی کنید که لبه‌ی بیرونی حریف را در دسترس قرار ندهید.",
+		"در بازی شبکه‌ای، حریف رنگ مقابل را کنترل می‌کند و هر حرکت پس از ثبت به صفحه‌ی او می‌رسد.",
 	],
 	"pentago": [
-		"ابتدا یک مهره روی خانه خالی بگذارید.",
-		"سپس یکی از چهار بخش ۳×۳ را ۹۰ درجه (ساعتگرد یا پادساعتگرد) بچرخانید.",
-		"اولین نفری که ۵ مهره هم‌رنگ پشت‌سرهم (افقی، عمودی یا مورب) بسازد برنده است.",
+		"هدف: پنج مهره‌ی هم‌رنگ را در یک خط افقی، عمودی یا مورب قرار دهید.",
+		"در هر نوبت، ابتدا یک مهره روی خانه‌ی خالی بگذارید و سپس یکی از چهار بخش ۳×۳ را ۹۰ درجه بچرخانید.",
+		"چرخاندن بخش جزئی از نوبت اجباری است؛ بعد از چرخش، خط پنج‌تایی دوباره بررسی می‌شود.",
+		"قبل از چرخش، اثر آن روی مهره‌های هر چهار بخش را بررسی کنید و مراقب تهدید فوری حریف باشید.",
+		"در بازی شبکه‌ای، نوبت‌ها یکی در میان است و حرکت پس از ثبت به حریف نمایش داده می‌شود.",
 	],
 	"quoridor": [
-		"هدف: زودتر از بقیه به ضلع مقابلِ محل شروع خود برسید.",
-		"در هر نوبت یا مهره را حرکت دهید، یا یک دیوار بگذارید. در صورت قرارگرفتن مهره حریف کنار شما، پرش مستقیم و در صورت بسته‌بودن آن، حرکت مورب مجاز است.",
-		"هر دیوار دقیقاً به اندازه دو مسیر خانه‌ای طول دارد و دو گذر را مسدود می‌کند. دیوارها نباید روی هم بیفتند، همدیگر را قطع کنند یا مسیر رسیدن هیچ بازیکنی به هدف را ببندند.",
-		"در بازی دونفره هر بازیکن ۱۰ دیوار دارد؛ در بازی چهارنفره هر بازیکن ۵ دیوار دارد.",
-		"برای چهار نفر، گزینه «بازی ۴ نفره روی یک دستگاه» را انتخاب کنید؛ نوبت‌ها بین چهار بازیکن می‌چرخد.",
+		"هدف: زودتر از حریف به ردیف مقابلِ محل شروع برسید.",
+		"در هر نوبت فقط یکی را انجام دهید: یک خانه حرکت کنید یا یک دیوار بگذارید. نقطه‌های روشن حرکت‌های مجاز را نشان می‌دهند.",
+		"می‌توانید از مهره‌ی کنار خود بپرید؛ اگر خانه‌ی پشت آن بسته باشد، حرکت مورب مجاز می‌شود.",
+		"دیوار باید دو گذر را ببندد، نباید تقاطع یا هم‌پوشانی داشته باشد و نباید مسیر هیچ بازیکنی را کاملاً مسدود کند.",
+		"در حالت دونفره هر نفر ۱۰ دیوار و در حالت چهارنفره هر نفر ۵ دیوار دارد. مسیر خود را هم کوتاه کنید، نه فقط مسیر حریف را.",
 	],
 	"chess": [
-		"حرکت مهره‌ها مطابق شطرنج کلاسیک است؛ مهره را بزنید تا خانه‌های مجاز نمایش داده شود.",
-		"پیاده در رسیدن به خانه آخر وزیر می‌شود.",
-		"نسخه ساده: قلعه، آن‌پاسان و کیش‌ومات وجود ندارد؛ بازی با گرفتن شاه تمام می‌شود.",
+		"برای حرکت، مهره را انتخاب کنید؛ خانه‌های مجاز روشن می‌شوند. سپس خانه‌ی مقصد را انتخاب کنید.",
+		"هر مهره حرکت مخصوص خودش را دارد. پیاده در رسیدن به انتهای صفحه به وزیر تبدیل می‌شود.",
+		"نسخه‌ی فعلی ساده‌شده است: قلعه‌رفتن و آن‌پاسان پشتیبانی نمی‌شوند و پایان بازی با گرفتن شاه تشخیص داده می‌شود؛ قوانین رسمی کیش‌ومات کامل نیستند.",
+		"در بازی شبکه‌ای، حریف رنگ مقابل را کنترل می‌کند. قبل از هر حرکت، مهره‌های در معرض گرفتن را بررسی کنید.",
 	],
 	"domino": [
-		"هر بازیکن ۷ مهره دارد. مهره را انتخاب کنید و در ابتدا یا انتهای زنجیر بگذارید؛ عدد باید با سر زنجیر برابر باشد.",
-		"اگر مهره مناسب ندارید از انبار بردارید؛ اگر انبار خالی بود پاس بدهید.",
-		"اولین نفری که مهره‌هایش تمام شود برنده است. در بن‌بست، مجموع نقطه‌های کمتر برنده است.",
+		"هدف: زودتر از حریف همه‌ی مهره‌های دومینوی خود را بازی کنید؛ در بن‌بست، نقطه‌های باقی‌مانده تعیین‌کننده‌اند.",
+		"هر نفر با ۷ مهره شروع می‌کند. یک سمت مهره‌ی انتخابی باید با عددِ سرِ زنجیر برابر باشد.",
+		"مهره را انتخاب کنید و سپس سرِ چپ یا راست زنجیر را بزنید. اگر امکان بازی ندارید، از انبار بردارید؛ اگر انبار خالی است نوبت را رد کنید.",
+		"نگه‌داشتن مهره‌های دارای عددهای نادر می‌تواند گزینه‌های حریف را محدود کند.",
+		"در بازی شبکه‌ای، پیش از تأیید سمت زنجیر، عددِ سرِ انتخاب‌شده را دوباره بررسی کنید.",
 	],
 	"pasoor": [
-		"کارت بازی‌شده یا روی میز می‌ماند یا کارت‌هایی را می‌گیرد؛ اگر گرفتن ممکن باشد اجباری است.",
-		"عدد: جمع کارت‌های عددی (آس تا ۱۰) باید دقیقاً ۱۱ شود. شاه با شاه، بی‌بی با بی‌بی.",
-		"سرباز همه کارت‌های میز را جارو می‌کند (به‌جز شاه و بی‌بی).",
-		"امتیاز: سور ۵ | هفت‌خاج ۷ | ده خشت ۳ | دو گشنیز ۲ | آس و سرباز هرکدام ۱.",
-		"هدف مسابقه: رسیدن به ۶۲ امتیاز. برای بازی کارت، دو بار ضربه بزنید یا دکمه پایین را بزنید.",
+		"هدف: زودتر از حریف به ۶۲ امتیاز برسید. هر نوبت یک کارت از دست خود انتخاب کنید.",
+		"کارت عددی می‌تواند یک یا چند کارت میز را بگیرد، اگر جمع دقیقاً ۱۱ شود؛ آس تا ۱۰ مقدار عددی دارند. شاه با شاه و بی‌بی با بی‌بی گرفته می‌شود.",
+		"سرباز معمولاً کارت‌های میز را جمع می‌کند، اما شاه و بی‌بی را نمی‌گیرد. اگر گرفتن ممکن باشد، کارت را برای گرفتن بازی کنید.",
+		"امتیازهای ویژه شامل سور، هفت‌خاج، ده خشت، دو گشنیز، آس و سرباز است؛ امتیازهای روی صفحه را بعد از هر دست بررسی کنید.",
+		"برای انتخاب کارت روی آن بزنید؛ اگر انتخاب دوم لازم بود، کارت‌های میز را نیز انتخاب کنید یا از دکمه‌ی تأیید پایین استفاده کنید.",
 	],
 	"hokm": [
-		"هر بازیکن ۱۳ کارت دارد و خال حکم بالای صفحه نمایش داده می‌شود.",
-		"اگر کارت هم‌خالِ زمین دارید باید همان را بازی کنید (کارت‌های غیرمجاز کم‌رنگ می‌شوند).",
-		"حکم بر بقیه خال‌ها برتری دارد. برنده هر دست یک امتیاز می‌گیرد.",
-		"بعد از ۱۳ دست، امتیاز بیشتر برنده است. (نسخه ساده دو نفره)",
+		"نسخه‌ی فعلی حکم در این پروژه ساده‌شده و دونفره است؛ نسخه‌ی استاندارد چهار نفره در این پیاده‌سازی فعال نیست.",
+		"خال حکم در بالای صفحه دیده می‌شود. اگر کارت هم‌خالِ کارت آغازگر دارید، باید همان خال را بازی کنید.",
+		"اگر هم‌خال ندارید، می‌توانید حکم یا خال دیگری بازی کنید. حکم از خال‌های دیگر قوی‌تر است.",
+		"هر دست را کارت برنده می‌برد؛ پس از پایان دور، امتیاز ثبت می‌شود. کارت‌های بزرگ را بدون دلیل زود مصرف نکنید.",
+		"روی کارت موردنظر بزنید تا بازی شود. کارت‌های کم‌رنگ‌شده در آن نوبت مجاز نیستند.",
 	],
 	"backgammon": [
-		"تاس‌ها خودکار ریخته می‌شوند. با دکمه «حرکت» یا ضربه روی صفحه، حرکت بعدی انجام می‌شود.",
-		"هدف: خارج‌کردن هر ۱۵ مهره از صفحه.",
-		"نسخه ساده: انتخاب دستی مهره هنوز پیاده‌سازی نشده است.",
+		"هدف: هر ۱۵ مهره‌ی خود را طبق جهت حرکت از صفحه خارج کنید.",
+		"تاس‌ها به‌صورت خودکار ریخته می‌شوند و بازی حرکت قانونی را با کنترل‌های فعلی انتخاب می‌کند؛ انتخاب دستی همه‌ی مهره‌ها هنوز کامل نیست.",
+		"عدد هر تاس به اندازه‌ی حرکت مربوط است. خانه‌ی تنها ممکن است زده شود؛ قانون ورود دوباره‌ی مهره از بار در این نسخه ساده‌شده است.",
+		"ساختن خانه‌های بسته و قرارندادن مهره‌های تنها در معرض ضربه، معمولاً خطر را کم می‌کند.",
+		"این نسخه هنوز تمام قواعد مسابقاتی تخته‌نرد را ندارد؛ آن را به‌عنوان نسخه‌ی ساده‌شده در نظر بگیرید.",
 	],
 	"gobblet": [
-		"هر بازیکن ۱۲ مهره دارد: سه مهره از هر یک از چهار اندازه.",
-		"در هر نوبت می‌توانید مهره تازه را در خانه خالی بگذارید یا بالاترین مهره خود روی صفحه را حرکت دهید؛ مهره بزرگ‌تر روی مهره کوچک‌تر می‌نشیند.",
-		"اگر با برداشتن یک مهره، ردیف چهار‌تاییِ نمایان حریف باقی بماند، می‌بازید؛ مگر اینکه همان حرکت ردیف را بپوشاند.",
+		"هدف: چهار مهره‌ی هم‌رنگ را در یک ردیف افقی، عمودی یا مورب قرار دهید.",
+		"هر بازیکن ۱۲ مهره دارد: سه مهره از هر کدام از چهار اندازه. مهره‌ی بزرگ‌تر می‌تواند مهره‌ی کوچک‌تر را بپوشاند.",
+		"برای گذاشتن مهره، اندازه را انتخاب و خانه را لمس کنید. برای جابه‌جایی، بالاترین مهره‌ی خود را انتخاب و مقصد مجاز را بزنید.",
+		"برداشتن یک مهره ممکن است ردیف زیر آن را آشکار کند. اگر با این کار ردیف چهار‌تاییِ حریف برنده شود و حرکت همان ردیف را نپوشاند، شما می‌بازید.",
+		"قبل از جابه‌جایی، مهره‌های پنهان و ردیف‌هایی را که با برداشتن مهره آشکار می‌شوند بررسی کنید.",
 	],
 	"mastermind": [
-		"با اتصال IP، میزبان کد مخفی را می‌سازد و دستگاه مهمان آن را حدس می‌زند؛ خود کد از میزبان خارج نمی‌شود.",
-		"در هر درجه، هم طول کد و هم تعداد رنگ‌های مجاز یکی بیشتر می‌شود؛ تکرار رنگ مجاز است.",
-		"مهره‌ی بازخورد دقیقاً زیر همان جای حدس چیده می‌شود: سیاه = رنگ و جای درست، سفید = رنگ درست در جای دیگر.",
-		"حداکثر ۱۰ تلاش دارید.",
+		"هدف: کد مخفی را با کمترین زمان و تلاش پیدا کنید. در هر سطح، طول کد و تعداد رنگ‌ها از ۴ تا ۹ افزایش می‌یابد؛ تکرار رنگ مجاز است.",
+		"خانه‌های ردیف جاری را از پالت رنگ انتخاب کنید و حدس را ثبت کنید. حداکثر ۱۰ تلاش دارید.",
+		"مهره‌های بازخورد دقیقاً زیر همان خانه‌ی حدس قرار می‌گیرند: سیاه یعنی رنگ و جای درست؛ سفید یعنی رنگ درست اما جای دیگر.",
+		"در مسابقه‌ی آنلاین، هر بازیکن حدس‌های خودش را در صفحه‌ی خصوصی می‌بیند. دیگران فقط نام، رتبه و تعداد خانه‌های دقیق را می‌بینند، نه کد یا ردیف‌های حدس شما.",
+		"رتبه‌ی زنده بر اساس خانه‌های دقیق و پیشرفت به‌روز می‌شود؛ در رتبه‌ی نهایی، زمان حل و تعداد تلاش‌ها معیار مقایسه‌اند.",
+		"برای مسابقه‌ی شبکه‌ای، همه باید فکر بکر را انتخاب کنند و در همان اتاق/صف بمانند تا رقابت آغاز شود.",
 	],
 	"abalone": [
-		"هر بازیکن ۱۴ مهره دارد؛ با بیرون‌راندن ۶ مهره حریف از صفحه برنده می‌شوید.",
-		"یک تا سه مهره هم‌رنگ و هم‌راستا را انتخاب کنید؛ گروه می‌تواند در امتداد خط یا به پهلو یک خانه حرکت کند.",
-		"هل‌دادن فقط در حرکت مستقیم و با برتری عددی مجاز است: دو به یک، سه به یک یا سه به دو. حرکت پهلو مهره حریف را هل نمی‌دهد.",
+		"هدف: با بیرون‌راندن شش مهره‌ی حریف از صفحه برنده شوید. هر بازیکن با ۱۴ مهره شروع می‌کند.",
+		"یک تا سه مهره‌ی هم‌رنگ و پیوسته را انتخاب کنید. گروه در یک خط مستقیم یا به پهلو یک خانه حرکت می‌کند.",
+		"هل‌دادن فقط در امتداد خط و با برتری عددی ممکن است: دو مهره در برابر یک، سه در برابر یک یا سه در برابر دو.",
+		"گروه‌های پهلو به پهلو نمی‌توانند مهره‌ی حریف را هل دهند؛ برای هل‌دادن، پشت مهره‌ی حریف باید فضای آزاد یا لبه‌ی صفحه باشد.",
+		"برای انتخاب گروه، مهره‌ها را به ترتیب انتخاب کنید و سپس یکی از خانه‌های علامت‌خورده را لمس کنید.",
 	],
 	"blockace": [
-		"نسخه‌ی کامل دو نفره: صفحه‌ی ۱۴×۱۴ و ۲۱ قطعه‌ی استاندارد برای هر بازیکن.",
-		"قطعه‌ی اول باید خانه‌ی شروع شما را بپوشاند؛ قطعات بعدی باید از گوشه با قطعه‌ی خودتان تماس داشته باشند، اما نباید از ضلع به آن بچسبند.",
-		"قطعات می‌توانند از ضلع یا گوشه با مهره‌های حریف تماس داشته باشند. قطعات را بچرخانید یا وارونه کنید تا حرکت مجاز پیدا شود.",
-		"بازی با نداشتن حرکت برای هر دو بازیکن تمام می‌شود. هر خانه‌ی قطعه‌ی باقی‌مانده یک امتیاز منفی دارد؛ استفاده از همه‌ی قطعات ۱۵ امتیاز پاداش و گذاشتن تک‌خانه‌ای در آخر ۵ امتیاز دیگر دارد.",
+		"هدف: با گذاشتن قطعه‌های بیشتری از حریف امتیاز بگیرید. صفحه ۱۴×۱۴ و هر بازیکن ۲۱ قطعه دارد.",
+		"قطعه‌ی اول باید خانه‌ی شروع خود را بپوشاند؛ هر قطعه‌ی بعدی باید از گوشه به قطعه‌ی هم‌رنگ شما وصل شود، نه از ضلع.",
+		"تماس قطعات شما با ضلع یا گوشه‌ی قطعات حریف مجاز است. قطعه را انتخاب کنید و در صورت نیاز بچرخانید یا وارونه کنید.",
+		"وقتی هیچ بازیکنی حرکت قانونی ندارد، امتیاز نهایی از خانه‌های استفاده‌نشده کم می‌شود؛ استفاده از تمام قطعات و گذاشتن تک‌خانه‌ای در آخر پاداش دارد.",
+		"در حالت تک‌نفره سطح CPU را پیش از شروع انتخاب کنید. بازی شبکه‌ای نوبتی است و هر حرکت باید قانون اتصال گوشه‌ای را رعایت کند.",
 	],
 }
+
+const GENERAL_HELP := [
+	"در صفحه‌ی بازی‌ها، فیلترهای دسته‌بندی را به‌کار ببرید و کارت بازی را لمس کنید تا صفحه‌ی انتخاب حالت باز شود.",
+	"در صفحه‌ی حالت، بازی با کامپیوتر یا شبکه را انتخاب کنید؛ اگر بازی سطح سختی دارد، پیش از شروع آن را تعیین کنید.",
+	"حین بازی از منوی توقف برای ادامه، راهنما، تنظیم صدا، شروع مجدد، تسلیم یا بازگشت به منوی اصلی استفاده کنید.",
+	"نوار پایین به چهار بخش بازی‌ها، آنلاین، رتبه‌بندی و آمار می‌رود. نام کاربری و وضعیت سرور در بخش آنلاین مدیریت می‌شود.",
+	"پایان بازی به شکل پنجره روی همان صفحه نشان داده می‌شود تا نتیجه و آخرین وضعیت صفحه را ببینید. برای بازی تازه از دکمه‌ی مربوط استفاده کنید.",
+]
+const ONLINE_HELP := [
+	"در بخش آنلاین، نام کاربری را ثبت کنید و بازی موردنظر را انتخاب کنید. حریف باید همان بازی را انتخاب کرده باشد.",
+	"برای مسابقه‌ی وب، «جستجوی هم‌بازی آنلاین» را بزنید و تا جفت‌شدن در صف بمانید. این روش به سرور WSS نیاز دارد.",
+	"اتصال مستقیم IP از طریق ENet/UDP فقط در خروجی APK و دسکتاپ است؛ دو گوشی باید روی همان وای‌فای یا هات‌اسپات باشند.",
+	"در طول مسابقه، دکمه‌ی ایموجی برای ارسال واکنش‌های آماده به حریف است. پیام متنی آزاد در این نسخه وجود ندارد.",
+	"اگر وضعیت اتصال تغییر نکرد، سرور و اینترنت را بررسی کنید. تا وقتی نشانی سرور در تنظیمات قرار نگرفته، صف آنلاین کار نخواهد کرد.",
+]
+const DASHBOARD_HELP := [
+	"در صفحه‌ی آمار، هر ردیف مربوط به یک بازی است و برد، باخت و امتیاز همان بازی را نمایش می‌دهد.",
+	"برگه‌های کلی، هفتگی و ماهانه بازه‌ی زمانی گزارش را عوض می‌کنند. بازی‌هایی که هنوز انجام نشده‌اند، آمار صفر دارند.",
+	"آمار محلی روی همان دستگاه یا مرورگر نگهداری می‌شود؛ پاک‌کردن داده‌های برنامه یا مرورگر ممکن است آن را حذف کند.",
+]
+const RANKINGS_HELP := [
+	"رتبه‌بندی داخل برنامه بر اساس امتیاز ثبت‌شده‌ی هر بازی ساخته می‌شود؛ این صفحه لزوماً جدول جهانی بازیکنان نیست.",
+	"مدال‌های بالای جدول جایگاه‌های نخست را نشان می‌دهند. امتیاز مثبت با سبز و امتیاز منفی با قرمز مشخص می‌شود.",
+	"برای مقایسه‌ی منصفانه، بازی را تا پایان ادامه دهید و از گزینه‌ی تسلیم فقط وقتی استفاده کنید که می‌خواهید نتیجه ثبت شود.",
+]
 
 const CAT_LABELS := {"all": "همه", "strategy": "استراتژی", "cards": "کارتی", "classic": "کلاسیک"}
 const MM_COLORS := [
@@ -1406,6 +1453,8 @@ var ov_buttons: Array = []
 var dialog: Dictionary = {}
 var pause_open: bool = false
 var rules_open: bool = false
+var rules_context: String = "game"
+var rules_page: int = 0
 var _ov_t: float = 0.0
 var _press_active: bool = false
 var _press_id: String = ""
@@ -1505,22 +1554,33 @@ func _fa(v) -> String:
 			out += s[i]
 	return out
 
+func _normalize_ui_text(value: String) -> String:
+	# Normalize common Arabic glyph variants to Persian forms consistently.
+	var text_value: String = value.replace("ي", "ی").replace("ى", "ی").replace("ك", "ک")
+	text_value = text_value.replace(" ،", "،").replace(" ؛", "؛").replace(" ؟", "؟").replace(" .", ".").replace(" !", "!")
+	while text_value.contains("  "):
+		text_value = text_value.replace("  ", " ")
+	return text_value
+
 func _txt(s: String, x: float, y: float, size: int, col: Color, align: int = HORIZONTAL_ALIGNMENT_LEFT, w: float = -1.0, bold: bool = false) -> void:
-	draw_string(font_bold if bold else font, Vector2(x, y), s, align, w, size, col)
+	var display_text: String = _normalize_ui_text(s)
+	draw_string(font_bold if bold else font, Vector2(x, y), display_text, align, w, size, col, 0, TextServer.DIRECTION_AUTO)
 
 func _txt_c(s: String, r: Rect2, size: int, col: Color, bold: bool = false) -> void:
 	var f: Font = font_bold if bold else font
+	var display_text: String = _normalize_ui_text(s)
 	var asc: float = f.get_ascent(size)
 	var desc: float = f.get_descent(size)
 	var y: float = r.position.y + (r.size.y + asc - desc) * 0.5
-	draw_string(f, Vector2(r.position.x, y), s, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, size, col)
+	draw_string(f, Vector2(r.position.x, y), display_text, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, size, col, 0, TextServer.DIRECTION_AUTO)
 
 func _txt_r(s: String, right_x: float, y: float, size: int, col: Color, bold: bool = false, w: float = 420.0) -> void:
-	draw_string(font_bold if bold else font, Vector2(right_x - w, y), s, HORIZONTAL_ALIGNMENT_RIGHT, w, size, col)
+	var display_text: String = _normalize_ui_text(s)
+	draw_string(font_bold if bold else font, Vector2(right_x - w, y), display_text, HORIZONTAL_ALIGNMENT_RIGHT, w, size, col, 0, TextServer.DIRECTION_AUTO)
 
 func _txt_w(s: String, size: int, bold: bool = false) -> float:
 	var f: Font = font_bold if bold else font
-	return f.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	return f.get_string_size(_normalize_ui_text(s), HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
 
 func _fit_size(s: String, max_w: float, size: int, bold: bool = false) -> int:
 	var sz := size
@@ -1530,13 +1590,14 @@ func _fit_size(s: String, max_w: float, size: int, bold: bool = false) -> int:
 
 func _wrap(s: String, x: float, y: float, w: float, size: int, col: Color, align: int = HORIZONTAL_ALIGNMENT_CENTER, bold: bool = false) -> float:
 	var f: Font = font_bold if bold else font
-	var sz: Vector2 = f.get_multiline_string_size(s, align, w, size)
-	draw_multiline_string(f, Vector2(x, y), s, align, w, size, -1, col)
+	var display_text: String = _normalize_ui_text(s)
+	var sz: Vector2 = f.get_multiline_string_size(display_text, align, w, size)
+	draw_multiline_string(f, Vector2(x, y), display_text, align, w, size, -1, col, TextServer.BREAK_MANDATORY, TextServer.JUSTIFICATION_WORD_BOUND, TextServer.DIRECTION_AUTO)
 	return sz.y
 
 func _wrap_h(s: String, w: float, size: int, bold: bool = false) -> float:
 	var f: Font = font_bold if bold else font
-	return f.get_multiline_string_size(s, HORIZONTAL_ALIGNMENT_CENTER, w, size).y
+	return f.get_multiline_string_size(_normalize_ui_text(s), HORIZONTAL_ALIGNMENT_CENTER, w, size).y
 
 # ---------- shape helpers ----------
 func _panel(r: Rect2, fill: Color, rad: float = 16.0, bc: Color = Color(0, 0, 0, 0), bw: float = 0.0, shadow: float = 0.0, sy: float = 0.0) -> void:
@@ -2620,6 +2681,7 @@ func _btns_menu() -> void:
 		_add_hit(_tile_rect(i), _select_game.bind(id), "game_" + id, true)
 	_add_btn(Rect2(16, 22, 44, 44), "", _confirm_exit_app, true, TEXT_DIM, "icon", "power", "exit")
 	_add_btn(Rect2(214, 22, 44, 44), "", _toggle_music, true, ACCENT if scoring_service.music_on else TEXT_DIM, "icon", _music_icon(), "music")
+	_add_btn(Rect2(16, 72, 104, 34), "راهنما", _open_general_help, true, BLUE, "soft", "help", "menu_help")
 	var x: float = VIEW_W - 16.0
 	for key in ["all", "strategy", "cards", "classic"]:
 		var label: String = CAT_LABELS[key]
@@ -2678,11 +2740,13 @@ func _draw_game_tile(g: Dictionary, r: Rect2, pressed: bool) -> void:
 	_panel(art, Color(col.r * 0.30 + 0.035, col.g * 0.30 + 0.045, col.b * 0.30 + 0.09, 1.0), 14)
 	_draw_game_art(str(g.id), art, col)
 	_gloss(art, 14, 0.05)
-	var chip := Rect2(art.position + Vector2(8, 8), Vector2(54, 22))
+	var player_label: String = str(g.get("players", "۲ نفر"))
+	var chip_w: float = clampf(_txt_w(player_label, 12, true) + 18.0, 58.0, 108.0)
+	var chip := Rect2(art.position + Vector2(8, 8), Vector2(chip_w, 22))
 	_panel(chip, Color(0, 0, 0, 0.38), 11)
-	_txt_c(_fa("2") + " نفره", chip, 12, TEXT, true)
+	_txt_c(player_label, chip, _fit_size(player_label, chip.size.x - 8.0, 12, true), TEXT, true)
 	if g.net:
-		_draw_icon("wifi", chip.position + Vector2(70, 11), 14, Color(1, 1, 1, 0.75), 1.6)
+		_draw_icon("wifi", chip.position + Vector2(chip.size.x + 14.0, 11), 14, Color(1, 1, 1, 0.75), 1.6)
 	if g.beta:
 		var bc := Rect2(art.end.x - 70, art.position.y + 8, 62, 22)
 		_panel(bc, Color(1.0, 0.72, 0.25, 0.22), 11, Color(1.0, 0.72, 0.25, 0.7), 1.0)
@@ -2830,8 +2894,38 @@ func _draw_game_art(id: String, rect: Rect2, col: Color) -> void:
 
 # ---------------- MODE ----------------
 func _open_rules() -> void:
+	rules_context = "connection" if state == State.LOBBY or state == State.IP_ENTRY else "game"
+	rules_page = 0
 	rules_open = true
 	_ov_t = 0.0
+	_rebuild_buttons()
+
+func _open_general_help() -> void:
+	_open_context_help("general")
+
+func _open_online_help() -> void:
+	_open_context_help("online")
+
+func _open_dashboard_help() -> void:
+	_open_context_help("dashboard")
+
+func _open_rankings_help() -> void:
+	_open_context_help("rankings")
+
+func _open_context_help(context: String) -> void:
+	rules_context = context
+	rules_page = 0
+	rules_open = true
+	_ov_t = 0.0
+	_rebuild_buttons()
+
+func _rules_prev_page() -> void:
+	rules_page = maxi(0, rules_page - 1)
+	_rebuild_buttons()
+
+func _rules_next_page() -> void:
+	var pages: int = maxi(1, int(ceil(float(_rules_lines().size()) / float(RULES_PAGE_SIZE))))
+	rules_page = mini(pages - 1, rules_page + 1)
 	_rebuild_buttons()
 
 func _btns_mode() -> void:
@@ -3151,6 +3245,7 @@ func _online_extra() -> float:
 
 func _btns_online() -> void:
 	var web_build: bool = OS.has_feature("web")
+	_add_btn(Rect2(16, 16, 44, 44), "", _open_online_help, true, TEXT, "icon", "help", "online_help")
 	_scroll_top = 76.0
 	_scroll_bottom = 868.0
 	_content_h = 0.0
@@ -3375,7 +3470,7 @@ func _draw_ip_entry() -> void:
 	var shown: String = join_ip if join_ip != "" else "192.168.1.5"
 	var caret: String = "|" if (int(_time * 2.0) % 2 == 0 and join_ip.length() < 15) else " "
 	var tc: Color = TEXT if join_ip != "" else TEXT_FAINT
-	draw_string(font_bold, Vector2(f.position.x, f.position.y + 56), shown + (caret if join_ip != "" else ""), HORIZONTAL_ALIGNMENT_CENTER, f.size.x, 34, tc)
+	_txt_c(shown + (caret if join_ip != "" else ""), Rect2(f.position.x, f.position.y + 38, f.size.x, 36), 34, tc, true)
 	if ok:
 		_draw_icon("check", Vector2(f.position.x + 30, f.get_center().y), 22, GREEN, 3.0)
 	_txt_c("هر دو گوشی باید به یک وای‌فای وصل باشند", Rect2(0, 190, VIEW_W, 28), 14, TEXT_DIM)
@@ -3706,6 +3801,7 @@ func _set_tab(i: int) -> void:
 	_rebuild_buttons()
 
 func _btns_dashboard() -> void:
+	_add_btn(Rect2(16, 16, 44, 44), "", _open_dashboard_help, true, TEXT, "icon", "help", "dashboard_help")
 	_scroll_top = 312.0
 	_scroll_bottom = 868.0
 	_content_h = GAMES.size() * 66.0 + 16.0
@@ -3777,6 +3873,7 @@ func _draw_dashboard() -> void:
 
 # ---------------- RANKINGS ----------------
 func _btns_rankings() -> void:
+	_add_btn(Rect2(16, 16, 44, 44), "", _open_rankings_help, true, TEXT, "icon", "help", "rankings_help")
 	_scroll_top = 262.0
 	_scroll_bottom = 868.0
 	_content_h = GAMES.size() * 66.0 + 16.0
@@ -3882,34 +3979,63 @@ const CONN_HELP := [
 	"اگر «خطا در اتصال» همراه با یک کد آمد، آن کد را برای سازنده بفرستید.",
 ]
 
+const RULES_PAGE_SIZE := 4
+
 func _conn_help_active() -> bool:
 	return rules_open and (state == State.LOBBY or state == State.IP_ENTRY)
 
 func _rules_lines() -> Array:
 	if _conn_help_active():
 		return CONN_HELP
-	return RULES.get(selected_game, [])
+	match rules_context:
+		"general": return GENERAL_HELP
+		"online": return ONLINE_HELP
+		"dashboard": return DASHBOARD_HELP
+		"rankings": return RANKINGS_HELP
+		_: return RULES.get(selected_game, [])
+
+func _rules_title() -> String:
+	if _conn_help_active():
+		return "راهنمای اتصال"
+	match rules_context:
+		"general": return "راهنمای برنامه"
+		"online": return "راهنمای بازی آنلاین"
+		"dashboard": return "راهنمای آمار"
+		"rankings": return "راهنمای رتبه‌بندی"
+		_: return "راهنمای " + str(_game_info(selected_game).get("name", "بازی"))
 
 func _rules_layout() -> Dictionary:
-	var lines: Array = _rules_lines()
+	var all_lines: Array = _rules_lines()
+	var page_count: int = maxi(1, int(ceil(float(all_lines.size()) / float(RULES_PAGE_SIZE))))
+	rules_page = clampi(rules_page, 0, page_count - 1)
+	var start_index: int = rules_page * RULES_PAGE_SIZE
+	var page_lines: Array = []
+	for i in range(start_index, mini(start_index + RULES_PAGE_SIZE, all_lines.size())):
+		page_lines.append(all_lines[i])
 	var tw: float = 392.0
 	var total: float = 0.0
 	var hs: Array = []
-	for t in lines:
+	for t in page_lines:
 		var h: float = _wrap_h(str(t), tw, 15)
 		hs.append(h)
 		total += h + 16.0
-	var ph: float = 96.0 + total + 84.0
-	var py: float = maxf(40.0, (VIEW_H - ph) * 0.5)
-	return {"rect": Rect2(24, py, VIEW_W - 48, ph), "hs": hs, "tw": tw}
+	var footer_h: float = 132.0 if page_count > 1 else 84.0
+	var ph: float = minf(VIEW_H - 48.0, 96.0 + total + footer_h)
+	var py: float = maxf(24.0, (VIEW_H - ph) * 0.5)
+	return {"rect": Rect2(24, py, VIEW_W - 48, ph), "hs": hs, "tw": tw, "lines": page_lines, "page": rules_page, "pages": page_count}
 
 func _btns_rules() -> void:
 	var l: Dictionary = _rules_layout()
 	var r: Rect2 = l.rect
-	_add_ov_btn(Rect2(r.position.x + 24, r.end.y - 72, r.size.x - 48, 54), "متوجه شدم", _close_rules, GREEN, "solid", "check", "r_ok")
+	if int(l.pages) > 1:
+		var nav_y: float = r.end.y - 122.0
+		_add_ov_btn(Rect2(r.position.x + 20, nav_y, 130, 42), "قبلی", _rules_prev_page, TEXT_DIM, "ghost", "back", "r_prev", rules_page > 0)
+		_add_ov_btn(Rect2(r.end.x - 150, nav_y, 130, 42), "بعدی", _rules_next_page, ACCENT, "soft", "next", "r_next", rules_page < int(l.pages) - 1)
+	_add_ov_btn(Rect2(r.position.x + 24, r.end.y - 64, r.size.x - 48, 48), "متوجه شدم", _close_rules, GREEN, "solid", "check", "r_ok")
 
 func _close_rules() -> void:
 	rules_open = false
+	rules_context = "game"
 	_rebuild_buttons()
 
 func _draw_rules() -> void:
@@ -3917,21 +4043,24 @@ func _draw_rules() -> void:
 	var l: Dictionary = _rules_layout()
 	var r: Rect2 = l.rect
 	var col: Color = _game_info(selected_game).get("icon_col", ACCENT)
+	if rules_context != "game":
+		col = BLUE if rules_context == "online" or rules_context == "connection" else ACCENT
 	_panel(r, Color(0.11, 0.14, 0.28), 28, Color(col.r, col.g, col.b, 0.5), 1.5, 24, 10)
 	_gloss(r, 28, 0.04)
-	var help_title: String = "راهنمای اتصال" if _conn_help_active() else "راهنمای " + str(_game_info(selected_game).get("name", ""))
-	_txt_c(help_title, Rect2(r.position.x, r.position.y + 18, r.size.x, 40), 22, TEXT, true)
+	_txt_c(_rules_title(), Rect2(r.position.x, r.position.y + 18, r.size.x, 40), 22, TEXT, true)
 	draw_rect(Rect2(r.position.x + 28, r.position.y + 68, r.size.x - 56, 1), LINE)
-	var lines: Array = _rules_lines()
+	var lines: Array = l.lines
 	var hs: Array = l.hs
 	var y: float = r.position.y + 90.0
 	for i in lines.size():
 		var h: float = hs[i]
 		var dc := Vector2(r.end.x - 40, y + 12)
 		draw_circle(dc, 13, Color(col.r, col.g, col.b, 0.25))
-		_txt_c(_fa(i + 1), Rect2(dc.x - 13, dc.y - 13, 26, 26), 13, col.lightened(0.35), true)
+		_txt_c(_fa(int(l.page) * RULES_PAGE_SIZE + i + 1), Rect2(dc.x - 13, dc.y - 13, 26, 26), 13, col.lightened(0.35), true)
 		_wrap(str(lines[i]), r.position.x + 24, y + 16, float(l.tw), 15, TEXT, HORIZONTAL_ALIGNMENT_RIGHT)
 		y += h + 16.0
+	if int(l.pages) > 1:
+		_txt_c("صفحه %s از %s" % [_fa(int(l.page) + 1), _fa(int(l.pages))], Rect2(r.position.x + 154, r.end.y - 122, r.size.x - 308, 42), 13, TEXT_DIM, true)
 
 func _dialog_layout() -> Dictionary:
 	var body: String = str(dialog.get("body", ""))
@@ -4834,6 +4963,25 @@ func _create_username_edit() -> void:
 	username_edit.placeholder_text = "نامی که حریف می‌بیند"
 	username_edit.max_length = 18
 	username_edit.clear_button_enabled = true
+	username_edit.alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	username_edit.text_direction = Control.TEXT_DIRECTION_RTL
+	username_edit.add_theme_font_override("font", font)
+	username_edit.add_theme_font_size_override("font_size", 16)
+	username_edit.add_theme_color_override("font_color", TEXT)
+	username_edit.add_theme_color_override("font_placeholder_color", TEXT_DIM)
+	username_edit.add_theme_color_override("font_uneditable_color", TEXT_DIM)
+	username_edit.add_theme_color_override("caret_color", ACCENT)
+	username_edit.add_theme_color_override("selection_color", Color(ACCENT.r, ACCENT.g, ACCENT.b, 0.35))
+	var edit_style := StyleBoxFlat.new()
+	edit_style.bg_color = CARD
+	edit_style.set_corner_radius_all(10)
+	edit_style.set_border_width_all(1)
+	edit_style.border_color = LINE_STRONG
+	edit_style.set_content_margin_all(10)
+	username_edit.add_theme_stylebox_override("normal", edit_style)
+	var focus_style: StyleBoxFlat = edit_style.duplicate()
+	focus_style.border_color = ACCENT
+	username_edit.add_theme_stylebox_override("focus", focus_style)
 	username_edit.visible = false
 	username_edit.text_submitted.connect(_save_online_username)
 	add_child(username_edit)

@@ -16,6 +16,32 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Download Persian fonts (Vazirmatn)
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          mkdir -p fonts
+          download_font() {
+            local filename="$1"
+            local destination="fonts/${filename}"
+            local primary_url="https://cdn.jsdelivr.net/npm/vazirmatn@33.0.3/fonts/ttf/${filename}"
+            local fallback_url="https://raw.githubusercontent.com/rastikerdar/vazirmatn/v33.003/fonts/ttf/${filename}"
+            if ! wget --tries=2 --waitretry=2 --timeout=20 --output-document="$destination" "$primary_url"; then
+              echo "Primary font URL failed; trying fallback for ${filename}." >&2
+              rm -f "$destination"
+              wget --tries=2 --waitretry=2 --timeout=20 --output-document="$destination" "$fallback_url"
+            fi
+            test -s "$destination" || { echo "ERROR: Font download failed: ${destination}" >&2; return 1; }
+          }
+          download_font "Vazirmatn-Regular.ttf"
+          download_font "Vazirmatn-Bold.ttf"
+          if ! wget --tries=2 --waitretry=2 --timeout=20 -O fonts/OFL.txt "https://raw.githubusercontent.com/rastikerdar/vazirmatn/v33.003/OFL.txt"; then
+            wget --tries=2 --waitretry=2 --timeout=20 -O fonts/OFL.txt "https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/OFL.txt"
+          fi
+          test -s fonts/OFL.txt
+          ls -lh fonts/Vazirmatn-*.ttf fonts/OFL.txt
+
       - name: Install Android SDK components
         run: |
           SDK=/usr/lib/android-sdk
@@ -57,8 +83,22 @@ jobs:
           sed -i 's/^          //' ~/.config/godot/editor_settings-4.tres
           cp ~/.config/godot/editor_settings-4.tres ~/.config/godot/editor_settings-4.3.tres
 
-      - name: Import project
-        run: godot --headless --verbose --import || true
+      - name: Import project resources
+        shell: bash
+        timeout-minutes: 8
+        run: godot --headless --editor --path . --import
+
+      - name: Smoke-test game startup
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          LOG_FILE="/tmp/mind-bastion-apk-startup.log"
+          godot --headless --verbose --path . --quit-after 2 2>&1 | tee "$LOG_FILE"
+          if grep -E 'SCRIPT ERROR|Parse Error|Parser Error|Failed loading resource|Failed to load script|Cannot load script' "$LOG_FILE"; then
+            echo "ERROR: Godot reported script or resource loading errors during startup." >&2
+            exit 1
+          fi
 
       - name: Diagnostics
         run: |
