@@ -321,7 +321,7 @@ func _gob_tap(p: Vector2) -> void:
 		if not _gob_can_place(gx, gy, gob_sel_size, me):
 			app._show_toast("مهره‌ی تازه معمولاً روی خانه‌ی خالی قرار می‌گیرد؛ فقط برای شکستن ردیف سه‌تایی حریف می‌توان روی مهره‌ی او گذاشت.")
 		elif app._net_on():
-			app.rpc("_rpc_gob_place", gx, gy, gob_sel_size, me)
+			app._send_game_action("_rpc_gob_place", [gx, gy, gob_sel_size, me])
 		else:
 			_gob_place(gx, gy, gob_sel_size, me)
 		return
@@ -330,7 +330,7 @@ func _gob_tap(p: Vector2) -> void:
 		var destination := Vector2i(gx, gy)
 		if _gob_can_move(gob_sel_from, destination, me):
 			if app._net_on():
-				app.rpc("_rpc_gob_move", gob_sel_from.x, gob_sel_from.y, gx, gy, me)
+				app._send_game_action("_rpc_gob_move", [gob_sel_from.x, gob_sel_from.y, gx, gy, me])
 			else:
 				_gob_move(gob_sel_from, destination, me)
 			return

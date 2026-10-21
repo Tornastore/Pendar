@@ -74,8 +74,8 @@ func _othello_place(c: Vector2i) -> bool:
 	var flips: Array = _othello_would_flip(c, othello_turn)
 	if flips.size() == 0:
 		return false
-	if not app.vs_cpu and app.multiplayer.multiplayer_peer != null:
-		app.rpc("_rpc_othello_place", c.x, c.y)
+	if app._net_on():
+		app._send_game_action("_rpc_othello_place", [c.x, c.y])
 	else:
 		_othello_apply_place(c)
 	return true

@@ -113,7 +113,7 @@ func _bg_step() -> void:
 	if app._net_on():
 		if bg_turn != _bg_me():
 			return
-		app.rpc("_rpc_bg_step", randi() % 6 + 1, randi() % 6 + 1)
+		app._send_game_action("_rpc_bg_step", [randi() % 6 + 1, randi() % 6 + 1])
 	else:
 		_bg_step_apply(0, 0)
 

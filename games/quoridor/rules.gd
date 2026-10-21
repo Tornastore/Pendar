@@ -310,7 +310,7 @@ func _quo_tap(p: Vector2) -> void:
 		)
 		if target in _quo_legal_moves(quo_turn):
 			if app._net_on():
-				app.rpc("_rpc_quo_action", 0, target.x, target.y, false)
+				app._send_game_action("_rpc_quo_action", [0, target.x, target.y, false])
 			else:
 				_quo_apply_move(quo_turn, target)
 	else:
@@ -322,7 +322,7 @@ func _quo_tap(p: Vector2) -> void:
 			return
 		if app._net_on():
 			if _quo_wall_placement_legal(int(edge.x), int(edge.y), bool(edge.v)):
-				app.rpc("_rpc_quo_action", 1, int(edge.x), int(edge.y), bool(edge.v))
+				app._send_game_action("_rpc_quo_action", [1, int(edge.x), int(edge.y), bool(edge.v)])
 			else:
 				app._show_toast("دیوار غیرمجاز است: هم‌پوشانی، تقاطع یا بستن مسیر بازیکن.")
 		elif _quo_place_wall(int(edge.x), int(edge.y), bool(edge.v)):

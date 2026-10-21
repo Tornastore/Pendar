@@ -97,7 +97,7 @@ def test_web_export_preset_and_github_workflows_are_present() -> None:
     assert 'actions/deploy-pages@v4' in deploy_workflow
     assert 'OS.has_feature("web")' in main
     assert 'info.get("net", false) and not web_build' in main
-    assert 'not web_build, GREEN' in main
+    assert 'not web_build, ACCENT' in main
     assert 'نسخه وب از اتصال شبکه‌ای ENet پشتیبانی نمی‌کند' in main
     assert 'ENet/UDP' in readme
 

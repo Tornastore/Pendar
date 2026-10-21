@@ -258,20 +258,29 @@ func _mm_submit() -> void:
 		mm_cur = _mm_blank_code()
 		mm_filled = _mm_blank_filled()
 		mm_slot = 0
-		var client_id: int = -1
-		for pid in app.peer_to_seat.keys():
-			if int(app.peer_to_seat[pid]) == 1:
-				client_id = int(pid)
-				break
-		if client_id >= 0:
-			app.rpc_id(client_id, "_rpc_mm_secret_ready", mm_code_len, mm_color_count)
+		if app.ws_match_active:
+			if not app._ws_send_json({"type": "mastermind_secret_ready", "code_length": mm_code_len, "color_count": mm_color_count}):
+				app._show_toast("کد ثبت شد اما ارسال به حریف ناموفق بود؛ اتصال را بررسی کنید.")
 		else:
-			app._show_toast("بازیکن مهمان پیدا نشد؛ اتصال را بررسی کنید.")
+			var client_id: int = -1
+			for pid in app.peer_to_seat.keys():
+				if int(app.peer_to_seat[pid]) == 1:
+					client_id = int(pid)
+					break
+			if client_id >= 0:
+				app.rpc_id(client_id, "_rpc_mm_secret_ready", mm_code_len, mm_color_count)
+			else:
+				app._show_toast("بازیکن مهمان پیدا نشد؛ اتصال را بررسی کنید.")
 		app._rebuild_buttons()
 		return
 	if app._net_on() and not app.is_host and mm_phase == 1:
 		mm_phase = 4
-		app.rpc_id(1, "_rpc_mm_submit", mm_cur.duplicate(), 1)
+		if app.ws_match_active:
+			if not app._ws_send_json({"type": "mastermind_guess", "guess": mm_cur.duplicate()}):
+				mm_phase = 1
+				app._show_toast("حدس ارسال نشد؛ اتصال را بررسی کنید.")
+		else:
+			app.rpc_id(1, "_rpc_mm_submit", mm_cur.duplicate(), 1)
 		app._rebuild_buttons()
 		return
 	_mm_apply(mm_cur.duplicate(), 0)
@@ -307,7 +316,10 @@ func _mm_apply(g: Array, player: int) -> void:
 	else:
 		app._build_playing_buttons()
 	if app._net_on() and app.is_host:
-		for pid in app.peer_to_seat.keys():
-			if int(app.peer_to_seat[pid]) == 1:
-				app.rpc_id(int(pid), "_rpc_mm_sync_state", mm_guesses, mm_game_over, mm_winner)
-				break
+		if app.ws_match_active:
+			app._ws_send_json({"type": "mastermind_sync", "guesses": mm_guesses, "is_over": mm_game_over, "winner": mm_winner})
+		else:
+			for pid in app.peer_to_seat.keys():
+				if int(app.peer_to_seat[pid]) == 1:
+					app.rpc_id(int(pid), "_rpc_mm_sync_state", mm_guesses, mm_game_over, mm_winner)
+					break

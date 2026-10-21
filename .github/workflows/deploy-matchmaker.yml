@@ -1,0 +1,48 @@
+name: Deploy Online Matchmaker to Liara
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'online-server/**'
+      - '.github/workflows/deploy-matchmaker.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    # The application ID is a repository variable. If it is not configured yet,
+    # skip instead of failing unrelated game/web builds.
+    if: ${{ vars.LIARA_MATCHMAKER_APP != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Test matchmaker protocol
+        working-directory: online-server
+        run: |
+          node --check server.js
+          node --check lib/protocol.js
+          node --test
+
+      - name: Install Liara CLI
+        run: npm install --global @liara/cli@9
+
+      - name: Deploy matchmaker to Liara
+        working-directory: online-server
+        env:
+          LIARA_API_TOKEN: ${{ secrets.LIARA_API_TOKEN }}
+          LIARA_MATCHMAKER_APP: ${{ vars.LIARA_MATCHMAKER_APP }}
+        run: |
+          if [ -z "$LIARA_API_TOKEN" ]; then
+            echo "Missing repository secret LIARA_API_TOKEN" >&2
+            exit 1
+          fi
+          liara deploy --app="$LIARA_MATCHMAKER_APP" --api-token="$LIARA_API_TOKEN" --no-app-logs

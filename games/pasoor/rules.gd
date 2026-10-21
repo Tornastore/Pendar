@@ -358,8 +358,8 @@ func _pas_confirm() -> void:
 		return
 	var i: int = pas_selected
 	var cap: Array = _pas_best_capture(pas_hands[me][i])
-	if not app.vs_cpu and app.multiplayer.multiplayer_peer != null:
-		app.rpc("_rpc_pas_play", me, i, cap)
+	if app._net_on():
+		app._send_game_action("_rpc_pas_play", [me, i, cap])
 	else:
 		_pas_play(me, i, cap)
 

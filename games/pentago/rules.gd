@@ -258,8 +258,8 @@ func _pent_tap(p: Vector2) -> void:
 			if r.has_point(p):
 				if pent_board[y][x] != 0:
 					return
-				if not app.vs_cpu and app.multiplayer.multiplayer_peer != null:
-					app.rpc("_rpc_pent_place", x, y)
+				if app._net_on():
+					app._send_game_action("_rpc_pent_place", [x, y])
 				else:
 					_pent_place(Vector2i(x, y))
 				return
@@ -267,8 +267,8 @@ func _pent_tap(p: Vector2) -> void:
 func _pent_rot(q: int, cw: bool) -> void:
 	if not _pent_my_turn() or pent_phase != 1:
 		return
-	if not app.vs_cpu and app.multiplayer.multiplayer_peer != null:
-		app.rpc("_rpc_pent_rotate", q, cw)
+	if app._net_on():
+		app._send_game_action("_rpc_pent_rotate", [q, cw])
 	else:
 		_pent_do_rotate(q, cw)
 

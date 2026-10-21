@@ -200,8 +200,8 @@ func _chess_tap(p: Vector2) -> void:
 	var c: Vector2i = _chess_scr(Vector2i(gx, gy))
 	if chess_selected.x >= 0:
 		if c in chess_valid:
-			if not app.vs_cpu and app.multiplayer.multiplayer_peer != null:
-				app.rpc("_rpc_chess_move", chess_selected.x, chess_selected.y, c.x, c.y)
+			if app._net_on():
+				app._send_game_action("_rpc_chess_move", [chess_selected.x, chess_selected.y, c.x, c.y])
 			else:
 				_chess_make_move(chess_selected, c)
 			return

@@ -59,6 +59,19 @@ var host_ips: Array = []              # local IPs shown to host
 var join_ip: String = ""              # IP typed by client
 var max_players_for_game: int = 2
 
+# WebSocket matchmaking for browser and cross-network online play. ENet/UDP stays
+# available for native APK/LAN sessions; this transport is independent of ENet.
+var ws_socket: WebSocketPeer
+var ws_match_active: bool = false
+var ws_state: String = "idle"
+var ws_queue_join_sent: bool = false
+var ws_emoji_picker_open: bool = false
+var online_username: String = "بازیکن"
+var online_status: String = ""
+var username_editing: bool = false
+var username_edit: LineEdit
+const ONLINE_EMOJIS := ["👍", "😂", "❤️", "🔥", "👏", "😮", "😢", "🤔"]
+
 # Extra game state vars (new games)
 
 
@@ -952,7 +965,7 @@ func _my_seat() -> int:
 	return 0 if vs_cpu else local_seat
 
 func _net_on() -> bool:
-	return not vs_cpu and multiplayer.multiplayer_peer != null
+	return not vs_cpu and (ws_match_active or multiplayer.multiplayer_peer != null)
 
 func _is_my_turn() -> bool:
 	if vs_cpu:
@@ -971,6 +984,16 @@ func _is_my_turn() -> bool:
 			return pas_turn == local_seat
 		"quoridor":
 			return quo_turn == local_seat
+		"gobblet":
+			return gob_turn == local_seat + 1
+		"abalone":
+			return aba_turn == local_seat + 1
+		"blockace":
+			return blk_turn == local_seat
+		"hokm":
+			return hokm_turn == local_seat
+		"backgammon":
+			return bg_turn == local_seat
 	return false
 
 func _reset_othello() -> void:
@@ -1333,6 +1356,9 @@ func _set_state(v: State) -> void:
 		pause_open = false
 		rules_open = false
 		dialog = {}
+		if v != State.ONLINE and username_edit != null:
+			username_edit.visible = false
+			username_editing = false
 	state = v
 
 # ---------- setup ----------
@@ -2050,7 +2076,7 @@ func _confirm_exit_app() -> void:
 
 func _confirm_exit_game() -> void:
 	var body := "بازی جاری ناتمام می‌ماند و نتیجه‌ای ثبت نمی‌شود."
-	if not vs_cpu and multiplayer.multiplayer_peer != null:
+	if _net_on():
 		body += "\nارتباط شما با حریف قطع خواهد شد."
 	_show_confirm("exit_game", "خروج از بازی؟", body, "خروج به منو", _back_to_menu, true, "ادامه بازی", "door")
 
@@ -2061,7 +2087,7 @@ func _confirm_restart() -> void:
 	_show_confirm("restart", "شروع بازی جدید؟", "پیشرفت بازی فعلی از بین می‌رود و نتیجه‌ای ثبت نمی‌شود.", "بازی جدید", _restart_current, true, "انصراف", "restart")
 
 func _request_leave_lobby() -> void:
-	if multiplayer.multiplayer_peer != null:
+	if multiplayer.multiplayer_peer != null or ws_match_active or online_searching:
 		_show_confirm("leave", "ترک لابی؟", "اتصال شما بسته می‌شود و باید دوباره وصل شوید.", "ترک لابی", _leave_lobby, true, "ماندن", "door")
 	else:
 		_leave_lobby()
@@ -2193,8 +2219,8 @@ func _player_won_current() -> bool:
 func _resign() -> void:
 	if state != State.PLAYING:
 		return
-	if not vs_cpu and multiplayer.multiplayer_peer != null:
-		rpc("_rpc_resign", local_seat)
+	if _net_on():
+		_send_game_action("_rpc_resign", [local_seat])
 	else:
 		_apply_resign(0)
 
@@ -2304,7 +2330,14 @@ func _start_game() -> void:
 	_rebuild_buttons()
 
 func _restart_current() -> void:
-	if not vs_cpu and multiplayer.multiplayer_peer != null:
+	if ws_match_active:
+		if is_host:
+			var ws_seed: int = randi()
+			var ws_mm_level: int = mm_difficulty if selected_game == "mastermind" else -1
+			var ws_blk_level: int = blk_difficulty if selected_game == "blockace" else -1
+			_ws_send_json({"type": "restart_game", "game": selected_game, "seed": ws_seed, "mastermind_difficulty": ws_mm_level, "blockace_difficulty": ws_blk_level})
+			_rpc_start_game(selected_game, ws_seed, ws_mm_level, ws_blk_level)
+	elif not vs_cpu and multiplayer.multiplayer_peer != null:
 		if is_host:
 			var rng_seed: int = randi()
 			var selected_mm_level: int = mm_difficulty if selected_game == "mastermind" else -1
@@ -2361,7 +2394,7 @@ func _cpu_tick() -> void:
 				_schedule_cpu(0.6, _blk_cpu)
 
 func _ui_sig() -> String:
-	var s: String = "%d|%d|%d|%s|%s|%d|%d|%d|%s|%s|%d" % [state, int(pause_open), int(rules_open), str(dialog.get("title", "")), menu_filter, dash_tab, connected_players, int(online_searching), online_game, join_ip, int(is_host)]
+	var s: String = "%d|%d|%d|%s|%s|%d|%d|%d|%s|%s|%d|%s|%s|%d|%d|%s" % [state, int(pause_open), int(rules_open), str(dialog.get("title", "")), menu_filter, dash_tab, connected_players, int(online_searching), online_game, join_ip, int(is_host), ws_state, online_username, int(ws_match_active), int(ws_emoji_picker_open), online_status]
 	s += "|%d|%d" % [int(multiplayer.multiplayer_peer != null), int(_result_logged)]
 	if state == State.PLAYING:
 		match selected_game:
@@ -2689,6 +2722,7 @@ func _btns_mode() -> void:
 	var web_build: bool = OS.has_feature("web")
 	# Godot Web does not support low-level ENet/UDP networking in browsers.
 	var net: bool = info.get("net", false) and not web_build
+	var online_net: bool = bool(info.get("net", false))
 	var option_y: float = 346.0
 	var difficulty_labels: Array[String] = ["خیلی آسان", "آسان", "متوسط", "سخت", "استاد", "استادتمام"]
 	_back_btn()
@@ -2777,13 +2811,15 @@ func _btns_mode() -> void:
 	var network_y: float = option_y + 98.0
 	_add_btn(Rect2(24, network_y, 492, 84), "میزبانی روی وای‌فای", _start_host, net, BLUE, "option", "wifi", "m_host", "شما میزبان باشید، دوستتان با IP وصل می‌شود")
 	_add_btn(Rect2(24, network_y + 98, 492, 84), "اتصال با IP", _go_ip_entry, net, ACCENT, "option", "keypad", "m_join", "به بازی میزبانِ دیگر بپیوندید")
-	_add_btn(Rect2(24, network_y + 196, 492, 84), "بازی آنلاین", _open_online_for_game, net, PINK, "option", "globe", "m_online", "ساخت اتاق و دعوت دوست")
+	_add_btn(Rect2(24, network_y + 196, 492, 84), "بازی آنلاین", _open_online_for_game, online_net, PINK, "option", "globe", "m_online", "جستجوی حریف از طریق سرور آنلاین")
 	if web_build:
-		for i in range(buttons.size() - 3, buttons.size()):
-			buttons[i].hint = "اتصال شبکه‌ای ENet در نسخه وب پشتیبانی نمی‌شود؛ بازی با کامپیوتر قابل اجراست."
+		buttons[buttons.size() - 3].hint = "میزبانی مستقیم ENet/UDP در مرورگر ممکن نیست."
+		buttons[buttons.size() - 2].hint = "اتصال مستقیم IP فقط در APK/Desktop فعال است."
+		buttons[buttons.size() - 1].hint = "برای نسخه وب از صف انتظار و WebSocket امن استفاده کنید."
 	elif not net:
-		for i in range(buttons.size() - 3, buttons.size()):
-			buttons[i].hint = "این بازی فعلاً فقط با کامپیوتر قابل بازی است."
+		buttons[buttons.size() - 3].hint = "این بازی فعلاً فقط با کامپیوتر قابل بازی است."
+		buttons[buttons.size() - 2].hint = "این بازی فعلاً فقط با کامپیوتر قابل بازی است."
+		buttons[buttons.size() - 1].hint = "این بازی فعلاً فقط با کامپیوتر قابل بازی است."
 	if selected_game == "quoridor":
 		_add_btn(Rect2(24, option_y + 392, 492, 76), "بازی ۴ نفره روی یک دستگاه", _start_quoridor_local_four_player, true, ACCENT, "option", "users", "m_quoridor_local4", "چهار بازیکن · نوبتی روی یک صفحه")
 
@@ -2905,7 +2941,87 @@ func _join_online_room_ui() -> void:
 	_go_ip_entry()
 
 func _quick_match_search() -> void:
-	_show_toast("جستجوی سریع به سرور آنلاین نیاز دارد و هنوز فعال نیست.")
+	if online_searching:
+		_cancel_online_search()
+		return
+	var endpoint: String = _online_server_url()
+	if endpoint.is_empty():
+		online_status = "سرور آنلاین هنوز راه‌اندازی نشده است؛ مراحل ONLINE_SERVER_FA.txt را انجام دهید."
+		_show_toast("نشانی سرور آنلاین هنوز تنظیم نشده است.")
+		_rebuild_buttons()
+		return
+	if ws_socket != null:
+		ws_socket.close()
+		ws_socket = null
+	ws_socket = WebSocketPeer.new()
+	var err: Error = ws_socket.connect_to_url(endpoint)
+	if err != OK:
+		ws_socket = null
+		ws_state = "idle"
+		_show_toast("اتصال به سرور بازی آغاز نشد: %s" % error_string(err))
+		return
+	ws_state = "connecting"
+	ws_queue_join_sent = false
+	ws_match_active = false
+	online_searching = true
+	online_status = "در حال اتصال به سرور آنلاین…"
+	state = State.ONLINE
+	_rebuild_buttons()
+
+func _cancel_online_search() -> void:
+	if ws_socket != null:
+		_ws_send_json({"type": "leave_queue"})
+		ws_socket.close()
+		ws_socket = null
+	ws_queue_join_sent = false
+	online_searching = false
+	ws_match_active = false
+	ws_state = "idle"
+	online_status = "جستجو لغو شد."
+	_show_toast("از صف انتظار خارج شدید.")
+	_rebuild_buttons()
+
+func _edit_online_username() -> void:
+	if username_edit == null:
+		return
+	username_editing = true
+	username_edit.text = online_username
+	username_edit.visible = true
+	username_edit.grab_focus()
+	username_edit.select_all()
+	_rebuild_buttons()
+
+func _save_online_username(_submitted: String = "") -> void:
+	if username_edit == null:
+		return
+	var clean: String = username_edit.text.strip_edges().replace("\n", " ").replace("\r", " ")
+	if clean.is_empty():
+		clean = "بازیکن"
+	online_username = clean.substr(0, 18)
+	var profile := ConfigFile.new()
+	profile.set_value("profile", "username", online_username)
+	var save_err: Error = profile.save("user://profile.cfg")
+	username_editing = false
+	username_edit.visible = false
+	if save_err != OK:
+		_show_toast("نام ذخیره نشد؛ این جلسه از آن استفاده می‌کند.")
+	else:
+		_show_toast("نام کاربری ذخیره شد: " + online_username)
+	_rebuild_buttons()
+
+func _toggle_emoji_picker() -> void:
+	if not ws_match_active:
+		return
+	ws_emoji_picker_open = not ws_emoji_picker_open
+	_rebuild_buttons()
+
+func _send_online_emoji(emoji: String) -> void:
+	if not ws_match_active or not ONLINE_EMOJIS.has(emoji):
+		return
+	if _ws_send_json({"type": "emoji", "emoji": emoji}):
+		_show_toast(online_username + "  " + emoji)
+	ws_emoji_picker_open = false
+	_rebuild_buttons()
 
 func _pick_online_game(id: String) -> void:
 	online_game = id
@@ -2932,30 +3048,47 @@ func _btns_online() -> void:
 		_add_btn(Rect2(x, y, w, 38), nm, _pick_online_game.bind(id), true, _game_info(id).icon_col, "seg_on" if id == online_game else "ghost", "", "og_" + id)
 		i += 1
 	var ex: float = _online_extra()
-	_add_btn(Rect2(24, 292 + ex, 492, 84), "ساخت اتاق", _create_online_room, not web_build, GREEN, "option", "plus", "o_create", "کد اتاق ۶ رقمی می‌گیرید و میزبان می‌شوید")
+	if online_searching:
+		_add_btn(Rect2(24, 292 + ex, 492, 84), "لغو انتظار برای حریف", _cancel_online_search, true, RED, "option", "close", "o_cancel_queue", "در صورت لغو، از صف بازی خارج می‌شوید")
+	else:
+		_add_btn(Rect2(24, 292 + ex, 492, 84), "جستجوی هم‌بازی آنلاین", _quick_match_search, not _online_server_url().is_empty(), PINK, "option", "globe", "به صف بازی انتخاب‌شده می‌پیوندید و با اولین بازیکن همان بازی جفت می‌شوید")
+		if _online_server_url().is_empty():
+			_last_btn().hint = "پس از میزبانی سرور آنلاین، نشانی WSS را در project.godot تنظیم کنید."
+	if username_editing:
+		_add_btn(Rect2(374, 91, 140, 40), "ثبت نام", _save_online_username, true, GREEN, "solid", "check", "o_username_save")
+	else:
+		_add_btn(Rect2(24, 91, 118, 40), "ویرایش نام", _edit_online_username, true, BLUE, "soft", "user", "o_username")
+	_add_btn(Rect2(24, 488 + ex, 492, 84), "اتصال مستقیم با IP (فقط APK/Desktop)", _go_ip_entry, not web_build, ACCENT, "option", "keypad", "o_lan", "اتصال مستقیم روی شبکه محلی")
 	if web_build:
-		_last_btn().hint = "نسخه وب هنوز از ENet/UDP پشتیبانی نمی‌کند."
-	_add_btn(Rect2(24, 390 + ex, 492, 84), "ورود با IP میزبان", _join_online_room_ui, not web_build, BLUE, "option", "keypad", "o_join", "IP را با صفحه‌کلید وارد کنید")
-	if web_build:
-		_last_btn().hint = "برای بازی شبکه‌ای نسخه وب باید به WebSocket یا WebRTC منتقل شود."
-	_add_btn(Rect2(24, 488 + ex, 492, 84), "جستجوی سریع هم‌بازی", _quick_match_search, false, PINK, "option", "globe", "o_quick", "به‌زودی · نیازمند سرور آنلاین")
-	_last_btn().hint = "جستجوی سریع به سرور آنلاین نیاز دارد و هنوز فعال نیست."
+		_last_btn().hint = "در مرورگر از جستجوی هم‌بازی با WebSocket استفاده کنید. اتصال ENet/IP فقط در نسخه نصب‌شدنی است."
 	_btns_nav()
 
 func _draw_online() -> void:
-	_draw_topbar("بازی آنلاین", "اتاق بسازید یا به دوستتان بپیوندید")
+	_draw_topbar("بازی آنلاین", "انتخاب بازی و جفت‌سازی خودکار با بازیکن منتظر")
+	var profile := Rect2(16, 82, VIEW_W - 32, 56)
+	_panel(profile, CARD, 16, LINE_STRONG, 1.0)
+	if username_editing:
+		_txt_r("نام کاربری", VIEW_W - 22, 113, 12, TEXT_DIM, true, 100)
+	else:
+		_txt_r("نام کاربری", VIEW_W - 22, 113, 12, TEXT_DIM, true, 100)
+		_txt_r(online_username, VIEW_W - 138, 113, 15, TEXT, true, 190)
 	_txt_r("۱. بازی را انتخاب کنید", VIEW_W - 24, 138, 15, TEXT_DIM, true, 300)
 	var ex: float = _online_extra()
-	_txt_r("۲. روش اتصال", VIEW_W - 24, 280 + ex, 15, TEXT_DIM, true, 300)
-	var note := Rect2(24, 592 + ex, 492, 120)
+	_txt_r("۲. جستجوی حریف", VIEW_W - 24, 280 + ex, 15, TEXT_DIM, true, 300)
+	var note := Rect2(24, 592 + ex, 492, 134)
 	_panel(note, Color(0.38, 0.62, 1.0, 0.10), 18, Color(0.38, 0.62, 1.0, 0.35), 1.0)
 	_draw_icon("info", Vector2(note.end.x - 28, note.position.y + 30), 22, BLUE, 2.0)
-	if OS.has_feature("web"):
-		_wrap("مرورگرها از اتصال سطح پایین ENet/UDP پشتیبانی نمی‌کنند؛ ساخت اتاق و اتصال با IP در نسخه وب غیرفعال است.", note.position.x + 18, note.position.y + 34, note.size.x - 76, 14, TEXT, HORIZONTAL_ALIGNMENT_RIGHT)
-		_wrap("بازی با کامپیوتر و بازی محلی تک‌دستگاه در دسترس است. برای چندنفره وب باید WebSocket/WebRTC و سرور سازگار پیاده‌سازی شود.", note.position.x + 18, note.position.y + 80, note.size.x - 36, 13, TEXT_DIM, HORIZONTAL_ALIGNMENT_RIGHT)
-	else:
-		_wrap("اتصال فعلی روی همان وای‌فای (یا با IP عمومی و پورت‌فوروارد) کار می‌کند.", note.position.x + 18, note.position.y + 34, note.size.x - 76, 14, TEXT, HORIZONTAL_ALIGNMENT_RIGHT)
-		_wrap("بازی با هم‌بازی تصادفی در اینترنت به یک سرور میانی نیاز دارد که هنوز اضافه نشده است.", note.position.x + 18, note.position.y + 80, note.size.x - 36, 13, TEXT_DIM, HORIZONTAL_ALIGNMENT_RIGHT)
+	var status_text: String = online_status
+	if online_searching:
+		status_text = "در صف انتظار برای «%s» هستید؛ با ورود نفر بعدی بازی شروع می‌شود." % str(_game_info(online_game).get("name", online_game))
+	elif ws_match_active:
+		status_text = "متصل به %s در بازی %s" % [opponent_name, str(_game_info(selected_game).get("name", selected_game))]
+	elif _online_server_url().is_empty():
+		status_text = "برای فعال‌شدن صف آنلاین، سرور WebSocket را میزبانی و network/matchmaking_url را تنظیم کنید."
+	elif status_text.is_empty():
+		status_text = "بازیکنان بر اساس بازی انتخاب‌شده جفت می‌شوند؛ نام کاربری و ایموجی‌ها به حریف نمایش داده می‌شود."
+	_wrap(status_text, note.position.x + 18, note.position.y + 32, note.size.x - 36, 14, TEXT, HORIZONTAL_ALIGNMENT_RIGHT)
+	_wrap("اتصال مستقیم IP در APK حفظ شده است؛ نسخه‌ی وب برای بازی آنلاین از WSS استفاده می‌کند.", note.position.x + 18, note.position.y + 86, note.size.x - 36, 13, TEXT_DIM, HORIZONTAL_ALIGNMENT_RIGHT)
 	_draw_bottom_nav()
 
 # ---------------- LOBBY ----------------
@@ -3101,6 +3234,11 @@ func _draw_ip_entry() -> void:
 func _btns_playing() -> void:
 	_back_btn()
 	_add_btn(Rect2(16, 16, 44, 44), "", _open_rules, true, TEXT, "icon", "help", "help")
+	if ws_match_active:
+		_add_btn(Rect2(VIEW_W - 60, 16, 44, 44), "😊", _toggle_emoji_picker, true, PINK, "soft", "", "online_emoji")
+		if ws_emoji_picker_open:
+			for i in range(ONLINE_EMOJIS.size()):
+				_add_btn(Rect2(12 + i * 65, 824, 60, 52), ONLINE_EMOJIS[i], _send_online_emoji.bind(ONLINE_EMOJIS[i]), true, PINK, "soft", "", "online_emoji_%d" % i)
 	_add_btn(Rect2(20, 892, 150, 52), "خروج", _confirm_exit_game, true, TEXT_DIM, "ghost", "door", "dock_exit")
 	_add_btn(Rect2(VIEW_W - 170, 892, 150, 52), "تسلیم", _confirm_resign, true, RED, "soft", "flag", "dock_resign")
 	_btns_game()
@@ -3122,7 +3260,10 @@ func _seat_me(seat: int) -> bool:
 	return seat == local_seat
 
 func _pl(name: String, col: Color, score: String, active: bool, me: bool, sub: String = "", light: int = -1) -> Dictionary:
-	return {"name": name, "col": col, "score": score, "active": active, "me": me, "sub": sub, "light": light}
+	var displayed_name: String = name
+	if ws_match_active:
+		displayed_name = online_username if me else opponent_name
+	return {"name": displayed_name, "col": col, "score": score, "active": active, "me": me, "sub": sub, "light": light}
 
 func _draw_pill(r: Rect2, p: Dictionary) -> void:
 	var active: bool = p.active
@@ -4293,6 +4434,254 @@ func _init_game_modules() -> void:
 		module.bind(self, str(id))
 		_game_modules[str(id)] = module
 
+func _online_server_url() -> String:
+	var url: String = str(ProjectSettings.get_setting("network/matchmaking_url", "")).strip_edges()
+	if url.is_empty() or url.contains("REPLACE-WITH-YOUR-LIARA-APP-DOMAIN"):
+		return ""
+	if not (url.begins_with("wss://") or url.begins_with("ws://")):
+		return ""
+	return url
+
+func _load_online_profile() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load("user://profile.cfg") == OK:
+		var saved: String = str(cfg.get_value("profile", "username", "بازیکن")).strip_edges()
+		if not saved.is_empty():
+			online_username = saved.substr(0, 18)
+
+func _create_username_edit() -> void:
+	if username_edit != null:
+		return
+	username_edit = LineEdit.new()
+	username_edit.position = Vector2(28, 91)
+	username_edit.size = Vector2(330, 40)
+	username_edit.placeholder_text = "نامی که حریف می‌بیند"
+	username_edit.max_length = 18
+	username_edit.clear_button_enabled = true
+	username_edit.visible = false
+	username_edit.text_submitted.connect(_save_online_username)
+	add_child(username_edit)
+
+func _online_queue_search() -> void:
+	# Backward-compatible alias used by older UI callbacks.
+	_quick_match_search()
+
+func _ws_send_json(payload: Dictionary) -> bool:
+	if ws_socket == null or ws_socket.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return false
+	return ws_socket.send_text(JSON.stringify(payload)) == OK
+
+func _ws_poll(_delta: float) -> void:
+	if ws_socket == null:
+		return
+	ws_socket.poll()
+	if ws_socket.get_ready_state() == WebSocketPeer.STATE_OPEN and online_searching and not ws_queue_join_sent:
+		var mm_level: int = int(_game_modules["mastermind"].mm_difficulty)
+		var blk_level: int = int(_game_modules["blockace"].blk_difficulty)
+		if _ws_send_json({"type": "join_queue", "game": online_game, "username": online_username, "mastermind_difficulty": mm_level, "blockace_difficulty": blk_level}):
+			ws_queue_join_sent = true
+			ws_state = "queued"
+			online_status = "در صف انتظار برای «%s»…" % str(_game_info(online_game).get("name", online_game))
+			_rebuild_buttons()
+	while ws_socket != null and ws_socket.get_available_packet_count() > 0:
+		var text_packet: String = ws_socket.get_packet().get_string_from_utf8()
+		var decoded: Variant = JSON.parse_string(text_packet)
+		if decoded is Dictionary:
+			_ws_handle_server_message(decoded)
+	if ws_socket != null and ws_socket.get_ready_state() == WebSocketPeer.STATE_CLOSED and ws_state not in ["idle", "closing"]:
+		var was_waiting: bool = online_searching
+		var was_matched: bool = ws_match_active
+		ws_socket = null
+		ws_queue_join_sent = false
+		ws_match_active = false
+		ws_state = "idle"
+		online_searching = false
+		if was_waiting or was_matched:
+			online_status = "ارتباط با سرور آنلاین قطع شد. دوباره تلاش کنید."
+			if state == State.PLAYING:
+				state = State.ONLINE
+			_show_toast("اتصال آنلاین قطع شد.")
+			_rebuild_buttons()
+
+func _ws_handle_server_message(message: Dictionary) -> void:
+	var message_type: String = str(message.get("type", ""))
+	match message_type:
+		"queued":
+			ws_state = "queued"
+			online_searching = true
+			online_status = "در صف انتظار برای %s؛ جایگاه %s" % [str(_game_info(online_game).get("name", online_game)), _fa(int(message.get("position", 1)))]
+			_rebuild_buttons()
+		"match_found":
+			_ws_begin_match(message)
+		"action":
+			_receive_ws_game_action(message)
+		"emoji":
+			if ws_match_active and int(message.get("seat", -1)) == 1 - local_seat:
+				var emoji: String = str(message.get("emoji", ""))
+				if ONLINE_EMOJIS.has(emoji):
+					_show_toast(opponent_name + "  " + emoji)
+		"mastermind_secret_ready":
+			if ws_match_active and not is_host and selected_game == "mastermind":
+				_rpc_mm_secret_ready(int(message.get("code_length", 4)), int(message.get("color_count", 4)))
+		"mastermind_guess":
+			if ws_match_active and is_host and selected_game == "mastermind" and int(_game_modules["mastermind"].mm_phase) == 3:
+				var guess_value: Variant = message.get("guess", [])
+				if guess_value is Array:
+					_game_modules["mastermind"]._mm_apply(guess_value, 1)
+		"mastermind_sync":
+			if ws_match_active and not is_host and selected_game == "mastermind":
+				var guesses_value: Variant = message.get("guesses", [])
+				if guesses_value is Array:
+					_rpc_mm_sync_state(guesses_value, bool(message.get("is_over", false)), int(message.get("winner", -1)))
+		"restart_game":
+			if ws_match_active and not is_host and str(message.get("game", "")) == selected_game:
+				_rpc_start_game(selected_game, int(message.get("seed", 0)), int(message.get("mastermind_difficulty", -1)), int(message.get("blockace_difficulty", -1)))
+		"opponent_left":
+			ws_match_active = false
+			ws_state = "idle"
+			online_searching = false
+			online_status = "حریف اتصال را ترک کرد. برای بازی دوباره جستجو کنید."
+			if state == State.PLAYING or state == State.RESULT:
+				state = State.ONLINE
+			_show_toast("حریف از بازی خارج شد.")
+			_rebuild_buttons()
+		"queue_cancelled":
+			online_searching = false
+			ws_state = "idle"
+			online_status = "از صف انتظار خارج شدید."
+			_rebuild_buttons()
+		"error":
+			online_status = str(message.get("message", "خطای سرور آنلاین"))
+			if not ws_match_active:
+				online_searching = false
+				ws_queue_join_sent = false
+				ws_state = "idle"
+			_show_toast(online_status)
+			_rebuild_buttons()
+
+func _ws_begin_match(message: Dictionary) -> void:
+	var game_id: String = str(message.get("game", online_game))
+	if not NET_GAMES.has(game_id):
+		_show_toast("سرور بازی نامعتبر فرستاد.")
+		_cancel_online_search()
+		return
+	_set_game(game_id)
+	online_game = game_id
+	_origin_online = true
+	local_seat = clampi(int(message.get("seat", 0)), 0, 1)
+	is_host = local_seat == 0
+	local_player_id = local_seat + 1
+	peer_to_seat.clear()
+	connected_players = 2
+	vs_cpu = false
+	my_name = online_username
+	opponent_name = str(message.get("opponent_username", "حریف"))
+	online_room_code = str(message.get("room_id", ""))
+	ws_state = "matched"
+	ws_match_active = true
+	ws_queue_join_sent = true
+	online_searching = false
+	ws_emoji_picker_open = false
+	if game_id == "mastermind":
+		mm_difficulty = clampi(int(message.get("mastermind_difficulty", mm_difficulty)), 1, 6)
+	if game_id == "blockace":
+		blk_difficulty = clampi(int(message.get("blockace_difficulty", blk_difficulty)), 1, 6)
+	var seed_value: int = int(message.get("seed", 0))
+	var mm_level: int = mm_difficulty if game_id == "mastermind" else -1
+	var blk_level: int = blk_difficulty if game_id == "blockace" else -1
+	_rpc_start_game(game_id, seed_value, mm_level, blk_level)
+	_show_toast("حریف پیدا شد: " + opponent_name)
+	_rebuild_buttons()
+
+func _ws_game_turn_seat() -> int:
+	match selected_game:
+		"othello", "othello12": return othello_turn - 1
+		"pentago": return pent_turn - 1
+		"chess": return chess_turn - 1
+		"domino": return dom_turn
+		"pasoor": return pas_turn
+		"quoridor": return quo_turn
+		"gobblet": return gob_turn - 1
+		"abalone": return aba_turn - 1
+		"blockace": return blk_turn
+		"hokm": return hokm_turn
+		"backgammon": return bg_turn
+	return -1
+
+func _ws_remote_action_allowed(action: String, args: Array, sender_seat: int) -> bool:
+	if state != State.PLAYING or sender_seat < 0 or sender_seat > 1 or sender_seat == local_seat:
+		return false
+	# Resigning is allowed at any point, even when it is not the resigning player's turn.
+	if action == "_rpc_resign":
+		return not args.is_empty() and int(args[0]) == sender_seat
+	if selected_game == "mastermind" or _ws_game_turn_seat() != sender_seat:
+		return false
+	match action:
+		"_rpc_dom_play", "_rpc_dom_draw", "_rpc_dom_pass", "_rpc_pas_play", "_rpc_hokm_play":
+			if args.is_empty() or int(args[0]) != sender_seat:
+				return false
+		"_rpc_blk_place":
+			if args.size() < 6 or int(args[5]) != sender_seat:
+				return false
+		"_rpc_gob_place":
+			if args.size() < 4 or int(args[3]) != sender_seat + 1:
+				return false
+		"_rpc_gob_move":
+			if args.size() < 5 or int(args[4]) != sender_seat + 1:
+				return false
+		"_rpc_aba_move":
+			if args.size() < 4 or int(args[3]) != sender_seat + 1:
+				return false
+		"_rpc_othello_place", "_rpc_pent_place", "_rpc_pent_rotate", "_rpc_chess_move", "_rpc_quo_action", "_rpc_bg_step":
+			pass
+		_:
+			return false
+	return true
+
+func _ws_execute_game_action(action: String, args: Array) -> void:
+	match action:
+		"_rpc_othello_place": _rpc_othello_place(int(args[0]), int(args[1]))
+		"_rpc_pent_place": _rpc_pent_place(int(args[0]), int(args[1]))
+		"_rpc_pent_rotate": _rpc_pent_rotate(int(args[0]), bool(args[1]))
+		"_rpc_dom_play": _rpc_dom_play(int(args[0]), int(args[1]), str(args[2]))
+		"_rpc_dom_draw": _rpc_dom_draw(int(args[0]))
+		"_rpc_dom_pass": _rpc_dom_pass(int(args[0]))
+		"_rpc_chess_move": _rpc_chess_move(int(args[0]), int(args[1]), int(args[2]), int(args[3]))
+		"_rpc_quo_action": _rpc_quo_action(int(args[0]), int(args[1]), int(args[2]), bool(args[3]))
+		"_rpc_pas_play": _rpc_pas_play(int(args[0]), int(args[1]), args[2])
+		"_rpc_gob_place": _rpc_gob_place(int(args[0]), int(args[1]), int(args[2]), int(args[3]))
+		"_rpc_gob_move": _rpc_gob_move(int(args[0]), int(args[1]), int(args[2]), int(args[3]), int(args[4]))
+		"_rpc_aba_move":
+			var encoded := PackedInt32Array()
+			for item in args[0]:
+				encoded.append(int(item))
+			_rpc_aba_move(encoded, int(args[1]), int(args[2]), int(args[3]))
+		"_rpc_blk_place": _rpc_blk_place(int(args[0]), int(args[1]), int(args[2]), int(args[3]), bool(args[4]), int(args[5]))
+		"_rpc_bg_step": _rpc_bg_step(int(args[0]), int(args[1]))
+		"_rpc_hokm_play": _rpc_hokm_play(int(args[0]), int(args[1]))
+		"_rpc_resign": _rpc_resign(int(args[0]))
+
+func _receive_ws_game_action(message: Dictionary) -> void:
+	var action: String = str(message.get("action", ""))
+	var args_value: Variant = message.get("args", [])
+	var sender_seat: int = int(message.get("seat", -1))
+	if not (args_value is Array) or not _ws_remote_action_allowed(action, args_value, sender_seat):
+		return
+	_ws_execute_game_action(action, args_value)
+	_rebuild_buttons()
+
+func _send_game_action(action: String, args: Array) -> void:
+	if ws_match_active:
+		if not _ws_send_json({"type": "action", "action": action, "args": args}):
+			_show_toast("ارتباط آنلاین آماده نیست؛ حرکت ارسال نشد.")
+			return
+		_ws_execute_game_action(action, args)
+		return
+	if multiplayer.multiplayer_peer != null:
+		var rpc_args: Array = [action]
+		rpc_args.append_array(args)
+		callv("rpc", rpc_args)
+
 func _game_ids() -> Array:
 	var ids: Array = []
 	for game in GAMES:
@@ -4308,6 +4697,8 @@ func _ready() -> void:
 	randomize()
 	_load_scores()
 	_setup_music()
+	_load_online_profile()
+	_create_username_edit()
 	_ensure_game_stats()
 	_reset_othello()
 	_reset_pentago()
@@ -4319,6 +4710,7 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_time += delta
+	_ws_poll(delta)
 	_music_update(delta)
 	_state_t += delta
 	if _ov_active():
@@ -4348,6 +4740,15 @@ func _save_scores() -> void:
 	scoring_service.save_scores()
 
 func _cleanup_network() -> void:
+	if ws_socket != null:
+		if ws_socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
+			_ws_send_json({"type": "leave_match" if ws_match_active else "leave_queue"})
+			ws_socket.close()
+		ws_socket = null
+	ws_match_active = false
+	ws_queue_join_sent = false
+	ws_emoji_picker_open = false
+	ws_state = "idle"
 	if peer:
 		peer.close()
 		peer = null

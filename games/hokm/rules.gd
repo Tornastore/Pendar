@@ -229,7 +229,7 @@ func _hokm_tap(p: Vector2) -> void:
 		app._show_toast("باید هم‌خالِ زمین بازی کنید.")
 		return
 	if app._net_on():
-		app.rpc("_rpc_hokm_play", me, i)
+		app._send_game_action("_rpc_hokm_play", [me, i])
 	else:
 		_hokm_play(me, i)
 

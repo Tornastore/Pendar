@@ -317,22 +317,22 @@ func _dom_do_play(end: String) -> void:
 	if dom_selected < 0 or dom_selected >= dom_hands[me].size():
 		return
 	var idx: int = dom_selected
-	if not app.vs_cpu and app.multiplayer.multiplayer_peer != null:
-		app.rpc("_rpc_dom_play", me, idx, end)
+	if app._net_on():
+		app._send_game_action("_rpc_dom_play", [me, idx, end])
 	else:
 		_dom_play(me, idx, end)
 
 func _dom_do_draw() -> void:
 	var me: int = _dom_me()
-	if not app.vs_cpu and app.multiplayer.multiplayer_peer != null:
-		app.rpc("_rpc_dom_draw", me)
+	if app._net_on():
+		app._send_game_action("_rpc_dom_draw", [me])
 	else:
 		_dom_draw(me)
 
 func _dom_do_pass() -> void:
 	var me: int = _dom_me()
-	if not app.vs_cpu and app.multiplayer.multiplayer_peer != null:
-		app.rpc("_rpc_dom_pass", me)
+	if app._net_on():
+		app._send_game_action("_rpc_dom_pass", [me])
 	else:
 		_dom_pass(me)
 

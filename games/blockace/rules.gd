@@ -300,7 +300,7 @@ func _blk_confirm() -> void:
 		app._show_toast("این جای قطعه مجاز نیست؛ گوشه‌ها و خانه‌ی شروع را بررسی کنید.")
 		return
 	if app._net_on():
-		app.rpc("_rpc_blk_place", blk_prev.x, blk_prev.y, blk_sel, blk_rot, blk_flip, me)
+		app._send_game_action("_rpc_blk_place", [blk_prev.x, blk_prev.y, blk_sel, blk_rot, blk_flip, me])
 	else:
 		_blk_place(blk_prev.x, blk_prev.y, cells, me, blk_sel, blk_rot, blk_flip)
 		app._rebuild_buttons()

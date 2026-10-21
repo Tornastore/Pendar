@@ -39,3 +39,6 @@ textures/vram_compression/import_etc2_astc=true
 
 pointing/emulate_mouse_from_touch=true
 pointing/emulate_touch_from_mouse=false
+
+[network]
+matchmaking_url="wss://REPLACE-WITH-YOUR-LIARA-APP-DOMAIN/ws"

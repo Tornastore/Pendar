@@ -394,7 +394,7 @@ func _aba_tap(p: Vector2) -> void:
 						var source_cell: Vector2i = raw_cell
 						encoded.append(source_cell.x)
 						encoded.append(source_cell.y)
-					app.rpc("_rpc_aba_move", encoded, int(move.dx), int(move.dy), aba_turn)
+					app._send_game_action("_rpc_aba_move", [encoded, int(move.dx), int(move.dy), aba_turn])
 				else:
 					_aba_apply_group_move(aba_selection.duplicate(), int(move.dx), int(move.dy), aba_turn)
 				return
