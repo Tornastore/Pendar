@@ -174,8 +174,11 @@ if not re.search(r"static func all_games\(\) -> Array", catalog):
 catalog_ids = re.findall(r'\{"id":\s*"([a-z0-9]+)"', catalog)
 if len(catalog_ids) != 15 or len(set(catalog_ids)) != 15:
     errors.append(f"catalog should define 15 unique game IDs, got {len(catalog_ids)} entries")
-if "scoring_service.record_result" not in main or "RankingServiceScript.build_game_rows" not in main:
-    errors.append("main.gd is not delegating result recording and ranking to separate services")
+if "scoring_service.record_result" not in main:
+    errors.append("main.gd is not delegating result recording to ScoringService")
+ranking_screen_text = (ROOT / "ui" / "screens" / "rankings_screen.gd").read_text(encoding="utf-8") if (ROOT / "ui" / "screens" / "rankings_screen.gd").is_file() else ""
+if "RankingServiceScript.build_game_rows" not in main and "RankingServiceScript.build_game_rows" not in ranking_screen_text:
+    errors.append("rankings page is not delegating row composition to RankingService")
 if "GAMES = GameCatalogScript.all_games()" not in main:
     errors.append("main.gd does not initialize its catalogue from GameCatalog")
 
@@ -192,6 +195,23 @@ if online_client_path.is_file():
     if 'preload("res://services/online_client.gd")' not in main:
         errors.append("main.gd does not preload OnlineClient")
 
+# Dashboard and rankings are view modules; main.gd keeps stable dispatcher wrappers.
+for screen_path, preload_line, entry_point in (
+    ("ui/screens/dashboard_screen.gd", 'preload("res://ui/screens/dashboard_screen.gd")', "_dashboard_screen.render(self, _ui_screen_theme)"),
+    ("ui/screens/rankings_screen.gd", 'preload("res://ui/screens/rankings_screen.gd")', "_rankings_screen.render(self, _ui_screen_theme)"),
+):
+    path = ROOT / screen_path
+    if not path.is_file():
+        errors.append(f"missing screen module: {screen_path}")
+        continue
+    if preload_line not in main:
+        errors.append(f"main.gd does not preload {screen_path}")
+    screen_source = path.read_text(encoding="utf-8")
+    if "func render(host, theme: Dictionary) -> void:" not in screen_source:
+        errors.append(f"{screen_path} is missing render(host, theme) entry point")
+    if entry_point not in main:
+        errors.append(f"main.gd does not delegate rendering to {screen_path}")
+
 if errors:
     print("STRUCTURE CHECK FAILED")
     for error in errors:
@@ -203,4 +223,5 @@ print(f"- {len(expected_modules)} independent game rule modules")
 print(f"- {module_method_count} app-facing module calls checked for compatibility")
 print(f"- {state_count} module-owned state fields checked")
 print("- scoring, ranking, and game catalog services found")
+print("- dashboard and rankings UI delegated to screen modules")
 print("NOTE: this is a static structural check, not a Godot runtime test.")

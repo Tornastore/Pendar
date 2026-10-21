@@ -13,6 +13,8 @@ const OnlineClientScript = preload("res://services/online_client.gd")
 const UIContentScript = preload("res://core/ui_content.gd")
 const IllustrationRendererScript = preload("res://ui/illustration_renderer.gd")
 const TabletopArtRendererScript = preload("res://ui/tabletop_art_renderer.gd")
+const DashboardScreenScript = preload("res://ui/screens/dashboard_screen.gd")
+const RankingsScreenScript = preload("res://ui/screens/rankings_screen.gd")
 const GAME_MODULE_SCRIPTS := {
 	"othello": preload("res://games/othello/rules.gd"),
 	"pentago": preload("res://games/pentago/rules.gd"),
@@ -33,6 +35,8 @@ var scoring_service = ScoringServiceScript.new()
 var _online_client = OnlineClientScript.new()
 var _illustration_renderer = IllustrationRendererScript.new()
 var _tabletop_art_renderer = TabletopArtRendererScript.new()
+var _dashboard_screen = DashboardScreenScript.new()
+var _rankings_screen = RankingsScreenScript.new()
 var _game_modules: Dictionary = {}
 
 
@@ -792,6 +796,19 @@ const GREEN := Color(0.24, 0.86, 0.60)
 const RED := Color(1.0, 0.36, 0.42)
 const BLUE := Color(0.38, 0.62, 1.0)
 const PINK := Color(1.0, 0.45, 0.72)
+
+# Shared style context passed to extracted screen presenters.
+var _ui_screen_theme: Dictionary = {
+	"VIEW_W": VIEW_W,
+	"CARD": CARD,
+	"LINE": LINE,
+	"BAR": BAR,
+	"ACCENT": ACCENT,
+	"TEXT": TEXT,
+	"TEXT_DIM": TEXT_DIM,
+	"GREEN": GREEN,
+	"RED": RED,
+}
 
 func _ensure_game_stats() -> void:
 	scoring_service.ensure_game_stats(_game_ids())
@@ -3669,137 +3686,20 @@ func _set_tab(i: int) -> void:
 	_rebuild_buttons()
 
 func _btns_dashboard() -> void:
-	_add_btn(Rect2(16, 16, 44, 44), "", _open_dashboard_help, true, TEXT, "icon", "help", "dashboard_help")
-	_scroll_top = 312.0
-	_scroll_bottom = 868.0
-	_content_h = GAMES.size() * 66.0 + 16.0
-	var tabs: Array = ["تمام‌دوران", "این هفته", "ماه جاری"]
-	for i in 3:
-		var w: float = 156.0
-		var x: float = VIEW_W - 16.0 - w - i * (w + 10.0)
-		_add_btn(Rect2(x, 256, w, 42), tabs[i], _set_tab.bind(i), true, ACCENT, "seg_on" if i == dash_tab else "ghost", "", "tab_%d" % i)
-	_btns_nav()
+	_dashboard_screen.build_buttons(self, _ui_screen_theme)
 
 func _stat_pts(id: String) -> int:
-	var st: Dictionary = scoring_service.game_stats.get(id, {})
-	if dash_tab == 0:
-		return int(st.get("points", 0))
-	if dash_tab == 2:
-		return scoring_service.current_month_points(id)
-	return _points_in_period(id, 7)
+	return _dashboard_screen.stat_points(self, id)
 
 func _draw_dashboard() -> void:
-	var maxabs: int = 1
-	for g in GAMES:
-		maxabs = maxi(maxabs, absi(_stat_pts(str(g.id))))
-	for i in GAMES.size():
-		var g: Dictionary = GAMES[i]
-		var id: String = g.id
-		var st: Dictionary = scoring_service.game_stats.get(id, {})
-		var pts: int = _stat_pts(id)
-		var r := Rect2(16, _scroll_top + 8.0 + i * 66.0 - scroll_y, VIEW_W - 32, 58)
-		if r.end.y < _scroll_top - 4 or r.position.y > _scroll_bottom + 4:
-			continue
-		var col: Color = g.icon_col
-		_panel(r, CARD, 16, LINE, 1.0)
-		_panel(Rect2(r.end.x - 8, r.position.y + 12, 4, r.size.y - 24), col, 2)
-		_txt_r(str(g.name), r.end.x - 20, r.position.y + 25, 16, TEXT, true, 190)
-		var w: int = int(st.get("wins", 0))
-		var l: int = int(st.get("losses", 0))
-		var d: int = int(st.get("draws", 0))
-		_txt_r("%s برد · %s مساوی · %s باخت" % [_fa(w), _fa(d), _fa(l)], r.end.x - 20, r.position.y + 46, 11, TEXT_DIM, false, 190)
-		var bar := Rect2(r.position.x + 90, r.position.y + 36, 130, 8)
-		_panel(bar, Color(1, 1, 1, 0.07), 4)
-		var frac: float = clampf(float(absi(pts)) / float(maxabs), 0.0, 1.0)
-		if frac > 0.0:
-			_panel(Rect2(bar.position, Vector2(maxf(8.0, bar.size.x * frac), 8)), GREEN if pts >= 0 else RED, 4)
-		var ps: String = ("+" if pts > 0 else ("−" if pts < 0 else "")) + _fa(absi(pts))
-		_txt_c(ps, Rect2(r.position.x + 8, r.position.y + 6, 90, 26), 18, GREEN if pts > 0 else (RED if pts < 0 else TEXT_DIM), true)
-	# header block
-	draw_rect(Rect2(0, 0, VIEW_W, _scroll_top - 4), BAR)
-	draw_rect(Rect2(0, _scroll_top - 5, VIEW_W, 1), LINE)
-	_vgrad(Rect2(0, _scroll_top - 4, VIEW_W, 16), Color(BAR.r, BAR.g, BAR.b, 0.95), Color(BAR.r, BAR.g, BAR.b, 0.0))
-	_txt_c("آمار و امتیازات", Rect2(70, 10, VIEW_W - 140, 40), 24, TEXT, true)
-	var wl: Array = _total_wins_losses()
-	var total: int = int(wl[0]) + int(wl[1]) + int(wl[2])
-	var rate: int = int(round(100.0 * float(wl[0]) / float(maxi(1, total)))) if total > 0 else 0
-	var card := Rect2(16, 58, VIEW_W - 32, 184)
-	var tier: Array = _tier_info()
-	var tc: Color = tier[1]
-	_panel(card, Color(0.15, 0.18, 0.34), 24, Color(tc.r, tc.g, tc.b, 0.5), 1.5, 12, 5)
-	_glow(Vector2(card.end.x - 90, card.position.y + 60), 120, Color(tc.r, tc.g, tc.b, 0.25))
-	_txt_r("رتبه کلی", card.end.x - 22, card.position.y + 34, 14, TEXT_DIM, true, 200)
-	_txt_r(_fa(scoring_service.global_rating), card.end.x - 22, card.position.y + 90, 52, TEXT, true, 300)
-	var tcw: float = _txt_w(tier[0], 14, true) + 30.0
-	var tchip := Rect2(card.end.x - 22 - tcw, card.position.y + 102, tcw, 28)
-	_panel(tchip, Color(tc.r, tc.g, tc.b, 0.18), 14, tc, 1.0)
-	_txt_c(str(tier[0]), tchip, 14, tc.lightened(0.2), true)
-	var cols3: Array = [["برد", _fa(wl[0]), GREEN], ["باخت", _fa(wl[1]), RED], ["درصد برد", _fa(rate) + "٪", ACCENT]]
-	for i in 3:
-		var cx: float = card.position.x + 20 + i * 100.0
-		_panel(Rect2(cx, card.position.y + 134, 92, 40), Color(1, 1, 1, 0.05), 12)
-		_txt_c(str(cols3[i][1]), Rect2(cx, card.position.y + 134, 92, 24), 17, cols3[i][2], true)
-		_txt_c(str(cols3[i][0]), Rect2(cx, card.position.y + 154, 92, 18), 11, TEXT_DIM)
-	_draw_bottom_nav()
+	_dashboard_screen.render(self, _ui_screen_theme)
 
 # ---------------- RANKINGS ----------------
 func _btns_rankings() -> void:
-	_add_btn(Rect2(16, 16, 44, 44), "", _open_rankings_help, true, TEXT, "icon", "help", "rankings_help")
-	_scroll_top = 262.0
-	_scroll_bottom = 868.0
-	_content_h = GAMES.size() * 66.0 + 16.0
-	_btns_nav()
+	_rankings_screen.build_buttons(self, _ui_screen_theme)
 
 func _draw_rankings() -> void:
-	var rows: Array = RankingServiceScript.build_game_rows(GAMES, scoring_service.game_stats)
-	var medal: Array = [Color(1.0, 0.80, 0.30), Color(0.80, 0.86, 0.94), Color(0.85, 0.55, 0.30)]
-	for i in rows.size():
-		var row: Dictionary = rows[i]
-		var r := Rect2(16, _scroll_top + 8.0 + i * 66.0 - scroll_y, VIEW_W - 32, 58)
-		if r.end.y < _scroll_top - 4 or r.position.y > _scroll_bottom + 4:
-			continue
-		_panel(r, CARD, 16, medal[i] if (i < 3 and row.pts > 0) else LINE, 1.5 if (i < 3 and row.pts > 0) else 1.0)
-		var bc := Vector2(r.end.x - 32, r.get_center().y)
-		if i < 3 and row.pts > 0:
-			draw_circle(bc, 18, medal[i])
-			_txt_c(_fa(i + 1), Rect2(bc.x - 18, bc.y - 18, 36, 36), 17, Color(0.1, 0.1, 0.16), true)
-		else:
-			draw_circle(bc, 18, Color(1, 1, 1, 0.06))
-			_txt_c(_fa(i + 1), Rect2(bc.x - 18, bc.y - 18, 36, 36), 15, TEXT_DIM, true)
-		draw_circle(Vector2(r.end.x - 66, r.get_center().y), 5, row.col)
-		_txt_r(str(row.name), r.end.x - 80, r.position.y + 26, 16, TEXT, true, 190)
-		_txt_r("مهارت %s · برد %s · مساوی %s · باخت %s" % [_fa(row.rating), _fa(row.w), _fa(row.d), _fa(row.l)], r.end.x - 80, r.position.y + 47, 10, TEXT_DIM, false, 190)
-		var pv: int = row.pts
-		_txt_c(("+" if pv > 0 else ("−" if pv < 0 else "")) + _fa(absi(pv)), Rect2(r.position.x + 8, r.position.y, 100, r.size.y), 20, GREEN if pv > 0 else (RED if pv < 0 else TEXT_DIM), true)
-	draw_rect(Rect2(0, 0, VIEW_W, _scroll_top - 4), BAR)
-	draw_rect(Rect2(0, _scroll_top - 5, VIEW_W, 1), LINE)
-	_vgrad(Rect2(0, _scroll_top - 4, VIEW_W, 16), Color(BAR.r, BAR.g, BAR.b, 0.95), Color(BAR.r, BAR.g, BAR.b, 0.0))
-	_txt_c("رتبه‌بندی", Rect2(70, 10, VIEW_W - 140, 40), 24, TEXT, true)
-	var tier: Array = _tier_info()
-	var tc: Color = tier[1]
-	var card := Rect2(16, 62, VIEW_W - 32, 180)
-	_panel(card, Color(0.15, 0.18, 0.34), 24, Color(tc.r, tc.g, tc.b, 0.55), 1.5, 12, 5)
-	_glow(Vector2(card.end.x - 80, card.position.y + 70), 130, Color(tc.r, tc.g, tc.b, 0.28))
-	var bc2 := Vector2(card.end.x - 74, card.position.y + 78)
-	draw_circle(bc2, 44, Color(tc.r * 0.3, tc.g * 0.3, tc.b * 0.3))
-	_ring(bc2, 44, tc, 3.0)
-	_draw_icon("crown", bc2, 44, tc, 2.0)
-	_txt_r(str(tier[0]), card.end.x - 140, card.position.y + 70, 30, TEXT, true, 240)
-	_txt_r("امتیاز: " + _fa(scoring_service.global_rating), card.end.x - 140, card.position.y + 98, 15, TEXT_DIM, false, 240)
-	var lo: int = tier[2]
-	var hi: int = tier[3]
-	var frac: float = 1.0 if hi <= lo else clampf(float(scoring_service.global_rating - lo) / float(hi - lo), 0.0, 1.0)
-	var pb := Rect2(card.position.x + 20, card.end.y - 46, card.size.x - 40, 12)
-	_panel(pb, Color(1, 1, 1, 0.08), 6)
-	_panel(Rect2(pb.position, Vector2(maxf(12.0, pb.size.x * frac), 12)), tc, 6)
-	var note: String = "به بالاترین رتبه مهارتی رسیده‌اید" if hi <= lo else "تا رتبه مهارتی بعد: " + _fa(hi - scoring_service.global_rating)
-	_txt_c(note, Rect2(card.position.x, card.end.y - 28, card.size.x, 22), 11, TEXT_DIM)
-	var season_tier: Array = RankingServiceScript.season_tier_info(scoring_service.current_month_points())
-	_txt_r("لیگ این ماه", card.position.x + 20, card.position.y + 40, 12, TEXT_DIM, true, 150)
-	_txt_r(str(season_tier[0]), card.position.x + 20, card.position.y + 66, 18, season_tier[1], true, 160)
-	_txt_r("امتیاز فصل: " + _fa(scoring_service.current_month_points()), card.position.x + 20, card.position.y + 92, 12, TEXT_DIM, false, 160)
-	_txt_r("تمام‌دوران: " + _fa(scoring_service.global_lifetime_points), card.position.x + 20, card.position.y + 116, 11, TEXT_DIM, false, 160)
-	_draw_bottom_nav()
+	_rankings_screen.render(self, _ui_screen_theme)
 
 # ---------------- OVERLAYS ----------------
 func _scrim(a: float = 0.62) -> void:
