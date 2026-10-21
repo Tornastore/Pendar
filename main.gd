@@ -742,8 +742,25 @@ const PINK := Color(1.0, 0.45, 0.72)
 func _ensure_game_stats() -> void:
 	scoring_service.ensure_game_stats(_game_ids())
 
-func _record_match_result(won: bool) -> void:
-	scoring_service.record_match_result(selected_game, won, "CPU" if vs_cpu else "Online", _game_ids())
+func _current_game_difficulty() -> int:
+	match selected_game:
+		"othello", "othello12": return int(_game_modules["othello"].oth_difficulty)
+		"pentago": return int(_game_modules["pentago"].pent_difficulty)
+		"quoridor": return int(_game_modules["quoridor"].quo_difficulty)
+		"chess": return int(_game_modules["chess"].chess_difficulty)
+		"domino": return int(_game_modules["domino"].dom_difficulty)
+		"pasoor": return int(_game_modules["pasoor"].pas_difficulty)
+		"hokm": return int(_game_modules["hokm"].hokm_difficulty)
+		"backgammon": return int(_game_modules["backgammon"].bg_difficulty)
+		"gobblet": return int(_game_modules["gobblet"].gob_difficulty)
+		"mastermind": return int(_game_modules["mastermind"].mm_difficulty)
+		"abalone": return int(_game_modules["abalone"].aba_difficulty)
+		"blockace": return int(_game_modules["blockace"].blk_difficulty)
+	return 3
+
+func _record_match_result(outcome: String, opponent_rating: int = -1, opponent_global_rating: int = -1) -> Dictionary:
+	var opponent_kind := "cpu" if vs_cpu else ("human_online" if _net_on() else "local_friendly")
+	return scoring_service.record_result(selected_game, outcome, opponent_kind, _current_game_difficulty(), _game_ids(), opponent_rating, opponent_global_rating)
 
 func _points_in_period(game_id: String, days: int) -> int:
 	return scoring_service.points_in_period(game_id, days)
@@ -1423,14 +1440,17 @@ const ONLINE_HELP := [
 	"اگر وضعیت اتصال تغییر نکرد، سرور و اینترنت را بررسی کنید. تا وقتی نشانی سرور در تنظیمات قرار نگرفته، صف آنلاین کار نخواهد کرد.",
 ]
 const DASHBOARD_HELP := [
-	"در صفحه‌ی آمار، هر ردیف مربوط به یک بازی است و برد، باخت و امتیاز همان بازی را نمایش می‌دهد.",
-	"برگه‌های کلی، هفتگی و ماهانه بازه‌ی زمانی گزارش را عوض می‌کنند. بازی‌هایی که هنوز انجام نشده‌اند، آمار صفر دارند.",
-	"آمار محلی روی همان دستگاه یا مرورگر نگهداری می‌شود؛ پاک‌کردن داده‌های برنامه یا مرورگر ممکن است آن را حذف کند.",
+	"در صفحه‌ی آمار، هر ردیف مربوط به یک بازی است و برد، مساوی، باخت و امتیاز آن بازی را نمایش می‌دهد.",
+	"تمام‌دوران امتیاز جمع‌شده‌ی همیشگی را نشان می‌دهد؛ این هفته رویدادهای هفت روز گذشته و ماه جاری امتیاز لیگ این فصل را نشان می‌دهد.",
+	"امتیاز لیگ در آغاز ماه میلادی صفر می‌شود اما رتبه‌ی مهارتی و آمار تمام‌دوران باقی می‌مانند.",
+	"آمار در این نسخه روی همان دستگاه یا مرورگر نگهداری می‌شود؛ پاک‌کردن داده‌های برنامه یا مرورگر ممکن است آن را حذف کند.",
 ]
 const RANKINGS_HELP := [
-	"رتبه‌بندی داخل برنامه بر اساس امتیاز ثبت‌شده‌ی هر بازی ساخته می‌شود؛ این صفحه لزوماً جدول جهانی بازیکنان نیست.",
-	"مدال‌های بالای جدول جایگاه‌های نخست را نشان می‌دهند. امتیاز مثبت با سبز و امتیاز منفی با قرمز مشخص می‌شود.",
-	"برای مقایسه‌ی منصفانه، بازی را تا پایان ادامه دهید و از گزینه‌ی تسلیم فقط وقتی استفاده کنید که می‌خواهید نتیجه ثبت شود.",
+	"امتیاز لیگ در ابتدای هر ماه میلادی از نو شروع می‌شود؛ امتیازهای تمام‌دوران و رتبه‌ی مهارتی دائمی جداگانه نگهداری می‌شوند.",
+	"هر بازی رتبه‌ی مهارتی مستقل دارد. این رتبه برای پیشنهاد حریف هم‌سطح مناسب است؛ رتبه‌ی کلی خلاصه‌ای از عملکرد در همه‌ی بازی‌هاست.",
+	"برد امتیاز بیشتری می‌دهد، مساوی امتیاز مثبت کوچک دارد و باخت امتیاز لیگ را کم می‌کند. برد مقابل انسان آنلاین از بازی CPU باارزش‌تر است.",
+	"بازی CPU فقط امتیاز لیگ با ضریب سطح سختی می‌دهد و رتبه‌ی مهارتی رقابتی را تغییر نمی‌دهد؛ بازی دوستانه‌ی روی یک دستگاه هم رتبه‌ای نیست.",
+	"جدول فعلی روی همین دستگاه ذخیره می‌شود و هنوز جدول جهانی مشترک بین همه‌ی کاربران نیست؛ برای آن به حساب و پایگاه داده‌ی سمت سرور نیاز است.",
 ]
 
 const CAT_LABELS := {"all": "همه", "strategy": "استراتژی", "cards": "کارتی", "classic": "کلاسیک"}
@@ -1474,6 +1494,8 @@ var _prev_boards: Dictionary = {}
 var _cell_anim: Dictionary = {}
 var _result_t0: float = 0.0
 var _result_delta: int = 0
+var _result_rating_delta: int = 0
+var _result_game_rating_delta: int = 0
 var _result_draw: bool = false
 var seen_rules: Dictionary:
 	get:
@@ -2337,11 +2359,18 @@ func _build_result_buttons() -> void:
 		_result_draw = _result_is_draw()
 		var won: bool = _player_won_current()
 		_result_delta = 0
+		_result_rating_delta = 0
+		_result_game_rating_delta = 0
 		var shared_device_four_player: bool = selected_game == "quoridor" and bool(_game_modules["quoridor"].quo_local_multiplayer)
 		# Shared-device four-player matches do not count toward one account's ranked results.
-		if not shared_device_four_player and not _result_draw and _result_counts():
-			_result_delta = scoring_service.WIN_PTS if won else scoring_service.LOSS_PTS
-			_record_match_result(won)
+		var scored_mode: bool = vs_cpu or _net_on()
+		if not shared_device_four_player and scored_mode and _result_counts():
+			var outcome: String = "draw" if _result_draw else ("win" if won else "loss")
+			var score_result: Dictionary = _record_match_result(outcome)
+			if bool(score_result.get("recorded", false)):
+				_result_delta = int(score_result.get("delta", 0))
+				_result_rating_delta = int(score_result.get("rating_delta", 0))
+				_result_game_rating_delta = int(score_result.get("game_rating_delta", 0))
 		_result_t0 = _time
 	_rebuild_buttons()
 
@@ -3752,11 +3781,14 @@ func _draw_result() -> void:
 	# delta chip
 	var dtxt: String
 	var dcol: Color
-	if _result_draw or _result_delta == 0:
-		dtxt = "بدون تغییر امتیاز"
+	if _result_delta == 0:
+		dtxt = "امتیاز رتبه‌ای ثبت نشد"
 		dcol = TEXT_DIM
+	elif _result_draw and _result_delta > 0:
+		dtxt = "مساوی · +%s امتیاز لیگ" % _fa(_result_delta)
+		dcol = GREEN
 	else:
-		dtxt = (_fa(absi(_result_delta)) + " امتیاز اضافه شد") if _result_delta > 0 else (_fa(absi(_result_delta)) + " امتیاز کسر شد")
+		dtxt = ("+%s امتیاز لیگ" % _fa(_result_delta)) if _result_delta > 0 else ("−%s امتیاز لیگ" % _fa(absi(_result_delta)))
 		dcol = GREEN if _result_delta > 0 else RED
 	var cw: float = _txt_w(dtxt, 17, true) + 44.0
 	var dy: float = minf(y + 6.0, 604.0)
@@ -3792,6 +3824,15 @@ func _draw_result_popup() -> void:
 		_panel(r, Color(1, 1, 1, 0.045), 10)
 		_txt_r(str(rows[i][0]), r.end.x - 10, r.position.y + 22, 12, TEXT_DIM, false, r.size.x * 0.62)
 		_txt_c(str(rows[i][1]), Rect2(r.position.x + 8, r.position.y, r.size.x * 0.36, r.size.y), 14, TEXT, true)
+	var rating_note := ""
+	if _result_rating_delta != 0 or _result_game_rating_delta != 0:
+		rating_note = " · مهارت کلی %s%s / این بازی %s%s" % ["+" if _result_rating_delta > 0 else ("−" if _result_rating_delta < 0 else ""), _fa(absi(_result_rating_delta)), "+" if _result_game_rating_delta > 0 else ("−" if _result_game_rating_delta < 0 else ""), _fa(absi(_result_game_rating_delta))]
+	var league_note := ""
+	if _result_delta == 0 and rating_note.is_empty():
+		league_note = "مسابقه‌ی دوستانه · امتیاز رتبه‌ای ثبت نشد"
+	else:
+		league_note = "لیگ ماهانه %s%s%s" % ["+" if _result_delta > 0 else ("−" if _result_delta < 0 else ""), _fa(absi(_result_delta)), rating_note]
+	_txt_c(league_note, Rect2(panel.position.x + 12, panel.end.y - 76, panel.size.x - 24, 20), 10 if rating_note.length() > 20 else 12, GREEN if _result_delta > 0 else (RED if _result_delta < 0 else TEXT_DIM), true)
 	_txt_c("صفحه‌ی نهایی پشت این پنجره حفظ شده است", Rect2(panel.position.x + 12, panel.end.y - 34, panel.size.x - 24, 20), 11, TEXT_FAINT, false)
 
 # ---------------- DASHBOARD ----------------
@@ -3805,7 +3846,7 @@ func _btns_dashboard() -> void:
 	_scroll_top = 312.0
 	_scroll_bottom = 868.0
 	_content_h = GAMES.size() * 66.0 + 16.0
-	var tabs: Array = ["کلی", "هفتگی", "ماهانه"]
+	var tabs: Array = ["تمام‌دوران", "این هفته", "ماه جاری"]
 	for i in 3:
 		var w: float = 156.0
 		var x: float = VIEW_W - 16.0 - w - i * (w + 10.0)
@@ -3816,7 +3857,9 @@ func _stat_pts(id: String) -> int:
 	var st: Dictionary = scoring_service.game_stats.get(id, {})
 	if dash_tab == 0:
 		return int(st.get("points", 0))
-	return _points_in_period(id, 7 if dash_tab == 1 else 30)
+	if dash_tab == 2:
+		return scoring_service.current_month_points(id)
+	return _points_in_period(id, 7)
 
 func _draw_dashboard() -> void:
 	var maxabs: int = 1
@@ -3836,7 +3879,8 @@ func _draw_dashboard() -> void:
 		_txt_r(str(g.name), r.end.x - 20, r.position.y + 25, 16, TEXT, true, 190)
 		var w: int = int(st.get("wins", 0))
 		var l: int = int(st.get("losses", 0))
-		_txt_r("%s برد · %s باخت" % [_fa(w), _fa(l)], r.end.x - 20, r.position.y + 46, 12, TEXT_DIM, false, 190)
+		var d: int = int(st.get("draws", 0))
+		_txt_r("%s برد · %s مساوی · %s باخت" % [_fa(w), _fa(d), _fa(l)], r.end.x - 20, r.position.y + 46, 11, TEXT_DIM, false, 190)
 		var bar := Rect2(r.position.x + 90, r.position.y + 36, 130, 8)
 		_panel(bar, Color(1, 1, 1, 0.07), 4)
 		var frac: float = clampf(float(absi(pts)) / float(maxabs), 0.0, 1.0)
@@ -3850,7 +3894,7 @@ func _draw_dashboard() -> void:
 	_vgrad(Rect2(0, _scroll_top - 4, VIEW_W, 16), Color(BAR.r, BAR.g, BAR.b, 0.95), Color(BAR.r, BAR.g, BAR.b, 0.0))
 	_txt_c("آمار و امتیازات", Rect2(70, 10, VIEW_W - 140, 40), 24, TEXT, true)
 	var wl: Array = _total_wins_losses()
-	var total: int = int(wl[0]) + int(wl[1])
+	var total: int = int(wl[0]) + int(wl[1]) + int(wl[2])
 	var rate: int = int(round(100.0 * float(wl[0]) / float(maxi(1, total)))) if total > 0 else 0
 	var card := Rect2(16, 58, VIEW_W - 32, 184)
 	var tier: Array = _tier_info()
@@ -3897,7 +3941,7 @@ func _draw_rankings() -> void:
 			_txt_c(_fa(i + 1), Rect2(bc.x - 18, bc.y - 18, 36, 36), 15, TEXT_DIM, true)
 		draw_circle(Vector2(r.end.x - 66, r.get_center().y), 5, row.col)
 		_txt_r(str(row.name), r.end.x - 80, r.position.y + 26, 16, TEXT, true, 190)
-		_txt_r("%s برد · %s باخت" % [_fa(row.w), _fa(row.l)], r.end.x - 80, r.position.y + 47, 12, TEXT_DIM, false, 190)
+		_txt_r("مهارت %s · برد %s · مساوی %s · باخت %s" % [_fa(row.rating), _fa(row.w), _fa(row.d), _fa(row.l)], r.end.x - 80, r.position.y + 47, 10, TEXT_DIM, false, 190)
 		var pv: int = row.pts
 		_txt_c(("+" if pv > 0 else ("−" if pv < 0 else "")) + _fa(absi(pv)), Rect2(r.position.x + 8, r.position.y, 100, r.size.y), 20, GREEN if pv > 0 else (RED if pv < 0 else TEXT_DIM), true)
 	draw_rect(Rect2(0, 0, VIEW_W, _scroll_top - 4), BAR)
@@ -3921,8 +3965,13 @@ func _draw_rankings() -> void:
 	var pb := Rect2(card.position.x + 20, card.end.y - 46, card.size.x - 40, 12)
 	_panel(pb, Color(1, 1, 1, 0.08), 6)
 	_panel(Rect2(pb.position, Vector2(maxf(12.0, pb.size.x * frac), 12)), tc, 6)
-	var note: String = "به بالاترین رتبه رسیده‌اید" if hi <= lo else "تا رتبه بعد: " + _fa(hi - scoring_service.global_rating) + " امتیاز"
-	_txt_c(note, Rect2(card.position.x, card.end.y - 28, card.size.x, 22), 12, TEXT_DIM)
+	var note: String = "به بالاترین رتبه مهارتی رسیده‌اید" if hi <= lo else "تا رتبه مهارتی بعد: " + _fa(hi - scoring_service.global_rating)
+	_txt_c(note, Rect2(card.position.x, card.end.y - 28, card.size.x, 22), 11, TEXT_DIM)
+	var season_tier: Array = RankingServiceScript.season_tier_info(scoring_service.current_month_points())
+	_txt_r("لیگ این ماه", card.position.x + 20, card.position.y + 40, 12, TEXT_DIM, true, 150)
+	_txt_r(str(season_tier[0]), card.position.x + 20, card.position.y + 66, 18, season_tier[1], true, 160)
+	_txt_r("امتیاز فصل: " + _fa(scoring_service.current_month_points()), card.position.x + 20, card.position.y + 92, 12, TEXT_DIM, false, 160)
+	_txt_r("تمام‌دوران: " + _fa(scoring_service.global_lifetime_points), card.position.x + 20, card.position.y + 116, 11, TEXT_DIM, false, 160)
 	_draw_bottom_nav()
 
 # ---------------- OVERLAYS ----------------

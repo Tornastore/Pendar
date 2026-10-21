@@ -162,7 +162,7 @@ if not re.search(r"static func all_games\(\) -> Array", catalog):
 catalog_ids = re.findall(r'\{"id":\s*"([a-z0-9]+)"', catalog)
 if len(catalog_ids) != 13 or len(set(catalog_ids)) != 13:
     errors.append(f"catalog should define 13 unique game IDs, got {len(catalog_ids)} entries")
-if "scoring_service.record_match_result" not in main or "RankingServiceScript.build_game_rows" not in main:
+if "scoring_service.record_result" not in main or "RankingServiceScript.build_game_rows" not in main:
     errors.append("main.gd is not delegating result recording and ranking to separate services")
 if "GAMES = GameCatalogScript.all_games()" not in main:
     errors.append("main.gd does not initialize its catalogue from GameCatalog")
