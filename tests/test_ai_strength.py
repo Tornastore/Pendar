@@ -32,7 +32,7 @@ def test_backgammon_prefers_maximum_legal_dice_usage_before_position_score():
     ai = read("games/backgammon/ai.gd")
     assert 'var used: int = int(candidate.get("used", 0))' in ai
     assert "if used > best_used or (used == best_used and score > best_score):" in ai
-    assert "var branch_limits: Array[int] = [0, 0, 0, 5, 8, 12, 15]" in ai
+    assert "var branch_limits: Array[int] = [0, 4, 5, 6, 7, 8, 10]" in ai
     assert "if int(game.bg_off[1]) >= 15:" in ai
     assert "for point in range(23, -1, -1):" in ai
 
@@ -109,3 +109,36 @@ def test_quoridor_minimax_no_longer_scans_all_128_walls_at_every_node():
     assert "for y in range(8)" not in actions
     assert "_wall_evaluations_remaining <= 0" in actions
     assert "Always include legal pawn moves first" in actions
+
+
+def test_backgammon_six_levels_are_wired_to_cpu_turn_and_catalog_is_not_beta():
+    root = Path(__file__).resolve().parents[1]
+    ai = read("games/backgammon/ai.gd")
+    rules = read("games/backgammon/rules.gd")
+    main = read("main.gd")
+    catalog = read("core/game_catalog.gd")
+    assert "ai.choose_turn(self, bg_difficulty)" in rules
+    assert "if bg_moves_left.is_empty():" in rules
+    assert '"backgammon":' in main
+    assert "_schedule_cpu(0.45, _bg_cpu)" in main
+    assert "_set_backgammon_difficulty.bind(i + 1)" in main
+    assert '"id": "backgammon"' in catalog and '"beta": false' in catalog[catalog.index('"id": "backgammon"'):catalog.index('"id": "backgammon"') + 260]
+    assert "var branch_limits: Array[int] = [0, 4, 5, 6, 7, 8, 10]" in ai
+    assert "if level == 1:" in ai and "if level == 2:" in ai
+    assert "if level >= 5:" in ai and "if level >= 6:" in ai
+    assert "while opening_dice[0] == opening_dice[1]:" in rules
+    assert "bg_turn = 0 if opening_dice[0] > opening_dice[1] else 1" in rules
+    assert 'opponent_name: String = "CPU" if app.vs_cpu else "حریف"' in rules
+
+
+def test_backgammon_cpu_uses_only_rule_authorized_moves_and_respects_difficulty():
+    rules = read("games/backgammon/rules.gd")
+    ai = read("games/backgammon/ai.gd")
+    main = read("main.gd")
+    assert "var legal_turn_moves: Array[Dictionary] = _bg_turn_legal_moves(1)" in rules
+    assert "ai.choose_legal_first_move(self, legal_turn_moves, bg_difficulty)" in rules
+    assert "ai.choose_turn(self, bg_difficulty)" in rules
+    assert "func choose_legal_first_move(game, legal_moves: Array[Dictionary], difficulty: int)" in ai
+    assert "var branch_limits: Array[int] = [0, 4, 5, 6, 7, 8, 10]" in ai
+    assert "levels[clampi(bg_difficulty, 1, 6) - 1]" in rules
+    assert "_schedule_cpu(0.45, _bg_cpu)" in main

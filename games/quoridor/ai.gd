@@ -78,6 +78,94 @@ func choose_action(game, difficulty: int) -> Dictionary:
 
 
 
+func choose_action_for_player(game, difficulty: int, player: int) -> Dictionary:
+	# Multiplayer CPU policy for the four-seat variant. This uses one shared rules
+	# engine but evaluates every opponent against their own edge goal, instead of
+	# treating seat 0 as the only human and seat 1 as the only CPU.
+	var level: int = clampi(difficulty, 1, 6)
+	if int(game.quo_player_count) != 4 or player < 1 or player > 3:
+		return choose_action(game, level)
+	var own_pos: Vector2i = game.quo_pawns[player]
+	var own_distance: int = _distance(game, player, own_pos)
+	var moves: Array[Dictionary] = []
+	for target in game._quo_legal_moves(player):
+		if game._quo_goal_reached(player, target):
+			return {"type": "move", "to": target}
+		var target_distance: int = _distance(game, player, target)
+		var score: float = float(own_distance - target_distance) * 105.0
+		# Prefer the centre when progress is equivalent, but do not overvalue it.
+		score -= absf(float(target.x) - 4.0) * 0.45 + absf(float(target.y) - 4.0) * 0.20
+		var history: Array = game.quo_cpu_position_history_by_player.get(str(player), [])
+		if history.size() >= 2 and target == history[history.size() - 2]:
+			score -= 150.0
+		elif target in history.slice(maxi(0, history.size() - 5), history.size()):
+			score -= 32.0
+		var noise: Array[float] = [0.0, 24.0, 14.0, 8.0, 3.0, 0.8, 0.0]
+		score += randf_range(-noise[level], noise[level])
+		moves.append({"type": "move", "to": target, "score": score})
+	moves.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a.score) > float(b.score))
+	var best_move: Dictionary = moves[0] if not moves.is_empty() else {"type": "pass"}
+	var best_score: float = float(best_move.get("score", -INF))
+	if level < 3 or int(game.quo_walls_left[player]) <= 0:
+		return best_move
+
+	var opponents: Array[Dictionary] = []
+	for other in range(4):
+		if other == player:
+			continue
+		opponents.append({"player": other, "distance": _distance(game, other, game.quo_pawns[other])})
+	opponents.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a.distance) < int(b.distance))
+	var candidate_map: Dictionary = {}
+	var target_limit: int = 1 if level == 3 else (2 if level < 6 else 3)
+	for oi in range(mini(target_limit, opponents.size())):
+		var target_player: int = int(opponents[oi].player)
+		for wall in _route_wall_candidates(game, target_player, 5 if level < 5 else 8):
+			candidate_map[str(wall.key)] = wall
+	var candidates: Array = candidate_map.values()
+	var wall_budget: int = 14 if level == 3 else (22 if level < 6 else 30)
+	var inspected: int = 0
+	var best_wall: Dictionary = {}
+	var best_wall_score: float = -INF
+	for wall_info in candidates:
+		if inspected >= wall_budget:
+			break
+		inspected += 1
+		var hx: int = int(wall_info.x)
+		var hy: int = int(wall_info.y)
+		var vertical: bool = bool(wall_info.vertical)
+		var key: String = str(wall_info.key)
+		if not game._quo_wall_geometry_clear(hx, hy, vertical):
+			continue
+		game.quo_walls[key] = true
+		var paths_ok: bool = true
+		for candidate_player in range(4):
+			if not game._quo_path_exists(candidate_player):
+				paths_ok = false
+				break
+		if not paths_ok:
+			game.quo_walls.erase(key)
+			continue
+		var new_own_distance: int = _distance(game, player, game.quo_pawns[player])
+		var wall_score: float = -maxf(0.0, float(new_own_distance - own_distance)) * 112.0
+		for opponent_info in opponents:
+			var other_player: int = int(opponent_info.player)
+			var old_distance: int = int(opponent_info.distance)
+			var new_distance: int = _distance(game, other_player, game.quo_pawns[other_player])
+			var delta: int = new_distance - old_distance
+			var weight: float = 74.0 if other_player == int(opponents[0].player) else (38.0 if other_player == int(opponents[1].player) else 20.0)
+			wall_score += float(delta) * weight
+		game.quo_walls.erase(key)
+		wall_score -= 25.0 + float(5 - int(game.quo_walls_left[player])) * 8.0
+		wall_score += randf_range(-2.0, 2.0) if level < 6 else 0.0
+		if wall_score > best_wall_score:
+			best_wall_score = wall_score
+			best_wall = {"type": "wall", "x": hx, "y": hy, "vertical": vertical, "score": wall_score}
+	# A wall must provide a meaningful delay to a rival to justify losing a turn.
+	var wall_threshold: float = [INF, INF, 125.0, 78.0, 42.0, 25.0, 15.0][level]
+	if not best_wall.is_empty() and best_wall_score > maxf(best_score * 0.75, wall_threshold):
+		return best_wall
+	return best_move
+
 func _first_legal_wall(game, player: int) -> Dictionary:
 	if int(game.quo_walls_left[player]) <= 0:
 		return {}

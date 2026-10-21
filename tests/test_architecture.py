@@ -57,7 +57,9 @@ def test_quoridor_uses_two_edge_walls_and_supports_four_player_hotseat() -> None
     assert "var can_wall: bool = int(quo_walls_left[candidate]) > 0" in rules
     assert "func _first_legal_wall(" in (project_root / "games" / "quoridor" / "ai.gd").read_text(encoding="utf-8")
     assert "_start_quoridor_local_four_player" in main
-    assert '"m_quoridor_local4"' in main
+    assert '"m_local4"' in main
+    assert '"چهارنفره · شما در برابر ۳ CPU"' in main
+    assert '_start_quoridor_vs_three_cpu' in main
     assert '"players": "۲ یا ۴ نفر", "max_p": 4' in catalog
 
 
@@ -295,3 +297,30 @@ def test_quoridor_master_ai_penalizes_repeated_cpu_pawn_positions() -> None:
     assert "score += _master_root_preference(game, action, root_distance)" in ai
     assert "quality -= _move_repetition_penalty(game, target)" in ai
     assert "_minimax(game, 0, _active_search_depth - 1, -INF, INF)" in ai
+
+
+def test_multiplayer_games_offer_cpu_opponents_and_mastermind_cpu_race() -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    main = (project_root / "main.gd").read_text(encoding="utf-8")
+    quo = (project_root / "games" / "quoridor" / "rules.gd").read_text(encoding="utf-8")
+    quo_ai = (project_root / "games" / "quoridor" / "ai.gd").read_text(encoding="utf-8")
+    mm = (project_root / "games" / "mastermind" / "rules.gd").read_text(encoding="utf-8")
+    assert "_start_quoridor_vs_three_cpu" in main
+    assert '"چهارنفره · شما در برابر ۳ CPU"' in main
+    assert "choose_action_for_player(self, quo_difficulty, player)" in quo
+    assert "func choose_action_for_player(game, difficulty: int, player: int)" in quo_ai
+    assert "_start_mastermind_vs_three_cpu" in main
+    assert "مسابقه با ۳ CPU · چهار نفره" in main
+    assert 'mm_cpu_racers.size() != 4' in mm
+    assert "_mm_cpu_race_tick()" in main
+
+
+def test_quarto_piece_renderer_distinguishes_all_four_standard_attributes() -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    main = (project_root / "main.gd").read_text(encoding="utf-8")
+    fn = main[main.index("func _draw_quarto_piece("):main.index("func _draw_quarto()", main.index("func _draw_quarto_piece("))]
+    for token in ("var tall: bool", "var round_piece: bool", "var dark_piece: bool", "var hollow_piece: bool"):
+        assert token in fn
+    assert "(30.0 if tall else 17.0)" in fn
+    assert "if round_piece:" in fn and "if hollow_piece:" in fn
+    assert "_draw_quarto_piece(Vector2(pr.position.x + 26, pr.get_center().y), piece, 0.80" in main

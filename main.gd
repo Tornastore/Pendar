@@ -864,9 +864,19 @@ func _start_vs_cpu() -> void:
 	local_player_id = 1
 	if selected_game == "mastermind":
 		mm_local_two_player = false
+		_game_modules["mastermind"].mm_cpu_race = false
 	if selected_game == "quoridor":
 		_game_modules["quoridor"].quo_player_count = 2
 		_game_modules["quoridor"].quo_local_multiplayer = false
+	_start_game()
+
+func _start_mastermind_vs_three_cpu() -> void:
+	vs_cpu = true
+	is_host = true
+	local_seat = 0
+	local_player_id = 1
+	mm_local_two_player = false
+	_game_modules["mastermind"].mm_cpu_race = true
 	_start_game()
 
 func _start_quoridor_local_four_player() -> void:
@@ -877,6 +887,16 @@ func _start_quoridor_local_four_player() -> void:
 	local_player_id = 1
 	_game_modules["quoridor"].quo_player_count = 4
 	_game_modules["quoridor"].quo_local_multiplayer = true
+	_start_game()
+
+func _start_quoridor_vs_three_cpu() -> void:
+	# Four-player match: one human and three CPU opponents.
+	vs_cpu = true
+	is_host = true
+	local_seat = 0
+	local_player_id = 1
+	_game_modules["quoridor"].quo_player_count = 4
+	_game_modules["quoridor"].quo_local_multiplayer = false
 	_start_game()
 
 func _get_local_ips() -> Array:
@@ -895,6 +915,7 @@ func _start_host() -> void:
 		return
 	if selected_game == "mastermind":
 		mm_local_two_player = false
+		_game_modules["mastermind"].mm_cpu_race = false
 	vs_cpu = false
 	is_host = true
 	_cleanup_network()
@@ -2450,6 +2471,7 @@ func _result_is_draw() -> bool:
 		"blockace": return blk_winner < 0
 		"quarto": return qto_winner == 0
 		"quoridor": return quo_winner < 0
+		"backgammon": return false
 		"mastermind":
 			if _is_mastermind_race():
 				return str(_game_modules["mastermind"].mm_race_status) == "مساوی"
@@ -2639,8 +2661,14 @@ func _cpu_tick() -> void:
 			if not pent_game_over and pent_turn == 2:
 				_schedule_cpu(0.7, _pent_cpu_move)
 		"quoridor":
-			if not quo_game_over and quo_turn == 1:
+			if not quo_game_over and ((quo_player_count == 2 and quo_turn == 1) or (quo_player_count == 4 and quo_turn > 0 and quo_turn < quo_player_count)):
 				_schedule_cpu(0.7, _quo_cpu)
+		"mastermind":
+			if bool(_game_modules["mastermind"].mm_cpu_race) and not bool(_game_modules["mastermind"].mm_game_over):
+				_game_modules["mastermind"]._mm_cpu_race_tick()
+		"backgammon":
+			if not bg_game_over and bg_turn == 1:
+				_schedule_cpu(0.45, _bg_cpu)
 		"domino":
 			if not dom_game_over and dom_turn == 1:
 				_schedule_cpu(0.85, _dom_cpu_move)
@@ -3134,6 +3162,29 @@ func _btns_mode() -> void:
 			var color: Color = GREEN if active else ACCENT
 			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_quarto_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "quarto_difficulty_%d" % (i + 1))
 		option_y = 398.0
+	if selected_game == "quoridor":
+		_add_btn(Rect2(24, option_y, 492, 62), "بازی با CPU · دو نفره", _start_vs_cpu, true, GREEN, "option", "cpu", "m_cpu", "شما در برابر یک CPU")
+		_add_btn(Rect2(24, option_y + 66, 492, 62), "چهارنفره · شما در برابر ۳ CPU", _start_quoridor_vs_three_cpu, true, Color(0.35, 0.78, 0.62), "option", "users", "m_cpu3", "چهار مسیر، سه حریف کامپیوتری")
+		_add_btn(Rect2(24, option_y + 132, 492, 62), "میزبانی روی وای‌فای", _start_host, net, BLUE, "option", "wifi", "m_host", "میزبان بازی دونفره یا چهارنفره")
+		_add_btn(Rect2(24, option_y + 198, 492, 62), "اتصال با IP", _go_ip_entry, net, ACCENT, "option", "keypad", "m_join", "به بازی میزبان بپیوندید")
+		_add_btn(Rect2(24, option_y + 264, 492, 62), "بازی آنلاین", _open_online_for_game, online_net, PINK, "option", "globe", "m_online", "صف انتظار آنلاین")
+		_add_btn(Rect2(24, option_y + 330, 492, 62), "چهارنفره روی یک دستگاه", _start_quoridor_local_four_player, true, ACCENT, "option", "users", "m_local4", "چهار نفر، نوبتی روی یک صفحه")
+		if web_build:
+			buttons[buttons.size() - 3].hint = "نسخه وب برای اتصال مستقیم IP به WebSocket نیاز دارد."
+			buttons[buttons.size() - 2].hint = "اتصال مستقیم IP در APK/Desktop فعال است."
+			buttons[buttons.size() - 1].hint = "برای نسخه وب از صف انتظار و WebSocket استفاده کنید."
+		return
+	if selected_game == "mastermind":
+		_add_btn(Rect2(24, option_y, 492, 62), "بازی با CPU · حل یک کد", _start_vs_cpu, true, GREEN, "option", "cpu", "m_cpu", "یک کد را حدس بزنید")
+		_add_btn(Rect2(24, option_y + 66, 492, 62), "مسابقه با ۳ CPU · چهار نفره", _start_mastermind_vs_three_cpu, true, Color(0.35, 0.78, 0.62), "option", "users", "m_cpu3", "هر نفر مستقل حدس می‌زند؛ رتبه‌بندی زنده")
+		_add_btn(Rect2(24, option_y + 132, 492, 62), "میزبانی روی وای‌فای", _start_host, net, BLUE, "option", "wifi", "m_host", "میزبان کد را نگه می‌دارد")
+		_add_btn(Rect2(24, option_y + 198, 492, 62), "اتصال با IP", _go_ip_entry, net, ACCENT, "option", "keypad", "m_join", "به مسابقه LAN بپیوندید")
+		_add_btn(Rect2(24, option_y + 264, 492, 62), "بازی آنلاین", _open_online_for_game, online_net, PINK, "option", "globe", "m_online", "صف انتظار آنلاین")
+		if web_build:
+			buttons[buttons.size() - 3].hint = "نسخه وب برای LAN مستقیم از WebSocket استفاده می‌کند."
+			buttons[buttons.size() - 2].hint = "اتصال IP فقط در APK/Desktop فعال است."
+			buttons[buttons.size() - 1].hint = "با صف انتظار آنلاین، خودکار حریف پیدا می‌کنید."
+		return
 	_add_btn(Rect2(24, option_y, 492, 84), "بازی با کامپیوتر", _start_vs_cpu, true, GREEN, "option", "cpu", "m_cpu", "تک‌نفره · بدون نیاز به اینترنت")
 	var network_y: float = option_y + 98.0
 	_add_btn(Rect2(24, network_y, 492, 84), "میزبانی روی وای‌فای", _start_host, net, BLUE, "option", "wifi", "m_host", "شما میزبان باشید، دوستتان با IP وصل می‌شود")
@@ -3147,8 +3198,6 @@ func _btns_mode() -> void:
 		buttons[buttons.size() - 3].hint = "این بازی فعلاً فقط با کامپیوتر قابل بازی است."
 		buttons[buttons.size() - 2].hint = "این بازی فعلاً فقط با کامپیوتر قابل بازی است."
 		buttons[buttons.size() - 1].hint = "این بازی فعلاً فقط با کامپیوتر قابل بازی است."
-	if selected_game == "quoridor":
-		_add_btn(Rect2(24, option_y + 392, 492, 76), "بازی ۴ نفره روی یک دستگاه", _start_quoridor_local_four_player, true, ACCENT, "option", "users", "m_quoridor_local4", "چهار بازیکن · نوبتی روی یک صفحه")
 
 func _set_quoridor_difficulty(level: int) -> void:
 	_game_modules["quoridor"].quo_difficulty = clampi(level, 1, 6)
@@ -3242,7 +3291,7 @@ func _draw_mode() -> void:
 	if selected_game == "quoridor":
 		_txt_r("سطح هوش کامپیوتر را انتخاب کنید", VIEW_W - 28, 333, 13, TEXT_DIM, true, 310)
 		_txt_r("روش بازی", VIEW_W - 28, 389, 13, TEXT_DIM, true, 180)
-	elif selected_game in ["othello", "othello12", "pentago", "domino", "gobblet", "abalone", "mastermind", "blockace", "quarto"]:
+	elif selected_game in ["othello", "othello12", "pentago", "domino", "gobblet", "abalone", "mastermind", "blockace", "quarto", "backgammon"]:
 		var difficulty_prompt: String = "درجه سختی، طول کد و تعداد رنگ‌ها" if selected_game == "mastermind" else "سطح هوش کامپیوتر را انتخاب کنید"
 		_txt_r(difficulty_prompt, VIEW_W - 28, 333, 13, TEXT_DIM, true, 310)
 		var mode_prompt: String = "کد: %s خانه · %s رنگ" % [_fa(3 + mm_difficulty), _fa(3 + mm_difficulty)] if selected_game == "mastermind" else "روش بازی"
@@ -3714,7 +3763,7 @@ func _is_mastermind_race() -> bool:
 	if not _game_modules.has("mastermind"):
 		return false
 	var mm = _game_modules["mastermind"]
-	return bool(mm.mm_online_race) or bool(mm.mm_lan_race)
+	return bool(mm.mm_online_race) or bool(mm.mm_lan_race) or bool(mm.mm_cpu_race)
 
 func _result_info() -> Dictionary:
 	var won: bool = _player_won_current()
@@ -4684,6 +4733,39 @@ func _rpc_bg_step(d1: int, d2: int) -> void:
 	if selected_game == "backgammon" and state == State.PLAYING:
 		_game_modules["backgammon"]._bg_step_apply(d1, d2)
 
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_bg_move(seat: int, source: int, target: int, die: int) -> void:
+	if selected_game != "backgammon" or state != State.PLAYING or not _net_on():
+		return
+	if seat != bg_turn or die < 1 or die > 6:
+		return
+	if multiplayer.multiplayer_peer != null:
+		var sender_id: int = multiplayer.get_remote_sender_id()
+		if sender_id != 0:
+			if is_host:
+				if not peer_to_seat.has(sender_id) or int(peer_to_seat[sender_id]) != seat:
+					return
+			elif sender_id != 1 or seat != 0:
+				return
+	_game_modules["backgammon"]._bg_apply_net_move(seat, source, target, die)
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_bg_end_turn(seat: int, d1: int, d2: int) -> void:
+	if selected_game != "backgammon" or state != State.PLAYING or not _net_on():
+		return
+	if seat != bg_turn or d1 < 1 or d1 > 6 or d2 < 1 or d2 > 6:
+		return
+	if multiplayer.multiplayer_peer != null:
+		var sender_id: int = multiplayer.get_remote_sender_id()
+		if sender_id != 0:
+			if is_host:
+				if not peer_to_seat.has(sender_id) or int(peer_to_seat[sender_id]) != seat:
+					return
+			elif sender_id != 1 or seat != 0:
+				return
+	_game_modules["backgammon"]._bg_end_turn_apply(seat, d1, d2)
+
 @rpc("any_peer", "call_local", "reliable")
 func _rpc_hokm_play(p: int, idx: int) -> void:
 	if selected_game == "hokm" and state == State.PLAYING:
@@ -5129,33 +5211,68 @@ func _quarto_piece_rect(piece: int) -> Rect2:
 	return Rect2(24.0 + col * 124.0, 584.0 + row * 46.0, 116.0, 40.0)
 
 func _draw_quarto_piece(center: Vector2, piece: int, scale: float = 1.0, opacity: float = 1.0) -> void:
+	# Standard Quarto visual language: four independent, clearly legible features.
+	# Height is represented by the actual column silhouette (not a floating marker);
+	# shape by a cylinder vs. square post; colour by ivory/charcoal; and top opening
+	# by a high-contrast hole on a hollow piece.
 	if piece < 0 or piece > 15:
 		return
 	var tall: bool = (piece & 1) != 0
 	var round_piece: bool = (piece & 2) != 0
-	var dark: bool = (piece & 4) != 0
-	var hollow: bool = (piece & 8) != 0
-	var h: float = (27.0 if tall else 19.0) * scale
-	var w: float = (27.0 if round_piece else 29.0) * scale
-	var fill: Color = Color(0.25, 0.34, 0.55, opacity) if dark else Color(0.98, 0.78, 0.36, opacity)
-	var edge: Color = Color(0.64, 0.78, 1.0, opacity) if dark else Color(1.0, 0.91, 0.62, opacity)
-	var r := Rect2(center.x - w * 0.5, center.y - h * 0.5, w, h)
+	var dark_piece: bool = (piece & 4) != 0
+	var hollow_piece: bool = (piece & 8) != 0
+	var width: float = (24.0 if round_piece else 23.0) * scale
+	var radius: float = width * 0.5
+	var baseline: float = center.y + 10.0 * scale
+	var body_height: float = (30.0 if tall else 17.0) * scale
+	var top_y: float = baseline - body_height
+	var left: float = center.x - width * 0.5
+	var right: float = center.x + width * 0.5
+	var ivory: Color = Color(0.97, 0.94, 0.84, opacity)
+	var charcoal: Color = Color(0.09, 0.10, 0.13, opacity)
+	var fill: Color = charcoal if dark_piece else ivory
+	var outline: Color = Color(0.77, 0.83, 0.91, opacity) if dark_piece else Color(0.56, 0.39, 0.13, opacity)
+	var cavity: Color = Color(0.96, 0.94, 0.85, opacity) if dark_piece else Color(0.08, 0.09, 0.12, opacity)
+	var shadow: Color = Color(0.0, 0.0, 0.0, 0.24 * opacity)
+	draw_circle(Vector2(center.x + 1.5 * scale, baseline + 1.5 * scale), radius * 1.02, shadow)
 	if round_piece:
-		if hollow:
-			draw_arc(center, maxf(w, h) * 0.44, 0.0, TAU, 28, edge, 2.2 * scale, true)
-			draw_circle(center, maxf(w, h) * 0.22, Color(fill.r, fill.g, fill.b, 0.18 * opacity))
+		# A cylinder: straight side wall plus a round, outlined top.
+		var side_top: float = top_y + radius * 0.42
+		var side_rect := Rect2(left, side_top, width, baseline - side_top)
+		_panel(side_rect, fill, radius * 0.62, outline, 1.2 * scale)
+		var top_center := Vector2(center.x, top_y + radius * 0.43)
+		draw_circle(top_center, radius, fill.lightened(0.10) if dark_piece else fill)
+		draw_arc(top_center, radius - 0.4 * scale, 0.0, TAU, 36, outline, 1.35 * scale, true)
+		if hollow_piece:
+			draw_circle(top_center, radius * 0.40, cavity)
+			draw_arc(top_center, radius * 0.40, 0.0, TAU, 30, outline, 0.9 * scale, true)
 		else:
-			draw_circle(center + Vector2(0, 1.5 * scale), maxf(w, h) * 0.46, Color(0, 0, 0, 0.20 * opacity))
-			draw_circle(center, maxf(w, h) * 0.43, fill.darkened(0.18))
-			draw_circle(center + Vector2(0, -1.0 * scale), maxf(w, h) * 0.36, fill)
+			draw_circle(top_center + Vector2(-radius * 0.20, -radius * 0.20), radius * 0.12, Color(1, 1, 1, 0.56 * opacity))
+		draw_arc(Vector2(center.x, baseline - radius * 0.08), radius * 0.88, 0.06, PI - 0.06, 24, outline, 0.75 * scale, true)
 	else:
-		if hollow:
-			draw_rect(r, edge, false, 2.2 * scale, true)
-			draw_rect(r.grow(-5.0 * scale), Color(fill.r, fill.g, fill.b, 0.16 * opacity), true)
+		# A square post: flat sides and a bevelled square top make it distinct
+		# from the cylindrical pieces even at the small tray size.
+		var bevel: float = 3.0 * scale
+		var side_top: float = top_y + 6.0 * scale
+		var side_rect := Rect2(left, side_top, width, baseline - side_top)
+		draw_rect(side_rect, fill, true)
+		draw_rect(side_rect, outline, false, 1.15 * scale, true)
+		var top_face := PackedVector2Array([
+			Vector2(left, top_y + bevel),
+			Vector2(left + bevel, top_y),
+			Vector2(right - bevel, top_y),
+			Vector2(right, top_y + bevel),
+			Vector2(right, top_y + 6.0 * scale),
+			Vector2(left, top_y + 6.0 * scale),
+		])
+		draw_colored_polygon(top_face, fill.lightened(0.15) if not dark_piece else fill.lightened(0.24))
+		draw_polyline(PackedVector2Array([top_face[0], top_face[1], top_face[2], top_face[3], top_face[4], top_face[5], top_face[0]]), outline, 1.0 * scale, true)
+		if hollow_piece:
+			var hole := Rect2(center.x - width * 0.22, top_y + 1.8 * scale, width * 0.44, 2.8 * scale)
+			draw_rect(hole, cavity, true)
+			draw_rect(hole, outline, false, 0.7 * scale, true)
 		else:
-			_panel(r, fill, 4.0 * scale, edge.darkened(0.25), 1.0 * scale, 2.0 * scale, 1.0 * scale)
-	if tall:
-		_panel(Rect2(center.x - 3.0 * scale, center.y - h * 0.5 - 4.0 * scale, 6.0 * scale, 4.5 * scale), edge, 2.0 * scale)
+			draw_circle(Vector2(center.x - width * 0.15, top_y + 2.2 * scale), 1.0 * scale, Color(1, 1, 1, 0.55 * opacity))
 
 func _draw_quarto() -> void:
 	var mod = _game_modules["quarto"]
@@ -5170,7 +5287,7 @@ func _draw_quarto() -> void:
 	_panel(status, CARD, 14, Color(0.75, 0.62, 0.92, 0.42), 1.0)
 	_txt_c(instruction if mine_turn else "حریف در حال تصمیم‌گیری…", status, 13, TEXT if mine_turn else TEXT_DIM, true)
 	if qto_phase == 1 and qto_piece_to_place >= 0:
-		_draw_quarto_piece(Vector2(VIEW_W - 48, 165), qto_piece_to_place, 0.65, 1.0)
+		_draw_quarto_piece(Vector2(VIEW_W - 48, 165), qto_piece_to_place, 0.82, 1.0)
 	var origin: Vector2 = mod._qto_board_origin()
 	var cell: float = QUARTO_CELL
 	var gap: float = QUARTO_GAP
@@ -5196,7 +5313,7 @@ func _draw_quarto() -> void:
 		var available: bool = piece in qto_remaining
 		var can_pick: bool = available and qto_phase == 0 and mine_turn
 		_panel(pr, CARD_H if can_pick else (CARD if available else Color(0.08, 0.09, 0.15, 0.78)), 9, ACCENT if can_pick else LINE, 1.1 if can_pick else 0.7)
-		_draw_quarto_piece(Vector2(pr.position.x + 26, pr.get_center().y), piece, 0.54, 1.0 if available else 0.20)
+		_draw_quarto_piece(Vector2(pr.position.x + 26, pr.get_center().y), piece, 0.80, 1.0 if available else 0.20)
 		_txt_c(_fa(piece + 1), Rect2(pr.position.x + 48, pr.position.y, pr.size.x - 50, pr.size.y), 12, TEXT if available else TEXT_FAINT, true)
 	if qto_game_over:
 		_hint("بازی تمام شد · وضعیت نهایی حفظ شده است", 780, TEXT_DIM)
@@ -5467,6 +5584,9 @@ func _ws_remote_action_allowed(action: String, args: Array, sender_seat: int) ->
 		"_rpc_aba_move":
 			if args.size() < 4 or int(args[3]) != sender_seat + 1:
 				return false
+		"_rpc_bg_move", "_rpc_bg_end_turn":
+			if args.size() < (4 if action == "_rpc_bg_move" else 3) or int(args[0]) != sender_seat:
+				return false
 		"_rpc_othello_place", "_rpc_pent_place", "_rpc_pent_rotate", "_rpc_chess_move", "_rpc_quo_action", "_rpc_bg_step":
 			pass
 		_:
@@ -5495,6 +5615,8 @@ func _ws_execute_game_action(action: String, args: Array) -> void:
 		"_rpc_quarto_choose_piece": _rpc_quarto_choose_piece(int(args[0]), int(args[1]))
 		"_rpc_quarto_place": _rpc_quarto_place(int(args[0]), int(args[1]), int(args[2]))
 		"_rpc_bg_step": _rpc_bg_step(int(args[0]), int(args[1]))
+		"_rpc_bg_move": _rpc_bg_move(int(args[0]), int(args[1]), int(args[2]), int(args[3]))
+		"_rpc_bg_end_turn": _rpc_bg_end_turn(int(args[0]), int(args[1]), int(args[2]))
 		"_rpc_hokm_play": _rpc_hokm_play(int(args[0]), int(args[1]))
 		"_rpc_resign": _rpc_resign(int(args[0]))
 

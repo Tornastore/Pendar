@@ -132,7 +132,11 @@ for game_id in sorted(expected_modules):
     direct_module_members = set(re.findall(rf'_game_modules\["{re.escape(game_id)}"\]\.(\w+)', main))
     # Mastermind's online-race marker is read through a local alias (`var mm = _game_modules["mastermind"]`)
     # so it is module-owned and does not require a legacy compatibility property in main.gd.
-    aliased_module_members = {"mm_online_race"} if game_id == "mastermind" else set()
+    aliased_module_members = {"mm_online_race", "mm_cpu_racers", "mm_cpu_race_started_msec"} if game_id == "mastermind" else set()
+    if game_id == "backgammon":
+        aliased_module_members |= {"bg_legal_cache_key", "bg_legal_cache"}
+    if game_id == "quoridor":
+        aliased_module_members |= {"quo_cpu_position_history_by_player"}
     missing_proxies = sorted(state_vars - state_proxies - direct_module_members - aliased_module_members)
     if missing_proxies:
         errors.append(f"{game_id}: state fields without compatibility properties: {missing_proxies}")

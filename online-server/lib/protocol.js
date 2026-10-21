@@ -9,7 +9,7 @@ const ALLOWED_ACTIONS = new Set([
   '_rpc_othello_place', '_rpc_pent_place', '_rpc_pent_rotate',
   '_rpc_dom_play', '_rpc_dom_draw', '_rpc_dom_pass', '_rpc_chess_move',
   '_rpc_quo_action', '_rpc_pas_play', '_rpc_gob_place', '_rpc_gob_move',
-  '_rpc_aba_move', '_rpc_blk_place', '_rpc_quarto_choose_piece', '_rpc_quarto_place', '_rpc_bg_step', '_rpc_hokm_play',
+  '_rpc_aba_move', '_rpc_blk_place', '_rpc_quarto_choose_piece', '_rpc_quarto_place', '_rpc_bg_step', '_rpc_bg_move', '_rpc_bg_end_turn', '_rpc_hokm_play',
   '_rpc_resign'
 ]);
 

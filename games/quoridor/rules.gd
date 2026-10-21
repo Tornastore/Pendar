@@ -16,7 +16,8 @@ var quo_mode: int = 0           # 0 move pawn, 1 place wall
 var quo_game_over: bool = false
 var quo_winner: int = -1
 var quo_walls: Dictionary = {}  # key "h3,4" or "v2,5"; each wall covers two edges
-var quo_cpu_position_history: Array[Vector2i] = [] # Recent real CPU pawn positions, used to prevent cycles.
+var quo_cpu_position_history: Array[Vector2i] = [] # Two-player CPU history.
+var quo_cpu_position_history_by_player: Dictionary = {} # Per-CPU history in four-player vs CPU mode.
 
 func reset_game() -> void:
 	_reset_quoridor()
@@ -35,8 +36,12 @@ func _reset_quoridor() -> void:
 	quo_winner = -1
 	quo_walls.clear()
 	quo_cpu_position_history.clear()
+	quo_cpu_position_history_by_player.clear()
 	if quo_player_count == 2:
 		quo_cpu_position_history.append(quo_pawns[1])
+	else:
+		for player in range(1, 4):
+			quo_cpu_position_history_by_player[str(player)] = [quo_pawns[player]]
 
 func _quo_in_bounds(pos: Vector2i) -> bool:
 	return pos.x >= 0 and pos.x <= 8 and pos.y >= 0 and pos.y <= 8
@@ -232,30 +237,39 @@ func _quo_next_step(player: int) -> Vector2i:
 	return step
 
 func _quo_cpu() -> void:
-	if quo_game_over or quo_player_count != 2 or quo_turn != 1:
+	if quo_game_over or quo_turn <= 0 or quo_turn >= quo_player_count:
 		return
-	var action: Dictionary = quo_ai.choose_action(self, quo_difficulty)
+	var player: int = quo_turn
+	var action: Dictionary = quo_ai.choose_action(self, quo_difficulty) if quo_player_count == 2 else quo_ai.choose_action_for_player(self, quo_difficulty, player)
 	match str(action.get("type", "move")):
 		"wall":
-			if _quo_place_wall(int(action.x), int(action.y), bool(action.vertical)):
-				quo_walls_left[1] -= 1
+			if _quo_place_wall(int(action.get("x", -1)), int(action.get("y", -1)), bool(action.get("vertical", false))):
+				quo_walls_left[player] -= 1
 				quo_mode = 0
-				_quo_advance_turn(1)
+				_quo_advance_turn(player)
 				return
 		"pass":
-			_quo_advance_turn(1)
+			_quo_advance_turn(player)
 			return
-	var step: Vector2i = action.get("to", _quo_next_step(1))
-	if step == quo_pawns[1] or step not in _quo_legal_moves(1):
-		step = _quo_next_step(1)
-	if step == quo_pawns[1]:
-		quo_turn = 0
+	var step: Vector2i = action.get("to", _quo_next_step(player))
+	if step == quo_pawns[player] or step not in _quo_legal_moves(player):
+		step = _quo_next_step(player)
+	if step == quo_pawns[player]:
+		_quo_advance_turn(player)
 		return
-	# Store only actual CPU moves, never the temporary positions explored by minimax.
-	quo_cpu_position_history.append(step)
-	while quo_cpu_position_history.size() > 12:
-		quo_cpu_position_history.pop_front()
-	_quo_apply_move(1, step)
+	# Store only actual CPU moves, never temporary positions explored by search.
+	if quo_player_count == 2:
+		quo_cpu_position_history.append(step)
+		while quo_cpu_position_history.size() > 12:
+			quo_cpu_position_history.pop_front()
+	else:
+		var history_key: String = str(player)
+		var history: Array = quo_cpu_position_history_by_player.get(history_key, [])
+		history.append(step)
+		while history.size() > 12:
+			history.pop_front()
+		quo_cpu_position_history_by_player[history_key] = history
+	_quo_apply_move(player, step)
 
 func _quo_my_turn() -> bool:
 	if quo_local_multiplayer:
@@ -358,7 +372,8 @@ func _draw_four_player_hud() -> void:
 		var active: bool = player == quo_turn and not quo_game_over
 		app._panel(rect, Color(0.14, 0.17, 0.32) if active else app.CARD, 11.0, Color(color.r, color.g, color.b, 0.95 if active else 0.35), 1.5 if active else 1.0)
 		app.draw_circle(Vector2(rect.position.x + 16.0, rect.get_center().y), 7.0, color)
-		app._txt_r("بازیکن %s" % app._fa(player + 1), rect.end.x - 9.0, rect.position.y + 15.0, 13, app.TEXT, true, 100.0)
+		var player_label: String = "شما" if app.vs_cpu and player == 0 else ("CPU %s" % app._fa(player) if app.vs_cpu else "بازیکن %s" % app._fa(player + 1))
+		app._txt_r(player_label, rect.end.x - 9.0, rect.position.y + 15.0, 13, app.TEXT, true, 100.0)
 		app._txt_r("دیوار: %s" % app._fa(quo_walls_left[player]), rect.end.x - 112.0, rect.position.y + 29.0, 10, app.ACCENT if active else app.TEXT_DIM, false, 100.0)
 		if active:
 			app._txt("نوبت", rect.position.x + 28.0, rect.position.y + 23.0, 10, app.ACCENT, HORIZONTAL_ALIGNMENT_LEFT, 48.0, true)
@@ -367,8 +382,8 @@ func _draw_quoridor() -> void:
 	if quo_player_count == 4:
 		_draw_four_player_hud()
 	else:
-		var pa: Dictionary = app._pl("بازیکن ۱", _quo_color(0), "", quo_turn == 0 and not quo_game_over, app._seat_me(0), "دیوار: " + app._fa(quo_walls_left[0]))
-		var pb: Dictionary = app._pl("بازیکن ۲", _quo_color(1), "", quo_turn == 1 and not quo_game_over, app._seat_me(1), "دیوار: " + app._fa(quo_walls_left[1]))
+		var pa: Dictionary = app._pl("شما" if app.vs_cpu else "بازیکن ۱", _quo_color(0), "", quo_turn == 0 and not quo_game_over, app._seat_me(0), "دیوار: " + app._fa(quo_walls_left[0]))
+		var pb: Dictionary = app._pl("CPU" if app.vs_cpu else "بازیکن ۲", _quo_color(1), "", quo_turn == 1 and not quo_game_over, app._seat_me(1), "دیوار: " + app._fa(quo_walls_left[1]))
 		if quo_turn == 0 and not quo_game_over:
 			pa.sub = "نوبت شما" if app._seat_me(0) else "نوبت حریف"
 		if quo_turn == 1 and not quo_game_over:

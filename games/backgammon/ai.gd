@@ -1,19 +1,15 @@
 extends RefCounted
-## Six-level backgammon AI for Mind Bastion's current simplified point-movement rules.
-## Stronger levels search full sequences of the rolled dice and value hits, bear-offs,
-## pip race, made points and exposed blots. This does not add official bar re-entry rules.
+## Six-level backgammon AI for the standard point-movement rules in rules.gd.
+## Searches legal dice sequences, maximizes dice use, respects the high-die rule,
+## and evaluates hits, bar exposure, made points, pip race and bearing off.
 
 func choose_turn(game, difficulty: int) -> Array:
 	var level: int = clampi(difficulty, 1, 6)
 	var dice: Array = game.bg_moves_left.duplicate()
 	if dice.is_empty():
 		return []
-	if level == 1:
-		return _random_plan(game, dice)
-	if level == 2:
-		return _greedy_plan(game, dice, level)
-	# On non-doubles, the dice may be played in either order. Search both orders;
-	# this avoids missing a legal two-die sequence because the first die blocks it.
+	# Consider both die orders. Backgammon maximizes the number of dice used before
+	# considering board quality; the high-die rule is then enforced when only one die can play.
 	var saved: Dictionary = _save_state(game)
 	var orders: Array = [dice.duplicate()]
 	if dice.size() == 2 and int(dice[0]) != int(dice[1]):
@@ -26,14 +22,64 @@ func choose_turn(game, difficulty: int) -> Array:
 		var candidate: Dictionary = _search_plan(game, order, 0, level)
 		var score: float = float(candidate.get("score", -INF))
 		var used: int = int(candidate.get("used", 0))
-		# Backgammon's compulsory-use rule takes priority over positional evaluation:
-		# never choose a prettier board if another legal sequence uses more dice.
 		if used > best_used or (used == best_used and score > best_score):
 			best_used = used
 			best_score = score
 			best_moves = candidate.get("moves", []).duplicate(true)
 	_restore_state(game, saved)
+	if best_used == 1 and dice.size() >= 2:
+		var high: int = 0
+		var low: int = 7
+		for value in dice:
+			high = maxi(high, int(value))
+			low = mini(low, int(value))
+		if high != low:
+			var high_sources: Array[int] = _legal_sources(game, high)
+			if not high_sources.is_empty():
+				var best_source: int = high_sources[0]
+				var best_high_score: float = -INF
+				for source in high_sources:
+					var snapshot: Dictionary = _apply_source(game, source, high)
+					var score: float = _evaluate(game, level)
+					_undo_source(game, snapshot)
+					if score > best_high_score:
+						best_high_score = score
+						best_source = source
+				best_moves = [{"die": high, "source": best_source, "target": _target_for_source(best_source, high)}]
+				for value in dice:
+					if int(value) != high:
+						best_moves.append({"die": int(value), "source": -99, "target": -99})
 	return best_moves
+
+func choose_legal_first_move(game, legal_moves: Array[Dictionary], difficulty: int) -> Dictionary:
+	# The rules module supplies only first moves that preserve the mandatory
+	# maximum-dice-use/high-die rules. The AI ranks within that legal set only.
+	if legal_moves.is_empty():
+		return {}
+	var level: int = clampi(difficulty, 1, 6)
+	if level == 1:
+		return legal_moves[randi_range(0, legal_moves.size() - 1)].duplicate(true)
+	var best_move: Dictionary = legal_moves[0].duplicate(true)
+	var best_score: float = -INF
+	for move in legal_moves:
+		var snapshot: Dictionary = game._bg_save_board()
+		game._bg_apply_board_move(1, move)
+		var score: float = _evaluate(game, level)
+		game._bg_restore_board(snapshot)
+		if level == 2:
+			score += randf_range(-38.0, 38.0)
+		if score > best_score:
+			best_score = score
+			best_move = move.duplicate(true)
+	return best_move
+
+func _leaf_score(game, level: int) -> float:
+	var value: float = _evaluate(game, level)
+	if level == 1:
+		value += randf_range(-180.0, 180.0)
+	elif level == 2:
+		value += randf_range(-38.0, 38.0)
+	return value
 
 func _random_plan(game, dice: Array) -> Array:
 	var saved: Dictionary = _save_state(game)
@@ -74,20 +120,20 @@ func _search_plan(game, dice: Array, index: int, level: int) -> Dictionary:
 	# Once either side has borne off all checkers, no later planned dice may
 	# alter the result. Stop here so the search never rewards phantom moves.
 	if int(game.bg_off[1]) >= 15 or int(game.bg_off[0]) >= 15:
-		return {"score": _evaluate(game, level), "moves": [], "used": 0}
+		return {"score": _leaf_score(game, level), "moves": [], "used": 0}
 	if index >= dice.size():
-		return {"score": _evaluate(game, level), "moves": [], "used": 0}
+		return {"score": _leaf_score(game, level), "moves": [], "used": 0}
 
 	var die: int = int(dice[index])
 	var sources: Array[int] = _legal_sources(game, die)
 	if sources.is_empty():
 		var skipped_tail: Dictionary = _search_plan(game, dice, index + 1, level)
-		var skipped_moves: Array = [{"die": die, "source": -1}]
+		var skipped_moves: Array = [{"die": die, "source": -99, "target": -99}]
 		skipped_moves.append_array(skipped_tail.get("moves", []))
 		return {"score": float(skipped_tail.get("score", _evaluate(game, level))), "moves": skipped_moves, "used": int(skipped_tail.get("used", 0))}
 
 	var ordered: Array[Dictionary] = _order_sources(game, sources, die, level)
-	var branch_limits: Array[int] = [0, 0, 0, 5, 8, 12, 15]
+	var branch_limits: Array[int] = [0, 4, 5, 6, 7, 8, 10]
 	var branch_limit: int = branch_limits[level]
 	if ordered.size() > branch_limit:
 		ordered.resize(branch_limit)
@@ -105,16 +151,24 @@ func _search_plan(game, dice: Array, index: int, level: int) -> Dictionary:
 		if used > best_used or (used == best_used and score > best_score):
 			best_used = used
 			best_score = score
-			best_moves = [{"die": die, "source": source}]
+			best_moves = [{"die": die, "source": source, "target": _target_for_source(source, die)}]
 			best_moves.append_array(tail.get("moves", []))
-	return {"score": best_score if not is_inf(best_score) else _evaluate(game, level), "moves": best_moves, "used": maxi(0, best_used)}
+	return {"score": best_score if not is_inf(best_score) else _leaf_score(game, level), "moves": best_moves, "used": maxi(0, best_used)}
 
 func _order_sources(game, sources: Array[int], die: int, level: int) -> Array[Dictionary]:
 	var ranked: Array[Dictionary] = []
 	for source in sources:
-		var snapshot: Dictionary = _apply_source(game, source, die)
-		var score: float = _evaluate(game, level)
-		_undo_source(game, snapshot)
+		var score: float
+		if level == 1:
+			# Beginner keeps the legal dice-use rules but intentionally samples the
+			# candidate order, avoiding a near-expert search with only noisy scoring.
+			score = randf()
+		else:
+			var snapshot: Dictionary = _apply_source(game, source, die)
+			score = _evaluate(game, level)
+			_undo_source(game, snapshot)
+			if level == 2:
+				score += randf_range(-38.0, 38.0)
 		ranked.append({"source": source, "score": score})
 	ranked.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return float(a["score"]) > float(b["score"])
@@ -123,42 +177,26 @@ func _order_sources(game, sources: Array[int], die: int, level: int) -> Array[Di
 
 func _legal_sources(game, die: int) -> Array[int]:
 	var result: Array[int] = []
-	for source in range(23, -1, -1):
-		if int(game.bg_points[source]) >= 0:
-			continue
-		var destination: int = source - die
-		if destination < 0 or int(game.bg_points[destination]) <= 1:
+	for move in game._bg_legal_moves_for_die(1, die):
+		var source: int = int(move.get("source", -99))
+		if source not in result:
 			result.append(source)
 	return result
 
+func _target_for_source(source: int, die: int) -> int:
+	if source == -1:
+		return die - 1
+	var target: int = source - die
+	return -1 if target < 0 else target
+
 func _apply_source(game, source: int, die: int) -> Dictionary:
-	var destination: int = source - die
-	var snapshot: Dictionary = {
-		"source": source,
-		"destination": destination,
-		"source_before": int(game.bg_points[source]),
-		"destination_before": int(game.bg_points[destination]) if destination >= 0 else 0,
-		"bar_before": int(game.bg_bar[0]),
-		"off_before": int(game.bg_off[1])
-	}
-	game.bg_points[source] = int(game.bg_points[source]) + 1
-	if destination < 0:
-		game.bg_off[1] = int(game.bg_off[1]) + 1
-	else:
-		if int(game.bg_points[destination]) == 1:
-			game.bg_points[destination] = 0
-			game.bg_bar[0] = int(game.bg_bar[0]) + 1
-		game.bg_points[destination] = int(game.bg_points[destination]) - 1
-	return snapshot
+	var board_snapshot: Dictionary = game._bg_save_board()
+	var target: int = _target_for_source(source, die)
+	game._bg_apply_board_move(1, {"source": source, "target": target, "die": die})
+	return {"board": board_snapshot, "source": source, "target": target}
 
 func _undo_source(game, snapshot: Dictionary) -> void:
-	var source: int = int(snapshot["source"])
-	var destination: int = int(snapshot["destination"])
-	game.bg_points[source] = int(snapshot["source_before"])
-	if destination >= 0:
-		game.bg_points[destination] = int(snapshot["destination_before"])
-	game.bg_bar[0] = int(snapshot["bar_before"])
-	game.bg_off[1] = int(snapshot["off_before"])
+	game._bg_restore_board(snapshot["board"])
 
 func _save_state(game) -> Dictionary:
 	return {
@@ -171,6 +209,7 @@ func _restore_state(game, snapshot: Dictionary) -> void:
 	game.bg_points = snapshot["points"].duplicate()
 	game.bg_bar = snapshot["bar"].duplicate()
 	game.bg_off = snapshot["off"].duplicate()
+	game._bg_invalidate_legal_cache()
 
 func _evaluate(game, level: int) -> float:
 	# Terminal positions dominate every heuristic term.
@@ -182,9 +221,9 @@ func _evaluate(game, level: int) -> float:
 	var human_pips: int = 0
 	var score: float = float(int(game.bg_off[1]) - int(game.bg_off[0])) * 22.0
 	score += float(int(game.bg_bar[0]) - int(game.bg_bar[1])) * 18.0
-	# Hit checkers still count as pip distance; in this prototype, a checker on the
-	# bar cannot re-enter yet, so it is valued as far away from bearing off.
-	human_pips += int(game.bg_bar[0]) * 25
+	# A checker on the bar is very vulnerable and must re-enter before any board
+	# checker can move; it is assigned a high pip and tactical penalty.
+	human_pips += int(game.bg_bar[0]) * 30
 	cpu_pips += int(game.bg_bar[1]) * 25
 	var cpu_made: int = 0
 	var human_made: int = 0
