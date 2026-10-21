@@ -12,7 +12,7 @@ static func all_games() -> Array:
 		{"id": "hokm", "name": "حکم", "desc": "ورق‌بازی ایرانی با حکم", "short": "حکم بزن", "players": "2 نفر", "max_p": 2, "icon_col": Color(0.9, 0.3, 0.55), "cat": "cards", "net": true, "beta": true},
 		{"id": "backgammon", "name": "تخته نرد", "desc": "تاس و مهره — کلاسیک ایرانی", "short": "تاس بینداز", "players": "2 نفر", "max_p": 2, "icon_col": Color(0.8, 0.58, 0.28), "cat": "classic", "net": true, "beta": true},
 		{"id": "gobblet", "name": "گابلت", "desc": "مهره‌های تو در تو", "short": "بخور و بچین", "players": "2 نفر", "max_p": 2, "icon_col": Color(0.98, 0.58, 0.18), "cat": "strategy", "net": true, "beta": false},
-		{"id": "mastermind", "name": "فکر بکر", "desc": "حدس کد رنگی مخفی", "short": "کد را بشکن", "players": "2 نفر", "max_p": 2, "icon_col": Color(0.45, 0.7, 0.95), "cat": "classic", "net": true, "beta": false},
+		{"id": "mastermind", "name": "فکر بکر", "desc": "حدس کد رنگی مخفی و رقابت سرعتی", "short": "کد را بشکن", "players": "۲ تا ۴ نفر", "max_p": 4, "icon_col": Color(0.45, 0.7, 0.95), "cat": "classic", "net": true, "beta": false},
 		{"id": "abalone", "name": "ابلون", "desc": "قواعد استاندارد هل‌دادن مهره‌ها", "short": "هل بده بیرون", "players": "2 نفر", "max_p": 2, "icon_col": Color(0.55, 0.5, 0.95), "cat": "strategy", "net": true, "beta": false},
 		{"id": "blockace", "name": "بلاک‌آس", "desc": "Blokus Duo · صفحه ۱۴×۱۴ و ۲۱ قطعه‌ی استاندارد", "short": "گسترش از گوشه‌ها", "players": "2 نفر", "max_p": 2, "icon_col": Color(0.3, 0.78, 0.72), "cat": "strategy", "net": true, "beta": false},
 	]

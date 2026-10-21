@@ -102,8 +102,7 @@ func _othello_apply_place(c: Vector2i) -> void:
 				othello_winner = 2
 			else:
 				othello_winner = 0
-			app.state = State.RESULT
-			app._build_result_buttons()
+			app._go_result()
 
 func _othello_cpu_move() -> void:
 	if othello_valid.size() == 0 or othello_game_over or othello_turn != 2:

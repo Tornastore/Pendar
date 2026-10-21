@@ -103,8 +103,7 @@ func _bg_cpu_apply_source(source: int, die: int) -> void:
 	if int(bg_off[1]) >= 15:
 		bg_game_over = true
 		bg_winner = 1
-		app.state = State.RESULT
-		app._build_result_buttons()
+		app._go_result()
 
 func _bg_pt_x(col: int) -> float:
 	return 40.0 + col * 36.0 + (24.0 if col >= 6 else 0.0)
@@ -161,8 +160,7 @@ func _bg_step_apply(d1: int, d2: int) -> void:
 				if bg_off[bg_turn] >= 15:
 					bg_game_over = true
 					bg_winner = bg_turn
-					app.state = State.RESULT
-					app._build_result_buttons()
+					app._go_result()
 				break
 	if not moved:
 		bg_moves_left.remove_at(0)

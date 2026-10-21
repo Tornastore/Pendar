@@ -3,7 +3,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   ALLOWED_GAMES, ALLOWED_EMOJIS, cleanUsername, clampLevel,
-  isSafeAction, isActionFromSeat
+  isSafeAction, isActionFromSeat, playerCapacityForGame,
+  fallbackRoomSizeForQueue, rankMastermindPlayers
 } = require('../lib/protocol');
 
 test('supports every game listed in the Godot online chooser', () => {
@@ -46,4 +47,32 @@ test('validates incoming Mastermind feedback records before relay', () => {
   assert.deepEqual(sanitizeMastermindGuesses(valid, 4, 4), valid);
   assert.equal(sanitizeMastermindGuesses([{ g: [0], b: 1, w: 0, f: [2], p: 1 }], 4, 4), null);
   assert.equal(sanitizeMastermindGuesses([{ g: [0, 1, 2, 3], b: 4, w: 2, f: [2, 2, 2, 2], p: 1 }], 4, 4), null);
+});
+
+
+test('LAN and online player capacity is four only for games with multiplayer rules', () => {
+  assert.equal(playerCapacityForGame('mastermind'), 4);
+  assert.equal(playerCapacityForGame('quoridor'), 4);
+  assert.equal(playerCapacityForGame('chess'), 2);
+});
+
+test('queue matchmaking forms 2-4 player Mastermind matches and valid Quoridor sizes', () => {
+  assert.equal(fallbackRoomSizeForQueue('mastermind', 1), 0);
+  assert.equal(fallbackRoomSizeForQueue('mastermind', 2), 2);
+  assert.equal(fallbackRoomSizeForQueue('mastermind', 3), 3);
+  assert.equal(fallbackRoomSizeForQueue('mastermind', 4), 4);
+  assert.equal(fallbackRoomSizeForQueue('mastermind', 6), 4);
+  assert.equal(fallbackRoomSizeForQueue('quoridor', 3), 2);
+  assert.equal(fallbackRoomSizeForQueue('quoridor', 4), 4);
+});
+
+test('Mastermind progress ranking changes live and solved players sort by solve time', () => {
+  const ranked = rankMastermindPlayers([
+    { seat: 0, status: 'active', latestBlack: 1, attemptsUsed: 2, solveMs: 0 },
+    { seat: 1, status: 'active', latestBlack: 3, attemptsUsed: 5, solveMs: 0 },
+    { seat: 2, status: 'solved', latestBlack: 6, attemptsUsed: 7, solveMs: 8200 },
+    { seat: 3, status: 'solved', latestBlack: 6, attemptsUsed: 5, solveMs: 5100 }
+  ]);
+  assert.deepEqual(ranked.map(p => p.seat), [3, 2, 1, 0]);
+  assert.deepEqual(ranked.map(p => p.rank), [1, 2, 3, 4]);
 });

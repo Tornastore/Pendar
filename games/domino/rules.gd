@@ -97,8 +97,7 @@ func _dom_play(p: int, idx: int, end: String) -> bool:
 		dom_game_over = true
 		dom_winner = p
 		_dom_calc_scores()
-		app.state = State.RESULT
-		app._build_result_buttons()
+		app._go_result()
 		return true
 	# next turn
 	dom_turn = 1 - p
@@ -114,8 +113,7 @@ func _dom_play(p: int, idx: int, end: String) -> bool:
 				dom_winner = 1
 			else:
 				dom_winner = -1
-			app.state = State.RESULT
-			app._build_result_buttons()
+			app._go_result()
 	return true
 
 func _dom_draw(p: int) -> void:
@@ -316,8 +314,7 @@ func _dom_pass(p: int) -> void:
 			dom_winner = 1
 		else:
 			dom_winner = -1
-		app.state = State.RESULT
-		app._build_result_buttons()
+		app._go_result()
 
 func _dom_me() -> int:
 	return 0 if app.vs_cpu else app.local_seat

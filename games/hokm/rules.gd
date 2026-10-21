@@ -97,8 +97,7 @@ func _hokm_play(p: int, idx: int) -> void:
 		if hokm_hands[0].size() == 0:
 			hokm_game_over = true
 			hokm_winner = 0 if hokm_scores[0] > hokm_scores[1] else 1
-			app.state = State.RESULT
-			app._build_result_buttons()
+			app._go_result()
 	else:
 		hokm_turn = 1 - p
 

@@ -249,8 +249,7 @@ func _aba_apply_group_move(raw_cells: Array, dx: int, dy: int, player: int) -> b
 	if aba_out[opponent - 1] >= 6:
 		aba_game_over = true
 		aba_winner = player
-		app.state = app.State.RESULT
-		app._build_result_buttons()
+		app._go_result()
 	else:
 		aba_turn = opponent
 	return true

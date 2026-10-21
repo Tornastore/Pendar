@@ -135,14 +135,12 @@ func _chess_make_move(from: Vector2i, to: Vector2i) -> void:
 	if not has_king[1]:
 		chess_game_over = true
 		chess_winner = 2
-		app.state = State.RESULT
-		app._build_result_buttons()
+		app._go_result()
 		return
 	if not has_king[2]:
 		chess_game_over = true
 		chess_winner = 1
-		app.state = State.RESULT
-		app._build_result_buttons()
+		app._go_result()
 		return
 	chess_turn = 3 - chess_turn
 
@@ -154,8 +152,7 @@ func _chess_cpu_move() -> void:
 	if best.is_empty():
 		chess_game_over = true
 		chess_winner = 1
-		app.state = State.RESULT
-		app._build_result_buttons()
+		app._go_result()
 		return
 	_chess_make_move(best[0], best[1])
 

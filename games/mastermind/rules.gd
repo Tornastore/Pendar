@@ -20,6 +20,11 @@ var mm_won: bool = false
 var mm_filled: Array = []
 var mm_turn: int = 0
 var mm_winner: int = -1
+var mm_online_race: bool = false
+var mm_lan_race: bool = false
+var mm_online_progress: Array = []
+var mm_race_finished: bool = false
+var mm_race_status: String = ""
 
 func reset_game() -> void:
 	_reset_mastermind()
@@ -73,7 +78,7 @@ func _mm_evaluate(guess: Array) -> Array:
 
 func _reset_mastermind() -> void:
 	mm_difficulty = clampi(mm_difficulty, 1, 6)
-	# Each harder level adds one peg to the code AND one available colour.
+	# Higher difficulty increases both code length and available colours.
 	mm_code_len = clampi(3 + mm_difficulty, 4, 9)
 	mm_color_count = clampi(3 + mm_difficulty, 4, 9)
 	mm_secret = []
@@ -82,7 +87,19 @@ func _reset_mastermind() -> void:
 	mm_filled = _mm_blank_filled()
 	mm_slot = 0
 	mm_phase = 1
-	if app._net_on():
+	mm_online_race = app.ws_match_active and app.selected_game == "mastermind"
+	mm_lan_race = (not app.ws_match_active and app.multiplayer.multiplayer_peer != null and app.connected_players >= 2 and app.selected_game == "mastermind")
+	if mm_online_race:
+		# The online matchmaker stores the secret on the server only.
+		mm_secret = []
+		mm_phase = 1
+	elif mm_lan_race:
+		# In IP/LAN races, the host evaluates guesses. Other clients never receive the secret.
+		if app.is_host:
+			for i in range(mm_code_len):
+				mm_secret.append(randi() % mm_color_count)
+		mm_phase = 1
+	elif app._net_on():
 		mm_local_two_player = false
 		mm_phase = 0 if app.is_host else 2
 	else:
@@ -92,10 +109,18 @@ func _reset_mastermind() -> void:
 	mm_won = false
 	mm_turn = 0
 	mm_winner = -1
+	mm_online_progress = []
+	mm_race_finished = false
+	mm_race_status = ""
+
+func _mm_is_race_mode() -> bool:
+	return mm_online_race or mm_lan_race
 
 func _mm_my_turn() -> bool:
 	if mm_game_over:
 		return false
+	if _mm_is_race_mode():
+		return mm_phase == 1
 	if app._net_on():
 		return (app.is_host and mm_phase == 0) or (not app.is_host and mm_phase == 1)
 	return mm_phase == 1
@@ -161,7 +186,9 @@ func _btns_mastermind() -> void:
 func _draw_mastermind() -> void:
 	var used: int = mm_guesses.size()
 	var net: bool = app._net_on()
-	if net and app.is_host and mm_phase == 0:
+	if _mm_is_race_mode():
+		app._draw_hud("فکر بکر · مسابقه %s نفره" % app._fa(app.connected_players), app._pl("تلاش‌های شما", app.ACCENT, "%s/10" % app._fa(used), not mm_game_over, true, "رقابت سرعتی · کد در سرور پنهان است"))
+	elif net and app.is_host and mm_phase == 0:
 		app._draw_hud("فکر بکر · ساخت کد مخفی", app._pl("طول کد", app.ACCENT, app._fa(mm_code_len), true, true, "%s رنگ در دسترس" % app._fa(mm_color_count)))
 	elif net and not app.is_host and mm_phase == 2:
 		app._draw_hud("فکر بکر · اتصال شبکه‌ای", app._pl("وضعیت", app.ACCENT, "انتظار", false, true, "میزبان کد مخفی را ثبت می‌کند"))
@@ -195,7 +222,7 @@ func _draw_mastermind() -> void:
 		app._txt_c("چطور کد بسازید؟", Rect2(44, 334, app.VIEW_W - 88, 32), 18, app.TEXT, true)
 		app._wrap("خانه‌های کد را انتخاب کنید و برای هر خانه یک رنگ بگذارید. سپس «ثبت کد مخفی» را بزنید تا گوشی دیگر بتواند حدس بزند. کد روی گوشی میزبان می‌ماند و برای مهمان ارسال نمی‌شود.", 52, 378, app.VIEW_W - 104, 17, app.TEXT_DIM, HORIZONTAL_ALIGNMENT_CENTER)
 	else:
-		var panel := Rect2(16, 150, app.VIEW_W - 32, 400)
+		var panel := Rect2(8, 150, 360, 400) if _mm_is_race_mode() else Rect2(16, 150, app.VIEW_W - 32, 400)
 		app._panel(panel, app.CARD, 22, app.LINE, 1.0, 12, 4)
 		var guess_gap: float = minf(44.0, (panel.size.x - 116.0) / float(maxi(1, mm_code_len - 1)))
 		var peg_radius: float = 13.0 if mm_code_len <= 5 else (11.0 if mm_code_len <= 7 else 9.5)
@@ -203,7 +230,7 @@ func _draw_mastermind() -> void:
 			var y: float = panel.position.y + 22.0 + float(gi) * 38.0
 			if y + 18.0 > panel.end.y - 2.0:
 				break
-			var active: bool = (gi == used) and mm_phase != 4
+			var active: bool = (gi == used) and (mm_phase != 4 or _mm_is_race_mode())
 			if active:
 				app._panel(Rect2(panel.position.x + 8, y - 17, panel.size.x - 16, 34), Color(app.ACCENT.r, app.ACCENT.g, app.ACCENT.b, 0.10), 14, Color(app.ACCENT.r, app.ACCENT.g, app.ACCENT.b, 0.5), 1.0)
 			app._txt_c(app._fa(gi + 1), Rect2(panel.end.x - 34, y - 14, 24, 28), 10, app.TEXT_FAINT, true)
@@ -231,7 +258,11 @@ func _draw_mastermind() -> void:
 					else:
 						app.draw_circle(mark, 4.6, Color(1, 1, 1, 0.04))
 						app._ring(mark, 4.6, Color(1, 1, 1, 0.10), 0.8)
-		app._txt_r("نشان زیر هر مهره متعلق به همان خانه است · سیاه: دقیق · سفید: رنگ درست", app.VIEW_W - 24, 574, 11, app.TEXT_DIM, false, 470)
+		if not mm_online_race:
+			app._txt_r("نشان زیر هر مهره متعلق به همان خانه است · سیاه: دقیق · سفید: رنگ درست", app.VIEW_W - 24, 574, 11, app.TEXT_DIM, false, 470)
+
+	if _mm_is_race_mode():
+		_draw_mm_online_sidebar()
 
 	if _mm_my_turn():
 		var current_title: String = "کد مخفی شما" if setup else "حدس فعلی"
@@ -250,6 +281,25 @@ func _draw_mastermind() -> void:
 
 func _mm_submit() -> void:
 	if mm_game_over or not _mm_all_filled() or not _mm_my_turn():
+		return
+	if mm_online_race:
+		var guess_to_send: Array = mm_cur.duplicate()
+		if app._ws_send_json({"type": "mastermind_guess", "guess": guess_to_send}):
+			mm_phase = 4
+			app._show_toast("حدس ثبت شد؛ منتظر نتیجه‌ی سرور…")
+		else:
+			app._show_toast("اتصال مسابقه قطع است؛ حدس ارسال نشد.")
+		app._rebuild_buttons()
+		return
+	if mm_lan_race:
+		var lan_guess: Array = mm_cur.duplicate()
+		if app.is_host:
+			app._mm_lan_process_guess(lan_guess, app.local_seat)
+		else:
+			mm_phase = 4
+			app.rpc_id(1, "_rpc_mm_lan_submit", lan_guess, app.local_seat)
+			app._show_toast("حدس ارسال شد؛ منتظر بازخورد هستید…")
+			app._rebuild_buttons()
 		return
 	if app._net_on() and app.is_host and mm_phase == 0:
 		# Never send the secret itself over the network.
@@ -284,6 +334,75 @@ func _mm_submit() -> void:
 		app._rebuild_buttons()
 		return
 	_mm_apply(mm_cur.duplicate(), 0)
+
+func _draw_mm_online_sidebar() -> void:
+	var sidebar := Rect2(376, 150, 156, 400)
+	app._panel(sidebar, Color(0.10, 0.13, 0.25), 18, Color(app.ACCENT.r, app.ACCENT.g, app.ACCENT.b, 0.55), 1.0, 8, 3)
+	app._txt_c("رتبه‌بندی", Rect2(sidebar.position.x + 4, sidebar.position.y + 9, sidebar.size.x - 8, 26), 14, app.TEXT, true)
+	if mm_online_progress.is_empty():
+		app._wrap("در انتظار وضعیت بازیکنان…", sidebar.position.x + 12, sidebar.position.y + 52, sidebar.size.x - 24, 11, app.TEXT_DIM, HORIZONTAL_ALIGNMENT_CENTER)
+		return
+	var row_h: float = 84.0
+	for i in range(mini(mm_online_progress.size(), 4)):
+		var entry: Dictionary = mm_online_progress[i]
+		var row := Rect2(sidebar.position.x + 6, sidebar.position.y + 42 + float(i) * row_h, sidebar.size.x - 12, 78)
+		var mine: bool = int(entry.get("seat", -1)) == app.local_seat
+		var edge: Color = app.ACCENT if mine else app.LINE
+		app._panel(row, Color(app.ACCENT.r, app.ACCENT.g, app.ACCENT.b, 0.10) if mine else Color(1, 1, 1, 0.035), 10, edge, 1.0)
+		app._txt_r("#%s" % app._fa(int(entry.get("rank", i + 1))), row.end.x - 5, row.position.y + 20, 12, app.ACCENT if i == 0 else app.TEXT_DIM, true, 28)
+		app._txt_r(str(entry.get("username", "بازیکن")), row.end.x - 32, row.position.y + 20, 11, app.TEXT, true, 86)
+		var exact_count: int = int(entry.get("latest_black", 0))
+		app._txt_r("خانه‌ی دقیق: %s از %s" % [app._fa(exact_count), app._fa(mm_code_len)], row.end.x - 6, row.position.y + 44, 10, app.TEXT_DIM, false, row.size.x - 12)
+		# Progress only: never show another player's guesses, attempt count, or feedback pattern.
+		var progress_track := Rect2(row.position.x + 8, row.position.y + 54, row.size.x - 16, 7)
+		app._panel(progress_track, Color(1, 1, 1, 0.07), 4)
+		var progress_ratio: float = clampf(float(exact_count) / float(maxi(1, mm_code_len)), 0.0, 1.0)
+		if progress_ratio > 0.0:
+			app._panel(Rect2(progress_track.position.x, progress_track.position.y, progress_track.size.x * progress_ratio, progress_track.size.y), app.GREEN if exact_count == mm_code_len else app.ACCENT, 4)
+
+func _mm_online_feedback(message: Dictionary) -> void:
+	if not mm_online_race:
+		return
+	_mm_accept_race_feedback(message)
+
+func _mm_lan_feedback(message: Dictionary) -> void:
+	if not mm_lan_race:
+		return
+	_mm_accept_race_feedback(message)
+
+func _mm_accept_race_feedback(message: Dictionary) -> void:
+	if mm_game_over:
+		return
+	var guess_value: Variant = message.get("guess", [])
+	var feedback_value: Variant = message.get("feedback", [])
+	if not (guess_value is Array) or not (feedback_value is Array):
+		return
+	if guess_value.size() != mm_code_len or feedback_value.size() != mm_code_len:
+		return
+	mm_guesses.append({
+		"g": guess_value.duplicate(),
+		"f": feedback_value.duplicate(),
+		"b": int(message.get("black", 0)),
+		"w": int(message.get("white", 0)),
+		"p": app.local_seat
+	})
+	var solved: bool = bool(message.get("solved", false))
+	var failed: bool = bool(message.get("failed", false))
+	mm_cur = _mm_blank_code()
+	mm_filled = _mm_blank_filled()
+	mm_slot = 0
+	mm_phase = 1
+	if solved or failed:
+		mm_game_over = true
+		mm_won = solved
+		mm_winner = app.local_seat if solved else -1
+		mm_race_status = "کد را پیدا کردی!" if solved else "فرصت حدس تمام شد"
+		# Keep the live leaderboard visible until every racer has finished.
+		app._show_toast(mm_race_status)
+		app._build_playing_buttons()
+	else:
+		app._show_toast("بازخورد دریافت شد؛ حدس بعدی را ثبت کن.")
+		app._build_playing_buttons()
 
 func _mm_apply(g: Array, player: int) -> void:
 	if mm_game_over or g.size() != mm_code_len or mm_secret.size() != mm_code_len:

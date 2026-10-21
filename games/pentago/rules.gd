@@ -77,8 +77,7 @@ func _pent_place(c: Vector2i) -> bool:
 	if _pent_check_win(pent_turn):
 		pent_game_over = true
 		pent_winner = pent_turn
-		app.state = State.RESULT
-		app._build_result_buttons()
+		app._go_result()
 		return true
 	pent_phase = 1
 	app._build_pent_rotate_buttons()
@@ -89,15 +88,13 @@ func _pent_do_rotate(quad: int, clockwise: bool) -> void:
 	if _pent_check_win(pent_turn):
 		pent_game_over = true
 		pent_winner = pent_turn
-		app.state = State.RESULT
-		app._build_result_buttons()
+		app._go_result()
 		return
 	# also check opponent (rare double win)
 	if _pent_check_win(3 - pent_turn):
 		pent_game_over = true
 		pent_winner = 3 - pent_turn
-		app.state = State.RESULT
-		app._build_result_buttons()
+		app._go_result()
 		return
 	pent_turn = 3 - pent_turn
 	pent_phase = 0

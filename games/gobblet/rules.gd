@@ -119,8 +119,7 @@ func _gob_finish(winner: int) -> void:
 	gob_winner = winner
 	gob_sel_size = -1
 	gob_sel_from = Vector2i(-1, -1)
-	app.state = app.State.RESULT
-	app._build_result_buttons()
+	app._go_result()
 
 func _gob_place(x: int, y: int, size: int, player: int) -> bool:
 	if not _gob_can_place(x, y, size, player):

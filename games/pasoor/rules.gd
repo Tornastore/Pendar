@@ -254,8 +254,7 @@ func _pas_end_hand() -> void:
 			pas_winner = 1
 
 	pas_game_over = true
-	app.state = State.RESULT
-	app._build_result_buttons()
+	app._go_result()
 
 func _pas_card_point_value(card: Dictionary) -> float:
 	# ارزش تقریبی امتیازی کارت در چهاربرگ.

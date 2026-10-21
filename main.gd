@@ -55,6 +55,9 @@ var connected_players: int = 1
 var local_player_id: int = 1          # multiplayer unique id
 var local_seat: int = 0               # 0 = host/first, 1 = second player
 var peer_to_seat: Dictionary = {}     # peer_id -> seat (0,1,...)
+var peer_to_username: Dictionary = {} # peer_id -> sanitized username
+var mm_lan_race_stats: Dictionary = {} # seat -> authoritative Mastermind race progress (LAN)
+var mm_lan_race_started_msec: int = 0
 var host_ips: Array = []              # local IPs shown to host
 var join_ip: String = ""              # IP typed by client
 var max_players_for_game: int = 2
@@ -63,6 +66,8 @@ var max_players_for_game: int = 2
 # available for native APK/LAN sessions; this transport is independent of ENet.
 var ws_socket: WebSocketPeer
 var ws_match_active: bool = false
+var online_player_roster: Array = []
+var _result_popup_open: bool = false
 var ws_state: String = "idle"
 var ws_queue_join_sent: bool = false
 var ws_emoji_picker_open: bool = false
@@ -829,8 +834,8 @@ func _start_host() -> void:
 	vs_cpu = false
 	is_host = true
 	_cleanup_network()
-	if selected_game == "quoridor":
-		max_players_for_game = 2
+	# The catalogue defines network capacity. Quoridor supports 2 or 4 players.
+	max_players_for_game = int(_game_info(selected_game).get("max_p", 2))
 	peer = ENetMultiplayerPeer.new()
 	var err := peer.create_server(PORT, max_players_for_game)
 	if err != OK:
@@ -842,6 +847,9 @@ func _start_host() -> void:
 	local_player_id = multiplayer.get_unique_id()  # معمولاً 1
 	local_seat = 0
 	peer_to_seat[local_player_id] = 0
+	peer_to_username.clear()
+	peer_to_username[local_player_id] = online_username
+	online_player_roster = [{"seat": 0, "username": online_username}]
 	connected_players = 1
 	host_ips = _get_local_ips()
 	state = State.LOBBY
@@ -896,28 +904,60 @@ func _on_peer_connected(id: int) -> void:
 	# فقط روی Host اجرا می‌شود
 	if not is_host:
 		return
+	if state != State.LOBBY:
+		if peer != null:
+			peer.disconnect_peer(id)
+		return
 	if connected_players >= max_players_for_game:
 		# رد کردن اتصال اضافی
 		peer.disconnect_peer(id)
 		_show_toast("ظرفیت پر است")
 		return
-	var seat := connected_players  # 1, 2, ...
+	var used_seats: Dictionary = {0: true}
+	for existing_id in peer_to_seat.keys():
+		used_seats[int(peer_to_seat[existing_id])] = true
+	var seat: int = 1
+	while used_seats.has(seat):
+		seat += 1
+	if seat >= max_players_for_game:
+		peer.disconnect_peer(id)
+		return
 	peer_to_seat[id] = seat
-	connected_players += 1
-	# به کلاینت بگو seat او چیست
+	peer_to_username[id] = "بازیکن %d" % (seat + 1)
+	connected_players = peer_to_seat.size()
 	rpc_id(id, "_rpc_assign_seat", seat, selected_game)
+	rpc("_rpc_lobby_sync", connected_players, max_players_for_game)
+	rpc("_rpc_lan_roster_sync", _build_lan_roster())
 	_show_toast("بازیکن " + str(seat + 1) + " متصل شد")
 	_build_lobby_buttons()
 
 func _on_peer_disconnected(id: int) -> void:
+	var disconnected_seat: int = int(peer_to_seat.get(id, -1))
 	if peer_to_seat.has(id):
 		peer_to_seat.erase(id)
-	connected_players = max(1, connected_players - 1)
+	peer_to_username.erase(id)
+	connected_players = peer_to_seat.size() if is_host else maxi(1, connected_players - 1)
 	_show_toast("بازیکن قطع شد")
+	if is_host and selected_game == "mastermind" and state == State.PLAYING and _game_modules["mastermind"].mm_lan_race and disconnected_seat >= 0 and mm_lan_race_stats.has(disconnected_seat):
+		var disconnected_stat: Dictionary = mm_lan_race_stats[disconnected_seat]
+		if str(disconnected_stat.get("status", "active")) == "active":
+			disconnected_stat["status"] = "failed"
+			mm_lan_race_stats[disconnected_seat] = disconnected_stat
+			_mm_lan_broadcast_progress()
+			_mm_lan_finish_if_complete()
+	if is_host and multiplayer.multiplayer_peer != null:
+		rpc("_rpc_lobby_sync", connected_players, max_players_for_game)
+		rpc("_rpc_lan_roster_sync", _build_lan_roster())
 	if state == State.PLAYING:
-		_show_toast("حریف قطع شد — بازگشت به منو")
-		_back_to_menu()
+		_show_toast("بازیکن قطع شد؛ صفحه‌ی آخر بازی حفظ شد.")
 	else:
+		_build_lobby_buttons()
+
+@rpc("authority", "call_local", "reliable")
+func _rpc_lobby_sync(count: int, capacity: int) -> void:
+	connected_players = clampi(count, 1, 4)
+	max_players_for_game = clampi(capacity, 2, 4)
+	if state == State.LOBBY:
 		_build_lobby_buttons()
 
 @rpc("authority", "reliable")
@@ -925,6 +965,43 @@ func _rpc_assign_seat(seat: int, game_id: String) -> void:
 	local_seat = seat
 	selected_game = game_id
 	_show_toast("شما بازیکن " + str(seat + 1) + " هستید")
+
+@rpc("any_peer", "reliable")
+func _rpc_register_lan_username(username: String) -> void:
+	if not is_host or multiplayer.multiplayer_peer == null:
+		return
+	var sender_id: int = multiplayer.get_remote_sender_id()
+	if not peer_to_seat.has(sender_id):
+		return
+	var cleaned: String = username.strip_edges().replace("\n", " ").replace("\r", " ").replace("<", "").replace(">", "")
+	cleaned = " ".join(cleaned.split(" ", false))
+	if cleaned.is_empty():
+		cleaned = "بازیکن %d" % (int(peer_to_seat[sender_id]) + 1)
+	peer_to_username[sender_id] = cleaned.substr(0, 18)
+	rpc("_rpc_lan_roster_sync", _build_lan_roster())
+	if selected_game == "mastermind" and _game_modules["mastermind"].mm_lan_race:
+		_mm_lan_broadcast_progress()
+
+@rpc("authority", "call_local", "reliable")
+func _rpc_lan_roster_sync(players: Array) -> void:
+	online_player_roster = players.duplicate(true)
+	if state == State.LOBBY:
+		_build_lobby_buttons()
+
+func _build_lan_roster() -> Array:
+	# Always publish every seat so a disconnected player never shifts the other
+	# players in the lobby. The connected flag is authoritative for each slot.
+	var roster: Array = []
+	for seat in range(maxi(2, max_players_for_game)):
+		var username: String = "بازیکن %d" % (seat + 1)
+		var connected: bool = false
+		for peer_id in peer_to_seat.keys():
+			if int(peer_to_seat[peer_id]) == seat:
+				username = str(peer_to_username.get(peer_id, username))
+				connected = true
+				break
+		roster.append({"seat": seat, "username": username, "connected": connected})
+	return roster
 
 func _on_server_disconnected() -> void:
 	_show_toast("اتصال با Host قطع شد")
@@ -936,14 +1013,16 @@ func _start_network_game() -> void:
 	if connected_players < 2:
 		_show_toast("حداقل ۲ بازیکن لازم است")
 		return
+	if selected_game == "quoridor" and connected_players == 3:
+		_show_toast("کوریدور با ۲ یا ۴ بازیکن شروع می‌شود؛ نفر چهارم را متصل کنید یا به ۲ نفر برگردید.")
+		return
 	var rng_seed: int = randi()
 	var selected_mm_level: int = mm_difficulty if selected_game == "mastermind" else -1
 	var selected_blk_level: int = blk_difficulty if selected_game == "blockace" else -1
-	rpc("_rpc_start_game", selected_game, rng_seed, selected_mm_level, selected_blk_level)
-	# call_local will also run on host
+	rpc("_rpc_start_game", selected_game, rng_seed, selected_mm_level, selected_blk_level, connected_players)
 
 @rpc("authority", "call_local", "reliable")
-func _rpc_start_game(game_id: String, rng_seed: int = 0, mastermind_level: int = -1, blockace_level: int = -1) -> void:
+func _rpc_start_game(game_id: String, rng_seed: int = 0, mastermind_level: int = -1, blockace_level: int = -1, player_count: int = 2) -> void:
 	selected_game = game_id
 	vs_cpu = false
 	if game_id == "mastermind":
@@ -955,11 +1034,16 @@ func _rpc_start_game(game_id: String, rng_seed: int = 0, mastermind_level: int =
 	if game_id == "blockace" and blockace_level >= 1:
 		blk_difficulty = clampi(blockace_level, 1, 6)
 	if game_id == "quoridor":
-		_game_modules["quoridor"].quo_player_count = 2
+		_game_modules["quoridor"].quo_player_count = 4 if player_count >= 4 else 2
 		_game_modules["quoridor"].quo_local_multiplayer = false
+		connected_players = 4 if player_count >= 4 else 2
+	elif game_id == "mastermind" and _net_on():
+		connected_players = clampi(player_count, 2, 4)
 	if rng_seed != 0:
 		seed(rng_seed)  # یکسان‌سازی تصادفی برای پخش کارت/مهره
 	_start_game()
+	if game_id == "mastermind" and is_host and bool(_game_modules["mastermind"].mm_lan_race):
+		_mm_lan_initialize_race()
 
 func _my_seat() -> int:
 	return 0 if vs_cpu else local_seat
@@ -1349,6 +1433,12 @@ var seen_rules: Dictionary:
 		scoring_service.seen_rules = value
 
 func _set_state(v: State) -> void:
+	# Keep the finished game board visible behind an in-HUD result popup.
+	if v == State.RESULT:
+		v = State.PLAYING
+		_result_popup_open = true
+	elif v != State.PLAYING:
+		_result_popup_open = false
 	if state != v:
 		_state_t = 0.0
 		scroll_y = 0.0
@@ -2025,9 +2115,12 @@ func _board_tap(p: Vector2) -> void:
 
 # ---------- central back / navigation ----------
 func _ov_active() -> bool:
-	return not dialog.is_empty() or pause_open or rules_open
+	return not dialog.is_empty() or pause_open or rules_open or _result_popup_open
 
 func _go_back() -> void:
+	if _result_popup_open:
+		_close_result_popup()
+		return
 	if not dialog.is_empty():
 		dialog = {}
 		_rebuild_buttons()
@@ -2112,6 +2205,7 @@ func _select_game(id: String) -> void:
 
 func _back_to_menu() -> void:
 	_cleanup_network()
+	_result_popup_open = false
 	dialog = {}
 	state = State.MENU
 	selected_game = ""
@@ -2142,8 +2236,23 @@ func _leave_lobby() -> void:
 	_rebuild_buttons()
 
 func _go_result(_won: bool = false) -> void:
-	state = State.RESULT
+	# Result is an overlay so the final board remains visible in the background.
+	if _result_popup_open and _result_logged:
+		_rebuild_buttons()
+		return
+	_result_popup_open = true
+	_result_t0 = _time
 	_build_result_buttons()
+
+func _close_result_popup() -> void:
+	_result_popup_open = false
+	_rebuild_buttons()
+
+func _btns_result_popup() -> void:
+	var can_restart: bool = vs_cpu or is_host or not _net_on()
+	_add_ov_btn(Rect2(54, 536, VIEW_W - 108, 52), "ادامه و مشاهده صفحه نهایی", _close_result_popup, GREEN, "solid", "eye", "result_view")
+	_add_ov_btn(Rect2(54, 598, 206, 50), "بازی دوباره", _restart_current, ACCENT, "soft", "restart", "result_again", can_restart)
+	_add_ov_btn(Rect2(280, 598, 206, 50), "منوی اصلی", _back_to_menu, TEXT_DIM, "ghost", "home", "result_home")
 
 # wrappers kept for the game-logic code that triggers a UI refresh
 func _build_menu_buttons() -> void:
@@ -2192,7 +2301,10 @@ func _result_is_draw() -> bool:
 		"pasoor": return pas_winner < 0
 		"blockace": return blk_winner < 0
 		"quoridor": return quo_winner < 0
-		"mastermind": return not vs_cpu and int(_game_modules["mastermind"].mm_winner) < 0
+		"mastermind":
+			if _is_mastermind_race():
+				return str(_game_modules["mastermind"].mm_race_status) == "مساوی"
+			return not vs_cpu and int(_game_modules["mastermind"].mm_winner) < 0
 	return false
 
 func _player_won_current() -> bool:
@@ -2205,6 +2317,8 @@ func _player_won_current() -> bool:
 		"domino": return dom_winner == seat
 		"pasoor": return pas_winner == seat
 		"mastermind":
+			if _is_mastermind_race():
+				return bool(_game_modules["mastermind"].mm_won)
 			if vs_cpu:
 				return mm_won
 			return int(_game_modules["mastermind"].mm_winner) == seat
@@ -2275,6 +2389,7 @@ func _apply_resign(seat: int) -> void:
 
 # ---------- game start / restart ----------
 func _start_game() -> void:
+	_result_popup_open = false
 	_result_logged = false
 	_game_epoch += 1
 	_prev_boards.clear()
@@ -2335,14 +2450,14 @@ func _restart_current() -> void:
 			var ws_seed: int = randi()
 			var ws_mm_level: int = mm_difficulty if selected_game == "mastermind" else -1
 			var ws_blk_level: int = blk_difficulty if selected_game == "blockace" else -1
-			_ws_send_json({"type": "restart_game", "game": selected_game, "seed": ws_seed, "mastermind_difficulty": ws_mm_level, "blockace_difficulty": ws_blk_level})
-			_rpc_start_game(selected_game, ws_seed, ws_mm_level, ws_blk_level)
+			_ws_send_json({"type": "restart_game", "game": selected_game, "seed": ws_seed, "mastermind_difficulty": ws_mm_level, "blockace_difficulty": ws_blk_level, "player_count": connected_players})
+			_rpc_start_game(selected_game, ws_seed, ws_mm_level, ws_blk_level, connected_players)
 	elif not vs_cpu and multiplayer.multiplayer_peer != null:
 		if is_host:
 			var rng_seed: int = randi()
 			var selected_mm_level: int = mm_difficulty if selected_game == "mastermind" else -1
 			var selected_blk_level: int = blk_difficulty if selected_game == "blockace" else -1
-			rpc("_rpc_start_game", selected_game, rng_seed, selected_mm_level, selected_blk_level)
+			rpc("_rpc_start_game", selected_game, rng_seed, selected_mm_level, selected_blk_level, connected_players)
 	else:
 		_start_game()
 
@@ -2460,8 +2575,10 @@ func _rebuild_buttons() -> void:
 			_btns_dialog()
 		elif rules_open:
 			_btns_rules()
-		else:
+		elif pause_open:
 			_btns_pause()
+		elif _result_popup_open:
+			_btns_result_popup()
 
 func _back_btn() -> void:
 	_add_btn(Rect2(VIEW_W - 60, 16, 44, 44), "", _go_back, true, TEXT, "icon", "back", "back")
@@ -3096,9 +3213,9 @@ func _btns_lobby() -> void:
 	_back_btn()
 	_add_btn(Rect2(16, 16, 44, 44), "", _open_rules, true, TEXT, "icon", "help", "help")
 	if is_host:
-		var can_start: bool = connected_players >= 2
+		var can_start: bool = connected_players >= 2 and not (selected_game == "quoridor" and connected_players == 3)
 		_add_btn(Rect2(40, 706, VIEW_W - 80, 62), "شروع بازی", _start_network_game, can_start, GREEN, "solid", "play", "start")
-		_last_btn().hint = "برای شروع، باید بازیکن دوم وصل شود."
+		_last_btn().hint = "کوریدور با ۲ یا ۴ بازیکن شروع می‌شود؛ سایر بازی‌ها طبق ظرفیت خود شروع می‌شوند."
 		var ips: Array = host_ips
 		for j in ips.size():
 			var y: float = 250.0 + 82.0 + j * 42.0
@@ -3133,17 +3250,48 @@ func _draw_seat(r: Rect2, seat: int, present: bool, me: bool, col: Color) -> voi
 	var role: String = "میزبان" if seat == 0 else "مهمان"
 	_txt_c(role, Rect2(r.position.x, r.end.y - 30, r.size.x, 24), 12, TEXT_DIM)
 
+func _draw_lobby_slot(r: Rect2, seat: int, present: bool, me: bool) -> void:
+	var colors: Array[Color] = [BLUE, ACCENT, GREEN, Color(1.0, 0.78, 0.30)]
+	var col: Color = colors[seat % colors.size()]
+	_panel(r, CARD if present else Color(0.10, 0.12, 0.23), 14, Color(col.r, col.g, col.b, 0.72 if present else 0.22), 1.2)
+	draw_circle(Vector2(r.position.x + 24, r.get_center().y), 12, col if present else Color(1, 1, 1, 0.08))
+	_draw_icon("user" if present else "clock", Vector2(r.position.x + 24, r.get_center().y), 13, TEXT if present else TEXT_FAINT, 1.7)
+	var shown_name: String = "بازیکن %s" % _fa(seat + 1)
+	for roster_entry in online_player_roster:
+		if int(roster_entry.get("seat", -1)) == seat:
+			shown_name = str(roster_entry.get("username", shown_name))
+			break
+	_txt_r(shown_name, r.end.x - 12, r.position.y + 30, 14, TEXT if present else TEXT_DIM, true, r.size.x - 56)
+	_txt_r(("شما · متصل" if me else "متصل") if present else "در انتظار…", r.end.x - 12, r.position.y + 52, 11, GREEN if present else TEXT_FAINT, false, r.size.x - 56)
+
 func _draw_lobby() -> void:
 	var info: Dictionary = _game_info(selected_game)
 	var col: Color = info.get("icon_col", ACCENT)
 	_draw_topbar("لابی بازی", str(info.get("name", "")))
 	var seat0_present: bool = true
 	var seat1_present: bool = connected_players >= 2 if is_host else _client_connected
-	_draw_seat(Rect2(VIEW_W - 16 - 238, 100, 238, 124), 0, seat0_present if is_host else _client_connected, local_seat == 0, BLUE)
-	_draw_seat(Rect2(16, 100, 238, 124), 1, seat1_present, local_seat == 1, ACCENT)
+	if max_players_for_game >= 4:
+		for seat in range(4):
+			var col_idx: int = seat % 2
+			var row_idx: int = int(seat / 2)
+			var seat_rect := Rect2(16.0 + float(col_idx) * 254.0, 96.0 + float(row_idx) * 94.0, 246.0, 84.0)
+			var present: bool = false
+			if is_host:
+				present = seat in peer_to_seat.values()
+			else:
+				present = seat == local_seat
+				for roster_entry in online_player_roster:
+					if int(roster_entry.get("seat", -1)) == seat:
+						present = bool(roster_entry.get("connected", present))
+						break
+			_draw_lobby_slot(seat_rect, seat, present, seat == local_seat)
+	else:
+		_draw_seat(Rect2(VIEW_W - 16 - 238, 100, 238, 124), 0, seat0_present if is_host else _client_connected, local_seat == 0, BLUE)
+		_draw_seat(Rect2(16, 100, 238, 124), 1, seat1_present, local_seat == 1, ACCENT)
 	if is_host:
 		var ips: Array = host_ips
-		var card := Rect2(16, 250, VIEW_W - 32, 112 + maxi(ips.size(), 1) * 42)
+		var card_y: float = 316.0 if max_players_for_game >= 4 else 250.0
+		var card := Rect2(16, card_y, VIEW_W - 32, 112 + maxi(ips.size(), 1) * 42)
 		_panel(card, CARD, 20, LINE_STRONG, 1.0, 12, 5)
 		_txt_r("آدرس شما برای دوست", card.end.x - 18, card.position.y + 34, 15, TEXT_DIM, true, 300)
 		if online_room_code != "":
@@ -3157,8 +3305,10 @@ func _draw_lobby() -> void:
 		else:
 			_txt_r("IP پیدا نشد — از تنظیمات وای‌فای ببینید", card.end.x - 18, card.position.y + 92, 14, TEXT_DIM, false, 400)
 		_txt_r("پورت: " + _fa(PORT), card.end.x - 18, card.end.y - 16, 13, TEXT_DIM, false, 200)
+		if max_players_for_game >= 4:
+			_txt_r("هر بازیکن IP بالا را وارد کند · ظرفیت %s نفر" % _fa(max_players_for_game), card.end.x - 18, card.position.y + 58, 12, TEXT_DIM, false, 420)
 		var need: int = max_players_for_game - connected_players
-		var msg: String = "منتظر بازیکن دوم…" if need > 0 else "همه آماده‌اند — بازی را شروع کنید"
+		var msg: String = ("منتظر %s بازیکن دیگر…" % _fa(need)) if need > 0 else "همه آماده‌اند — بازی را شروع کنید"
 		_txt_c(msg, Rect2(0, 650, VIEW_W, 36), 17, TEXT_DIM if need > 0 else GREEN, true)
 	else:
 		var card2 := Rect2(16, 250, VIEW_W - 32, 190)
@@ -3343,6 +3493,12 @@ func _draw_playing() -> void:
 			_draw_topbar("به زودی", "این بازی در نسخه‌های بعدی اضافه می‌شود")
 
 # ---------------- RESULT ----------------
+func _is_mastermind_race() -> bool:
+	if not _game_modules.has("mastermind"):
+		return false
+	var mm = _game_modules["mastermind"]
+	return bool(mm.mm_online_race) or bool(mm.mm_lan_race)
+
 func _result_info() -> Dictionary:
 	var won: bool = _player_won_current()
 	var rows: Array = []
@@ -3350,6 +3506,19 @@ func _result_info() -> Dictionary:
 	if selected_game == "quoridor" and bool(_game_modules["quoridor"].quo_local_multiplayer) and quo_winner >= 0:
 		title = "بازیکن %s برنده شد!" % _fa(quo_winner + 1)
 	var sub: String = ""
+	if selected_game == "mastermind" and _is_mastermind_race():
+		var race_status: String = str(_game_modules["mastermind"].mm_race_status)
+		if bool(_game_modules["mastermind"].mm_won):
+			title = "کد را پیدا کردی!"
+			sub = race_status
+		else:
+			title = "تلاش‌های تو تمام شد" if race_status == "فرصت حدس تمام شد" else "مسابقه به پایان رسید"
+			sub = race_status
+		var progress: Array = _game_modules["mastermind"].mm_online_progress
+		for entry in progress:
+			if int(entry.get("seat", -1)) == local_seat:
+				sub += " · رتبه %s از %s" % [_fa(int(entry.get("rank", 0))), _fa(progress.size())]
+				break
 	match selected_game:
 		"othello", "othello12":
 			rows.append(["سیاه", _fa(othello_scores[1])])
@@ -3375,11 +3544,27 @@ func _result_info() -> Dictionary:
 			rows.append(["دست‌های شما", _fa(hokm_scores[_my_seat()])])
 			rows.append(["دست‌های حریف", _fa(hokm_scores[1 - _my_seat()])])
 		"mastermind":
-			if vs_cpu:
-				title = "کد را شکستید!" if mm_won else "کد شکسته نشد"
-			elif _result_draw:
-				title = "کد شکسته نشد"
-			sub = "تعداد تلاش: %s از ۱۰ · طول کد: %s · رنگ‌ها: %s" % [_fa(mm_guesses.size()), _fa(mm_code_len), _fa(mm_color_count)]
+			if _is_mastermind_race():
+				# Preserve the race rank/status already composed above and show a small final podium.
+				var own_attempt_count: int = int(_game_modules["mastermind"].mm_guesses.size())
+				sub += " · تلاش‌های شما: %s از ۱۰" % _fa(own_attempt_count)
+				var progress: Array = _game_modules["mastermind"].mm_online_progress
+				for i in range(mini(progress.size(), 3)):
+					var entry: Dictionary = progress[i]
+					var row_label: String = "#%s %s" % [_fa(int(entry.get("rank", i + 1))), str(entry.get("username", "بازیکن"))]
+					var rank_status: String = str(entry.get("status", "active"))
+					var rank_value: String = ""
+					if rank_status == "solved":
+						rank_value = "حل در %s ثانیه" % _fa(snappedf(float(entry.get("solve_ms", 0)) / 1000.0, 0.1))
+					else:
+						rank_value = "دقیق: %s/%s" % [_fa(int(entry.get("latest_black", 0))), _fa(mm_code_len)]
+					rows.append([row_label, rank_value])
+			else:
+				if vs_cpu:
+					title = "کد را شکستید!" if mm_won else "کد شکسته نشد"
+				elif _result_draw:
+					title = "کد شکسته نشد"
+				sub = "تعداد تلاش: %s از ۱۰ · طول کد: %s · رنگ‌ها: %s" % [_fa(mm_guesses.size()), _fa(mm_code_len), _fa(mm_color_count)]
 		"gobblet":
 			sub = "۴ مهره هم‌رنگ در یک خط"
 		"backgammon":
@@ -3487,6 +3672,32 @@ func _draw_result() -> void:
 		_txt_c(dtxt, cr, 17, dcol, true)
 		if _result_delta != 0:
 			_txt_c("رتبه: " + _fa(scoring_service.global_rating), Rect2(0, cr.end.y + 4, VIEW_W, 22), 12, TEXT_DIM)
+
+func _draw_result_popup() -> void:
+	_scrim(0.58)
+	var info: Dictionary = _result_info()
+	var won: bool = _player_won_current()
+	var col: Color = TEXT_DIM if _result_draw else (GREEN if won else RED)
+	var panel := Rect2(28, 218, VIEW_W - 56, 508)
+	_panel(panel, Color(0.10, 0.13, 0.27), 26, Color(col.r, col.g, col.b, 0.58), 1.5, 22, 8)
+	_gloss(panel, 26, 0.04)
+	var ic := Vector2(VIEW_W * 0.5, panel.position.y + 56)
+	draw_circle(ic, 30, Color(col.r, col.g, col.b, 0.16))
+	_ring(ic, 30, Color(col.r, col.g, col.b, 0.64), 1.5)
+	_draw_icon("swap" if _result_draw else ("trophy" if won else "flag"), ic, 27, col, 2.4)
+	_txt_c(str(info.get("title", "پایان بازی")), Rect2(panel.position.x + 14, panel.position.y + 96, panel.size.x - 28, 40), 26, col.lightened(0.12), true)
+	var sub: String = str(info.get("sub", ""))
+	if sub.is_empty():
+		sub = "صفحه‌ی نهایی بازی پشت این پنجره حفظ شده است."
+	_wrap(sub, panel.position.x + 28, panel.position.y + 143, panel.size.x - 56, 14, TEXT_DIM, HORIZONTAL_ALIGNMENT_CENTER)
+	var rows: Array = info.get("rows", [])
+	var row_y: float = panel.position.y + 198
+	for i in range(mini(rows.size(), 3)):
+		var r := Rect2(panel.position.x + 24, row_y + i * 40, panel.size.x - 48, 34)
+		_panel(r, Color(1, 1, 1, 0.045), 10)
+		_txt_r(str(rows[i][0]), r.end.x - 10, r.position.y + 22, 12, TEXT_DIM, false, r.size.x * 0.62)
+		_txt_c(str(rows[i][1]), Rect2(r.position.x + 8, r.position.y, r.size.x * 0.36, r.size.y), 14, TEXT, true)
+	_txt_c("صفحه‌ی نهایی پشت این پنجره حفظ شده است", Rect2(panel.position.x + 12, panel.end.y - 34, panel.size.x - 24, 20), 11, TEXT_FAINT, false)
 
 # ---------------- DASHBOARD ----------------
 func _set_tab(i: int) -> void:
@@ -3777,6 +3988,8 @@ func _draw() -> void:
 			_draw_rules()
 		if not dialog.is_empty():
 			_draw_dialog()
+		if _result_popup_open and dialog.is_empty() and not pause_open and not rules_open:
+			_draw_result_popup()
 		for b in ov_buttons:
 			_draw_button(b)
 	_draw_toast()
@@ -4216,10 +4429,173 @@ func _rpc_mm_sync_state(guesses: Array, is_over: bool, winner: int) -> void:
 	else:
 		_build_playing_buttons()
 
+func _mm_lan_initialize_race() -> void:
+	mm_lan_race_stats.clear()
+	mm_lan_race_started_msec = Time.get_ticks_msec()
+	for seat in range(connected_players):
+		mm_lan_race_stats[seat] = {"status": "active", "attempts_used": 0, "latest_black": 0, "solve_ms": 0}
+	rpc("_rpc_lan_roster_sync", _build_lan_roster())
+	_mm_lan_broadcast_progress()
+
+func _mm_lan_before(a: Dictionary, b: Dictionary) -> bool:
+	var order: Dictionary = {"solved": 0, "active": 1, "failed": 2}
+	var status_a: String = str(a.get("status", "active"))
+	var status_b: String = str(b.get("status", "active"))
+	if int(order.get(status_a, 1)) != int(order.get(status_b, 1)):
+		return int(order.get(status_a, 1)) < int(order.get(status_b, 1))
+	if status_a == "solved":
+		if int(a.get("solve_ms", 0)) != int(b.get("solve_ms", 0)):
+			return int(a.get("solve_ms", 0)) < int(b.get("solve_ms", 0))
+		return int(a.get("seat", 0)) < int(b.get("seat", 0))
+	if status_a == "active":
+		if int(a.get("latest_black", 0)) != int(b.get("latest_black", 0)):
+			return int(a.get("latest_black", 0)) > int(b.get("latest_black", 0))
+		if int(a.get("attempts_used", 0)) != int(b.get("attempts_used", 0)):
+			return int(a.get("attempts_used", 0)) < int(b.get("attempts_used", 0))
+	return int(a.get("seat", 0)) < int(b.get("seat", 0))
+
+func _mm_lan_build_progress() -> Array:
+	var progress: Array = []
+	var seats: Array[int] = []
+	for seat_key in mm_lan_race_stats.keys():
+		seats.append(int(seat_key))
+	seats.sort()
+	for seat in seats:
+		var stat: Dictionary = mm_lan_race_stats.get(seat, {"status": "active", "attempts_used": 0, "latest_black": 0, "solve_ms": 0})
+		var username: String = "بازیکن %d" % (seat + 1)
+		for entry in online_player_roster:
+			if int(entry.get("seat", -1)) == seat:
+				username = str(entry.get("username", username))
+				break
+		progress.append({"seat": seat, "username": username, "status": str(stat.get("status", "active")), "attempts_used": int(stat.get("attempts_used", 0)), "latest_black": int(stat.get("latest_black", 0)), "solve_ms": int(stat.get("solve_ms", 0))})
+	for i in range(progress.size()):
+		for j in range(i + 1, progress.size()):
+			if _mm_lan_before(progress[j], progress[i]):
+				var swap_value: Dictionary = progress[i]
+				progress[i] = progress[j]
+				progress[j] = swap_value
+	for i in range(progress.size()):
+		progress[i]["rank"] = i + 1
+	return progress
+
+func _mm_lan_broadcast_progress() -> void:
+	if not is_host or multiplayer.multiplayer_peer == null or selected_game != "mastermind":
+		return
+	rpc("_rpc_mm_lan_progress", _mm_lan_build_progress())
+
+func _mm_lan_process_guess(guess: Array, seat: int) -> void:
+	if not is_host or selected_game != "mastermind" or state != State.PLAYING:
+		return
+	var mm = _game_modules["mastermind"]
+	if not bool(mm.mm_lan_race) or seat < 0 or not mm_lan_race_stats.has(seat):
+		return
+	var stat: Dictionary = mm_lan_race_stats[seat]
+	if str(stat.get("status", "active")) != "active":
+		return
+	if guess.size() != int(mm.mm_code_len):
+		return
+	for color in guess:
+		if not (color is int) or int(color) < 0 or int(color) >= int(mm.mm_color_count):
+			return
+	var feedback: Array = mm._mm_feedback(guess)
+	var black: int = 0
+	var white: int = 0
+	for item in feedback:
+		if int(item) == 2:
+			black += 1
+		elif int(item) == 1:
+			white += 1
+	stat["attempts_used"] = int(stat.get("attempts_used", 0)) + 1
+	stat["latest_black"] = black
+	var solved: bool = black == int(mm.mm_code_len)
+	var failed: bool = not solved and int(stat["attempts_used"]) >= 10
+	if solved:
+		stat["status"] = "solved"
+		stat["solve_ms"] = maxi(1, Time.get_ticks_msec() - mm_lan_race_started_msec)
+	elif failed:
+		stat["status"] = "failed"
+	mm_lan_race_stats[seat] = stat
+	var packet: Dictionary = {"guess": guess.duplicate(), "feedback": feedback, "black": black, "white": white, "attempt": int(stat["attempts_used"]), "solved": solved, "failed": failed, "status": str(stat["status"]), "solve_ms": int(stat["solve_ms"])}
+	if seat == 0:
+		mm._mm_lan_feedback(packet)
+	else:
+		var receiver_id: int = -1
+		for peer_id in peer_to_seat.keys():
+			if int(peer_to_seat[peer_id]) == seat:
+				receiver_id = int(peer_id)
+				break
+		if receiver_id > 0:
+			rpc_id(receiver_id, "_rpc_mm_lan_feedback", packet)
+	var progress: Array = _mm_lan_build_progress()
+	rpc("_rpc_mm_lan_progress", progress)
+	_mm_lan_finish_if_complete()
+
+func _mm_lan_finish_if_complete() -> void:
+	if not is_host or mm_lan_race_stats.is_empty() or selected_game != "mastermind":
+		return
+	for player_stat in mm_lan_race_stats.values():
+		if str(player_stat.get("status", "active")) == "active":
+			return
+	var mm = _game_modules["mastermind"]
+	var progress: Array = _mm_lan_build_progress()
+	mm.mm_race_finished = true
+	mm.mm_online_progress = progress.duplicate(true)
+	rpc("_rpc_mm_lan_race_over", progress, mm.mm_secret.duplicate())
+
+@rpc("any_peer", "reliable")
+func _rpc_mm_lan_submit(guess: Array, claimed_seat: int) -> void:
+	if not is_host or multiplayer.multiplayer_peer == null:
+		return
+	var sender_id: int = multiplayer.get_remote_sender_id()
+	if not peer_to_seat.has(sender_id) or int(peer_to_seat[sender_id]) != claimed_seat:
+		return
+	_mm_lan_process_guess(guess, claimed_seat)
+
+@rpc("authority", "reliable")
+func _rpc_mm_lan_feedback(packet: Dictionary) -> void:
+	if selected_game == "mastermind" and state == State.PLAYING:
+		_game_modules["mastermind"]._mm_lan_feedback(packet)
+
+@rpc("authority", "call_local", "reliable")
+func _rpc_mm_lan_progress(progress: Array) -> void:
+	if selected_game != "mastermind":
+		return
+	_game_modules["mastermind"].mm_online_progress = progress.duplicate(true)
+	_rebuild_buttons()
+
+@rpc("authority", "call_local", "reliable")
+func _rpc_mm_lan_race_over(progress: Array, secret: Array) -> void:
+	if selected_game != "mastermind":
+		return
+	var mm = _game_modules["mastermind"]
+	mm.mm_online_progress = progress.duplicate(true)
+	mm.mm_race_finished = true
+	if secret.size() == int(mm.mm_code_len):
+		mm.mm_secret = secret.duplicate()
+	if not mm.mm_game_over:
+		mm.mm_game_over = true
+		mm.mm_race_status = "مسابقه تمام شد"
+	# Show the end-of-race popup only when every player has finished.
+	_go_result(false)
+	_rebuild_buttons()
+
 @rpc("any_peer", "call_local", "reliable")
-func _rpc_quo_action(kind: int, x: int, y: int, vertical: bool) -> void:
-	if selected_game == "quoridor" and state == State.PLAYING:
-		_game_modules["quoridor"]._quo_net_apply(kind, x, y, vertical)
+func _rpc_quo_action(kind: int, x: int, y: int, vertical: bool, claimed_seat: int = -1) -> void:
+	if selected_game != "quoridor" or state != State.PLAYING or quo_game_over:
+		return
+	var active_seat: int = int(quo_turn)
+	if claimed_seat < 0:
+		claimed_seat = active_seat # Compatibility with older LAN clients.
+	if claimed_seat != active_seat:
+		return
+	if multiplayer.multiplayer_peer != null and multiplayer.is_server():
+		var sender_id: int = multiplayer.get_remote_sender_id()
+		if sender_id == 0:
+			if local_seat != claimed_seat:
+				return
+		elif int(peer_to_seat.get(sender_id, -1)) != claimed_seat:
+			return
+	_game_modules["quoridor"]._quo_net_apply(kind, x, y, vertical)
 
 func _draw_domino() -> void:
 	_game_modules["domino"]._draw_domino()
@@ -4516,7 +4892,7 @@ func _ws_handle_server_message(message: Dictionary) -> void:
 		"action":
 			_receive_ws_game_action(message)
 		"emoji":
-			if ws_match_active and int(message.get("seat", -1)) == 1 - local_seat:
+			if ws_match_active and int(message.get("seat", -1)) != local_seat:
 				var emoji: String = str(message.get("emoji", ""))
 				if ONLINE_EMOJIS.has(emoji):
 					_show_toast(opponent_name + "  " + emoji)
@@ -4533,9 +4909,28 @@ func _ws_handle_server_message(message: Dictionary) -> void:
 				var guesses_value: Variant = message.get("guesses", [])
 				if guesses_value is Array:
 					_rpc_mm_sync_state(guesses_value, bool(message.get("is_over", false)), int(message.get("winner", -1)))
+		"mastermind_feedback":
+			if ws_match_active and selected_game == "mastermind":
+				_game_modules["mastermind"]._mm_online_feedback(message)
+		"mastermind_progress":
+			if ws_match_active and selected_game == "mastermind":
+				_game_modules["mastermind"].mm_online_progress = message.get("players", []).duplicate(true)
+				_rebuild_buttons()
+		"mastermind_race_over":
+			if ws_match_active and selected_game == "mastermind":
+				_game_modules["mastermind"].mm_race_finished = true
+				_game_modules["mastermind"].mm_online_progress = message.get("players", []).duplicate(true)
+				var final_secret: Variant = message.get("secret", [])
+				if final_secret is Array and final_secret.size() == int(_game_modules["mastermind"].mm_code_len):
+					_game_modules["mastermind"].mm_secret = final_secret.duplicate()
+				if not _game_modules["mastermind"].mm_game_over:
+					_game_modules["mastermind"].mm_game_over = true
+					_game_modules["mastermind"].mm_race_status = "مسابقه به پایان رسید"
+				_go_result(false)
+				_rebuild_buttons()
 		"restart_game":
 			if ws_match_active and not is_host and str(message.get("game", "")) == selected_game:
-				_rpc_start_game(selected_game, int(message.get("seed", 0)), int(message.get("mastermind_difficulty", -1)), int(message.get("blockace_difficulty", -1)))
+				_rpc_start_game(selected_game, int(message.get("seed", 0)), int(message.get("mastermind_difficulty", -1)), int(message.get("blockace_difficulty", -1)), int(message.get("player_count", connected_players)))
 		"opponent_left":
 			ws_match_active = false
 			ws_state = "idle"
@@ -4568,14 +4963,21 @@ func _ws_begin_match(message: Dictionary) -> void:
 	_set_game(game_id)
 	online_game = game_id
 	_origin_online = true
-	local_seat = clampi(int(message.get("seat", 0)), 0, 1)
+	local_seat = clampi(int(message.get("seat", 0)), 0, 3)
 	is_host = local_seat == 0
 	local_player_id = local_seat + 1
 	peer_to_seat.clear()
-	connected_players = 2
+	connected_players = clampi(int(message.get("player_count", 2)), 2, 4)
+	online_player_roster = message.get("players", []).duplicate(true)
 	vs_cpu = false
 	my_name = online_username
 	opponent_name = str(message.get("opponent_username", "حریف"))
+	if online_player_roster.size() > 2:
+		var other_names: Array[String] = []
+		for entry in online_player_roster:
+			if int(entry.get("seat", -1)) != local_seat:
+				other_names.append(str(entry.get("username", "بازیکن")))
+		opponent_name = ", ".join(other_names)
 	online_room_code = str(message.get("room_id", ""))
 	ws_state = "matched"
 	ws_match_active = true
@@ -4589,7 +4991,7 @@ func _ws_begin_match(message: Dictionary) -> void:
 	var seed_value: int = int(message.get("seed", 0))
 	var mm_level: int = mm_difficulty if game_id == "mastermind" else -1
 	var blk_level: int = blk_difficulty if game_id == "blockace" else -1
-	_rpc_start_game(game_id, seed_value, mm_level, blk_level)
+	_rpc_start_game(game_id, seed_value, mm_level, blk_level, connected_players)
 	_show_toast("حریف پیدا شد: " + opponent_name)
 	_rebuild_buttons()
 
@@ -4609,7 +5011,7 @@ func _ws_game_turn_seat() -> int:
 	return -1
 
 func _ws_remote_action_allowed(action: String, args: Array, sender_seat: int) -> bool:
-	if state != State.PLAYING or sender_seat < 0 or sender_seat > 1 or sender_seat == local_seat:
+	if state != State.PLAYING or sender_seat < 0 or sender_seat >= connected_players or sender_seat == local_seat:
 		return false
 	# Resigning is allowed at any point, even when it is not the resigning player's turn.
 	if action == "_rpc_resign":
@@ -4647,7 +5049,7 @@ func _ws_execute_game_action(action: String, args: Array) -> void:
 		"_rpc_dom_draw": _rpc_dom_draw(int(args[0]))
 		"_rpc_dom_pass": _rpc_dom_pass(int(args[0]))
 		"_rpc_chess_move": _rpc_chess_move(int(args[0]), int(args[1]), int(args[2]), int(args[3]))
-		"_rpc_quo_action": _rpc_quo_action(int(args[0]), int(args[1]), int(args[2]), bool(args[3]))
+		"_rpc_quo_action": _rpc_quo_action(int(args[0]), int(args[1]), int(args[2]), bool(args[3]), int(args[4]) if args.size() > 4 else -1)
 		"_rpc_pas_play": _rpc_pas_play(int(args[0]), int(args[1]), args[2])
 		"_rpc_gob_place": _rpc_gob_place(int(args[0]), int(args[1]), int(args[2]), int(args[3]))
 		"_rpc_gob_move": _rpc_gob_move(int(args[0]), int(args[1]), int(args[2]), int(args[3]), int(args[4]))
@@ -4767,6 +5169,10 @@ func _cleanup_network() -> void:
 	connected_players = 1
 	local_seat = 0
 	peer_to_seat.clear()
+	peer_to_username.clear()
+	mm_lan_race_stats.clear()
+	mm_lan_race_started_msec = 0
+	online_player_roster.clear()
 	host_ips.clear()
 	join_ip = ""
 	_client_connected = false
@@ -4774,6 +5180,7 @@ func _cleanup_network() -> void:
 func _on_connected_to_server() -> void:
 	local_player_id = multiplayer.get_unique_id()
 	_client_connected = true
+	rpc_id(1, "_rpc_register_lan_username", online_username)
 	_show_toast("متصل شدید! منتظر شروع بازی توسط میزبان…")
 
 func _on_connection_failed() -> void:

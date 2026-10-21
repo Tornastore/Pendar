@@ -183,8 +183,7 @@ func _quo_apply_move(player: int, target: Vector2i) -> void:
 	if _quo_goal_reached(player, target):
 		quo_game_over = true
 		quo_winner = player
-		app.state = State.RESULT
-		app._build_result_buttons()
+		app._go_result()
 		return
 	_quo_advance_turn(player)
 
@@ -207,8 +206,7 @@ func _quo_advance_turn(completed_player: int) -> void:
 	# Extremely rare deadlock: nobody can move or place a wall.
 	quo_game_over = true
 	quo_winner = -1
-	app.state = State.RESULT
-	app._build_result_buttons()
+	app._go_result()
 
 func _quo_next_step(player: int) -> Vector2i:
 	var start: Vector2i = quo_pawns[player]
@@ -310,7 +308,7 @@ func _quo_tap(p: Vector2) -> void:
 		)
 		if target in _quo_legal_moves(quo_turn):
 			if app._net_on():
-				app._send_game_action("_rpc_quo_action", [0, target.x, target.y, false])
+				app._send_game_action("_rpc_quo_action", [0, target.x, target.y, false, quo_turn])
 			else:
 				_quo_apply_move(quo_turn, target)
 	else:
@@ -322,7 +320,7 @@ func _quo_tap(p: Vector2) -> void:
 			return
 		if app._net_on():
 			if _quo_wall_placement_legal(int(edge.x), int(edge.y), bool(edge.v)):
-				app._send_game_action("_rpc_quo_action", [1, int(edge.x), int(edge.y), bool(edge.v)])
+				app._send_game_action("_rpc_quo_action", [1, int(edge.x), int(edge.y), bool(edge.v), quo_turn])
 			else:
 				app._show_toast("دیوار غیرمجاز است: هم‌پوشانی، تقاطع یا بستن مسیر بازیکن.")
 		elif _quo_place_wall(int(edge.x), int(edge.y), bool(edge.v)):

@@ -199,8 +199,7 @@ func _blk_finish_game() -> void:
 	blk_game_over = true
 	blk_scores = [_blk_score_player(0), _blk_score_player(1)]
 	blk_winner = 0 if blk_scores[0] > blk_scores[1] else (1 if blk_scores[1] > blk_scores[0] else -1)
-	app.state = State.RESULT
-	app._build_result_buttons()
+	app._go_result()
 
 func _blk_move_score(move: Dictionary, player: int, difficulty: int) -> float:
 	var cells: Array = _blk_cells(int(move.i), int(move.r), bool(move.f))

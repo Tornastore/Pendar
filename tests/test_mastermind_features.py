@@ -53,6 +53,22 @@ class MastermindFeatureTests(unittest.TestCase):
             )
         self.assertEqual(RULES.count("app.draw_circle("), 5)
 
+
+    def test_race_rank_remains_live_until_every_player_finishes(self):
+        feedback = RULES[RULES.index('func _mm_accept_race_feedback'):RULES.index('func _mm_apply')]
+        self.assertIn('Keep the live leaderboard visible until every racer has finished.', feedback)
+        self.assertNotIn('app._go_result(solved)', feedback)
+        self.assertIn('"mastermind_race_over"', MAIN)
+        self.assertIn('_go_result(false)', MAIN[MAIN.index('"mastermind_race_over"'):MAIN.index('"restart_game"', MAIN.index('"mastermind_race_over"'))])
+        self.assertIn('final_secret', MAIN)
+
+    def test_public_mastermind_sidebar_does_not_expose_other_guess_rows(self):
+        sidebar = RULES[RULES.index('func _draw_mm_online_sidebar'):RULES.index('func _mm_online_feedback')]
+        self.assertIn('latest_black', sidebar)
+        self.assertIn('progress_ratio', sidebar)
+        self.assertNotIn('attempts_used', sidebar)
+        self.assertNotIn('entry.get(\"guess\"', sidebar)
+
     def test_guess_slots_and_color_controls_are_dynamic(self):
         self.assertIn("for i in range(mm_code_len):", RULES)
         self.assertIn("for i in range(mm_color_count):", RULES)
