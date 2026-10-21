@@ -90,3 +90,22 @@ def test_backgammon_stops_search_after_terminal_bear_off():
     terminal = ai.index("if int(game.bg_off[1]) >= 15 or int(game.bg_off[0]) >= 15:", fn)
     finish = ai.index("if index >= dice.size():", fn)
     assert terminal < finish
+
+def test_quoridor_expert_and_grandmaster_search_is_hard_bounded_for_web():
+    ai = read("games/quoridor/ai.gd")
+    assert "EXPERT_SEARCH_BUDGET_USEC: int = 80000" in ai
+    assert "GRANDMASTER_SEARCH_BUDGET_USEC: int = 135000" in ai
+    assert "EXPERT_NODE_BUDGET: int = 48" in ai
+    assert "GRANDMASTER_NODE_BUDGET: int = 88" in ai
+    assert "func _should_abort_search() -> bool:" in ai
+    assert "if alpha >= beta or _search_aborted:" in ai
+    assert "_route_wall_candidates(game, 1 - player, _active_wall_route_segments)" in ai
+
+
+def test_quoridor_minimax_no_longer_scans_all_128_walls_at_every_node():
+    ai = read("games/quoridor/ai.gd")
+    actions = ai[ai.index("func _search_actions("):ai.index("func _route_wall_candidates(")]
+    assert "_route_wall_candidates(" in actions
+    assert "for y in range(8)" not in actions
+    assert "_wall_evaluations_remaining <= 0" in actions
+    assert "Always include legal pawn moves first" in actions

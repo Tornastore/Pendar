@@ -11,7 +11,11 @@ def test_online_matchmaker_server_and_liara_config_exist():
     text = server.read_text(encoding="utf-8")
     assert "join_queue" in text
     assert "match_found" in text
-    assert "mastermind_secret_ready" in text
+    # The current race mode keeps each secret on the server instead of
+    # asking a client to submit/announce the hidden code.
+    assert "makeMastermindRoomState" in text
+    assert "evaluateMastermindGuess" in text
+    assert "mastermind_feedback" in text
     assert "opponent_left" in text
     assert "ALLOWED_ORIGINS" in text
 

@@ -4,12 +4,25 @@ extends RefCounted
 const DIRS: Array[Vector2i] = [
 	Vector2i(0, -1), Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1)
 ]
-const MASTER_SEARCH_DEPTH: int = 4 # Grandmaster looks four plies ahead where branching permits.
+const MASTER_SEARCH_DEPTH: int = 4 # Kept for strong play, but all search is hard-bounded below.
 const MASTER_WALL_BRANCH: int = 2
 const WIN_SCORE: float = 100000.0
+# A browser game's main thread must never be occupied by an unbounded search.
+# These budgets cap wall evaluations, minimax nodes and wall-clock time per move.
+const EXPERT_SEARCH_BUDGET_USEC: int = 80000
+const GRANDMASTER_SEARCH_BUDGET_USEC: int = 135000
+const EXPERT_NODE_BUDGET: int = 48
+const GRANDMASTER_NODE_BUDGET: int = 88
+const EXPERT_WALL_EVALUATION_BUDGET: int = 42
+const GRANDMASTER_WALL_EVALUATION_BUDGET: int = 76
 var _active_search_depth: int = MASTER_SEARCH_DEPTH
 var _active_wall_branch: int = MASTER_WALL_BRANCH
-var _root_wall_branch: int = 3
+var _root_wall_branch: int = 2
+var _active_wall_route_segments: int = 8
+var _search_deadline_usec: int = 0
+var _nodes_remaining: int = 0
+var _wall_evaluations_remaining: int = 0
+var _search_aborted: bool = false
 const IMMEDIATE_REVERSAL_PENALTY: float = 175.0
 const RECENT_REVISIT_PENALTY: float = 42.0
 const HISTORY_LOOKBACK: int = 9
@@ -17,10 +30,16 @@ const HISTORY_LOOKBACK: int = 9
 func choose_action(game, difficulty: int) -> Dictionary:
 	var level: int = clampi(difficulty, 1, 6)
 	if level >= 5:
-		# Expert searches a shorter line; Grandmaster widens and deepens the tree.
+		# Expert and Grandmaster use a bounded adversarial search. Deadlines are
+		# especially important for Web exports, where GDScript runs on the UI thread.
 		_active_search_depth = 3 if level == 5 else MASTER_SEARCH_DEPTH
 		_active_wall_branch = 1 if level == 5 else MASTER_WALL_BRANCH
-		_root_wall_branch = 2 if level == 5 else 3
+		_root_wall_branch = 1 if level == 5 else 2
+		_search_deadline_usec = Time.get_ticks_usec() + (EXPERT_SEARCH_BUDGET_USEC if level == 5 else GRANDMASTER_SEARCH_BUDGET_USEC)
+		_nodes_remaining = EXPERT_NODE_BUDGET if level == 5 else GRANDMASTER_NODE_BUDGET
+		_wall_evaluations_remaining = EXPERT_WALL_EVALUATION_BUDGET if level == 5 else GRANDMASTER_WALL_EVALUATION_BUDGET
+		_active_wall_route_segments = 8
+		_search_aborted = false
 		return _choose_master_grandmaster(game)
 	var cpu_pos: Vector2i = game.quo_pawns[1]
 	var human_pos: Vector2i = game.quo_pawns[0]
@@ -79,10 +98,16 @@ func _choose_master_grandmaster(game) -> Dictionary:
 	if actions.is_empty():
 		var forced_wall: Dictionary = _first_legal_wall(game, 1)
 		return forced_wall if not forced_wall.is_empty() else {"type": "pass"}
+	# _search_actions always adds legal pawn moves before wall analysis. If its
+	# bounded wall scan already used the deadline, return the top ordered move now.
+	if _search_aborted:
+		return actions[0]
 	var best_action: Dictionary = actions[0]
 	var best_score: float = -INF
 	var root_distance: int = _distance(game, 1, game.quo_pawns[1])
 	for action in actions:
+		if _should_abort_search():
+			break
 		var snapshot: Dictionary = _save_search_state(game)
 		_apply_search_action(game, 1, action)
 		# Use a full window for every root action: the history penalty is applied
@@ -90,13 +115,14 @@ func _choose_master_grandmaster(game) -> Dictionary:
 		# prune a move whose anti-repetition bonus makes it the better choice.
 		var score: float = _minimax(game, 0, _active_search_depth - 1, -INF, INF)
 		_restore_search_state(game, snapshot)
-		# The search evaluates a finite horizon and can tie strategically similar
-		# positions. Penalize repeated pawn positions at the root so the CPU
-		# cannot get trapped in a two-square ping-pong loop across real turns.
+		# Penalize repeated pawn positions and keep the best completed candidate so
+		# far. If a deadline is reached, return that candidate instead of freezing UI.
 		score += _master_root_preference(game, action, root_distance)
 		if score > best_score:
 			best_score = score
 			best_action = action
+		if _search_aborted:
+			break
 	return best_action
 
 func _master_root_preference(game, action: Dictionary, root_distance: int) -> float:
@@ -126,8 +152,22 @@ func _move_repetition_penalty(game, target: Vector2i) -> float:
 			penalty += RECENT_REVISIT_PENALTY + maxf(0.0, 4.0 - float(age)) * 6.0
 	return penalty
 
+func _should_abort_search() -> bool:
+	if _search_aborted:
+		return true
+	if _search_deadline_usec > 0 and Time.get_ticks_usec() >= _search_deadline_usec:
+		_search_aborted = true
+		return true
+	if _nodes_remaining <= 0:
+		_search_aborted = true
+		return true
+	return false
+
 func _minimax(game, player: int, depth: int, alpha: float, beta: float) -> float:
 	# Player 1 is the computer and maximizes the evaluation; player 0 minimizes it.
+	if _should_abort_search():
+		return _evaluate_master_position(game)
+	_nodes_remaining -= 1
 	if game.quo_pawns[1].y == 0:
 		return WIN_SCORE + float(depth)
 	if game.quo_pawns[0].y == 8:
@@ -141,27 +181,31 @@ func _minimax(game, player: int, depth: int, alpha: float, beta: float) -> float
 	if player == 1:
 		var max_value: float = -INF
 		for action in actions:
+			if _should_abort_search():
+				break
 			var snapshot: Dictionary = _save_search_state(game)
 			_apply_search_action(game, player, action)
 			var child: float = _minimax(game, 0, depth - 1, alpha, beta)
 			_restore_search_state(game, snapshot)
 			max_value = maxf(max_value, child)
 			alpha = maxf(alpha, max_value)
-			if alpha >= beta:
+			if alpha >= beta or _search_aborted:
 				break
-		return max_value
+		return max_value if max_value > -INF else _evaluate_master_position(game)
 	else:
 		var min_value: float = INF
 		for action in actions:
+			if _should_abort_search():
+				break
 			var snapshot: Dictionary = _save_search_state(game)
 			_apply_search_action(game, player, action)
 			var child: float = _minimax(game, 1, depth - 1, alpha, beta)
 			_restore_search_state(game, snapshot)
 			min_value = minf(min_value, child)
 			beta = minf(beta, min_value)
-			if alpha >= beta:
+			if alpha >= beta or _search_aborted:
 				break
-		return min_value
+		return min_value if min_value < INF else _evaluate_master_position(game)
 
 func _search_actions(game, player: int, wall_limit: int) -> Array[Dictionary]:
 	var actions: Array[Dictionary] = []
@@ -170,7 +214,8 @@ func _search_actions(game, player: int, wall_limit: int) -> Array[Dictionary]:
 	var own_distance: int = _distance(game, player, pawn)
 	var enemy_distance: int = _distance(game, 1 - player, other_pawn)
 
-	# Include standard straight jumps and diagonal evasions around blocked jumps.
+	# Always include legal pawn moves first so there is a usable fallback even if
+	# the search deadline is reached while considering defensive walls.
 	for target in game._quo_legal_moves_from(player, pawn):
 		var target_distance: int = _distance(game, player, target)
 		var move_order: float = float(own_distance - target_distance) * 100.0
@@ -180,22 +225,21 @@ func _search_actions(game, player: int, wall_limit: int) -> Array[Dictionary]:
 			move_order += -absf(float(target.x) - 4.0) * 0.2
 		actions.append({"type": "move", "to": target, "order_score": move_order})
 
-	# Wall actions are the most important branching factor. Evaluate all board edges,
-	# then retain only the strongest few for this ply, without touching the real turn.
-	if int(game.quo_walls_left[player]) > 0:
+	if int(game.quo_walls_left[player]) > 0 and not _should_abort_search():
 		var wall_actions: Array[Dictionary] = []
-		for y in range(8):
-			for x in range(8):
-				var h_key: String = "h%d,%d" % [x, y]
-				var candidate: Dictionary = _search_wall_candidate(game, player, h_key, x, y, false, own_distance, enemy_distance)
-				if not candidate.is_empty():
-					wall_actions.append(candidate)
-		for y in range(8):
-			for x in range(8):
-				var v_key: String = "v%d,%d" % [x, y]
-				var candidate: Dictionary = _search_wall_candidate(game, player, v_key, x, y, true, own_distance, enemy_distance)
-				if not candidate.is_empty():
-					wall_actions.append(candidate)
+		# Only inspect walls that could cut edges on the opponent's current shortest
+		# route. The old 128-position full scan at every minimax node caused seconds
+		# of synchronous work in HTML5 exports.
+		var candidates: Array[Dictionary] = _route_wall_candidates(game, 1 - player, _active_wall_route_segments)
+		for wall_info in candidates:
+			if _should_abort_search() or _wall_evaluations_remaining <= 0:
+				break
+			var candidate: Dictionary = _search_wall_candidate(
+				game, player, str(wall_info.key), int(wall_info.x), int(wall_info.y),
+				bool(wall_info.vertical), own_distance, enemy_distance
+			)
+			if not candidate.is_empty():
+				wall_actions.append(candidate)
 		wall_actions.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 			return float(a.get("order_score", -INF)) > float(b.get("order_score", -INF))
 		)
@@ -207,9 +251,72 @@ func _search_actions(game, player: int, wall_limit: int) -> Array[Dictionary]:
 	)
 	return actions
 
+func _route_wall_candidates(game, target_player: int, max_segments: int) -> Array[Dictionary]:
+	var candidates: Array[Dictionary] = []
+	var seen: Dictionary = {}
+	var route: Array[Vector2i] = _shortest_route_cells(game, target_player)
+	if route.size() < 2:
+		return candidates
+	var edge_count: int = mini(max_segments, route.size() - 1)
+	for index in range(edge_count):
+		var from: Vector2i = route[index]
+		var to: Vector2i = route[index + 1]
+		if from.x != to.x:
+			# A vertical wall can block this horizontal edge from either adjacent row.
+			var anchor_x: int = mini(from.x, to.x)
+			for anchor_y in [from.y, from.y - 1]:
+				if anchor_x < 0 or anchor_x > 7 or anchor_y < 0 or anchor_y > 7:
+					continue
+				var v_key: String = "v%d,%d" % [anchor_x, anchor_y]
+				if not seen.has(v_key):
+					seen[v_key] = true
+					candidates.append({"key": v_key, "x": anchor_x, "y": anchor_y, "vertical": true})
+		else:
+			# A horizontal wall can block this vertical edge from either adjacent column.
+			var anchor_y: int = mini(from.y, to.y)
+			for anchor_x in [from.x, from.x - 1]:
+				if anchor_x < 0 or anchor_x > 7 or anchor_y < 0 or anchor_y > 7:
+					continue
+				var h_key: String = "h%d,%d" % [anchor_x, anchor_y]
+				if not seen.has(h_key):
+					seen[h_key] = true
+					candidates.append({"key": h_key, "x": anchor_x, "y": anchor_y, "vertical": false})
+	return candidates
+
+func _shortest_route_cells(game, player: int) -> Array[Vector2i]:
+	# Cheap adjacent-cell BFS used only to derive relevant wall anchors. It mirrors
+	# the route legality rule (a pawn always has at least one open path to its goal).
+	var start: Vector2i = game.quo_pawns[player]
+	var previous: Dictionary = {start: start}
+	var queue: Array[Vector2i] = [start]
+	var head: int = 0
+	var goal: Vector2i = Vector2i(-1, -1)
+	while head < queue.size():
+		var current: Vector2i = queue[head]
+		head += 1
+		if game._quo_goal_reached(player, current):
+			goal = current
+			break
+		for direction in DIRS:
+			var next: Vector2i = current + direction
+			if game._quo_can_move(current, next) and not previous.has(next):
+				previous[next] = current
+				queue.append(next)
+	if goal.x < 0:
+		return []
+	var path: Array[Vector2i] = [goal]
+	var cursor: Vector2i = goal
+	while cursor != start:
+		cursor = previous[cursor]
+		path.push_front(cursor)
+	return path
+
 func _search_wall_candidate(game, player: int, key: String, x: int, y: int, vertical: bool, own_distance: int, enemy_distance: int) -> Dictionary:
+	if _should_abort_search() or _wall_evaluations_remaining <= 0:
+		return {}
 	if not game._quo_wall_geometry_clear(x, y, vertical):
 		return {}
+	_wall_evaluations_remaining -= 1
 	game.quo_walls[key] = true
 	var paths_ok: bool = true
 	for path_player in range(game.quo_player_count):
@@ -364,25 +471,16 @@ func _best_wall(game, level: int, current_cpu_distance: int, current_human_dista
 			turn_cost = 27.0 - urgency * 5.0
 			wall_cost = 7.0 + float(cpu_walls_spent) * 3.5 - urgency * 10.0
 
-	# Each candidate is a full two-edge wall; geometry and path legality are checked by rules.gd.
-	for y in range(8):
-		for x in range(8):
-			var key: String = "h%d,%d" % [x, y]
-			var candidate: Dictionary = _evaluate_wall(game, key, x, y, false, current_cpu_distance, current_human_distance)
-			if not candidate.is_empty():
-				var score: float = _wall_score(candidate, level, enemy_weight, self_penalty, turn_cost, wall_cost, urgency, lead_penalty)
-				if score > best_score:
-					best_score = score
-					best = candidate
-	for y in range(8):
-		for x in range(8):
-			var key: String = "v%d,%d" % [x, y]
-			var candidate: Dictionary = _evaluate_wall(game, key, x, y, true, current_cpu_distance, current_human_distance)
-			if not candidate.is_empty():
-				var score: float = _wall_score(candidate, level, enemy_weight, self_penalty, turn_cost, wall_cost, urgency, lead_penalty)
-				if score > best_score:
-					best_score = score
-					best = candidate
+	# Evaluate only wall anchors on the opponent's route instead of testing all 128
+	# placements. This keeps even levels 2-4 responsive in web exports.
+	var route_candidates: Array[Dictionary] = _route_wall_candidates(game, 0, 8)
+	for info in route_candidates:
+		var candidate: Dictionary = _evaluate_wall(game, str(info.key), int(info.x), int(info.y), bool(info.vertical), current_cpu_distance, current_human_distance)
+		if not candidate.is_empty():
+			var score: float = _wall_score(candidate, level, enemy_weight, self_penalty, turn_cost, wall_cost, urgency, lead_penalty)
+			if score > best_score:
+				best_score = score
+				best = candidate
 	if best.is_empty():
 		return {}
 	best.score = best_score

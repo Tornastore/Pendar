@@ -1,0 +1,13 @@
+رفع هنگ مرورگر هنگام فکرکردن CPU در کریدور
+
+۱. این بسته را استخراج کنید.
+۲. محتویات پوشه‌ی MindBastion_Modular را روی پوشه‌ی محلی پروژه کپی کنید و فایل‌های هم‌نام را جایگزین کنید؛ پوشه‌ی .git را نگه دارید.
+۳. در Git Bash و از ریشه‌ی مخزن اجرا کنید:
+
+ git add games/quoridor/ai.gd games/quoridor/README.md tests/test_ai_strength.py README.md APPLY_QUORIDOR_WEB_RESPONSIVENESS_FIX_FA.txt
+ git commit -m "Bound Quoridor AI search to keep web responsive"
+ git push origin main
+
+۴. در GitHub Actions، اجرای Deploy Web App to GitHub Pages را بررسی کنید.
+
+توضیح: سطح استاد از بودجه‌ی ۸۰ میلی‌ثانیه و سطح استادتمام از بودجه‌ی ۱۳۵ میلی‌ثانیه، همراه با محدودیت گره و ارزیابی دیوار، استفاده می‌کنند. این محدودیت برای جلوگیری از اشغال طولانی رشته‌ی اصلی مرورگر است. در صورت اتمام بودجه، بهترین حرکت پیدا‌شده تا آن لحظه انتخاب می‌شود.
