@@ -15,6 +15,9 @@ const IllustrationRendererScript = preload("res://ui/illustration_renderer.gd")
 const TabletopArtRendererScript = preload("res://ui/tabletop_art_renderer.gd")
 const DashboardScreenScript = preload("res://ui/screens/dashboard_screen.gd")
 const RankingsScreenScript = preload("res://ui/screens/rankings_screen.gd")
+const RulesScreenScript = preload("res://ui/screens/rules_screen.gd")
+const PauseScreenScript = preload("res://ui/screens/pause_screen.gd")
+const DialogComponentScript = preload("res://ui/components/dialog_component.gd")
 const GAME_MODULE_SCRIPTS := {
 	"othello": preload("res://games/othello/rules.gd"),
 	"pentago": preload("res://games/pentago/rules.gd"),
@@ -37,6 +40,9 @@ var _illustration_renderer = IllustrationRendererScript.new()
 var _tabletop_art_renderer = TabletopArtRendererScript.new()
 var _dashboard_screen = DashboardScreenScript.new()
 var _rankings_screen = RankingsScreenScript.new()
+var _rules_screen = RulesScreenScript.new()
+var _pause_screen = PauseScreenScript.new()
+var _dialog_component = DialogComponentScript.new()
 var _game_modules: Dictionary = {}
 
 
@@ -800,14 +806,17 @@ const PINK := Color(1.0, 0.45, 0.72)
 # Shared style context passed to extracted screen presenters.
 var _ui_screen_theme: Dictionary = {
 	"VIEW_W": VIEW_W,
+	"VIEW_H": VIEW_H,
 	"CARD": CARD,
 	"LINE": LINE,
+	"LINE_STRONG": LINE_STRONG,
 	"BAR": BAR,
 	"ACCENT": ACCENT,
 	"TEXT": TEXT,
 	"TEXT_DIM": TEXT_DIM,
 	"GREEN": GREEN,
 	"RED": RED,
+	"BLUE": BLUE,
 }
 
 func _ensure_game_stats() -> void:
@@ -2703,7 +2712,7 @@ func _rules_prev_page() -> void:
 	_rebuild_buttons()
 
 func _rules_next_page() -> void:
-	var pages: int = maxi(1, int(ceil(float(_rules_lines().size()) / float(RULES_PAGE_SIZE))))
+	var pages: int = _rules_screen.page_count(self)
 	rules_page = mini(pages - 1, rules_page + 1)
 	_rebuild_buttons()
 
@@ -3706,108 +3715,37 @@ func _scrim(a: float = 0.62) -> void:
 	var k: float = _ease_out(_ov_t / 0.18)
 	draw_rect(Rect2(0, 0, VIEW_W, VIEW_H), Color(0.02, 0.03, 0.08, a * k))
 
+# Pause state transitions remain in this controller; layout, input construction and drawing
+# are delegated to a view-only presenter.
 func _pause_layout() -> Rect2:
-	var rows: int = 6 if vs_cpu else 5
-	var h: float = 104.0 + rows * 62.0 + 24.0 + (28.0 if not vs_cpu else 0.0)
-	return Rect2(36, (VIEW_H - h) * 0.5, VIEW_W - 72, h)
+	return _pause_screen.layout(self, _ui_screen_theme)
 
 func _btns_pause() -> void:
-	var p: Rect2 = _pause_layout()
-	var y: float = p.position.y + 92
-	var x: float = p.position.x + 20
-	var w: float = p.size.x - 40
-	_add_ov_btn(Rect2(x, y, w, 54), "ادامه بازی", _close_pause, GREEN, "solid", "play", "p_resume")
-	y += 62
-	_add_ov_btn(Rect2(x, y, w, 54), "راهنمای بازی", _open_rules, BLUE, "soft", "help", "p_rules")
-	y += 62
-	_add_ov_btn(Rect2(x, y, w, 54), _music_label(), _toggle_music, ACCENT, "soft", _music_icon(), "p_music")
-	y += 62
-	if vs_cpu:
-		_add_ov_btn(Rect2(x, y, w, 54), "بازی جدید", _confirm_restart, ACCENT, "soft", "restart", "p_new")
-		y += 62
-	_add_ov_btn(Rect2(x, y, w, 54), "تسلیم", _confirm_resign, RED, "soft", "flag", "p_resign")
-	y += 62
-	_add_ov_btn(Rect2(x, y, w, 54), "خروج به منوی اصلی", _confirm_exit_game, TEXT_DIM, "ghost", "door", "p_exit")
+	_pause_screen.build_buttons(self, _ui_screen_theme)
 
 func _close_pause() -> void:
 	pause_open = false
 	_rebuild_buttons()
 
 func _draw_pause() -> void:
-	_scrim()
-	var p: Rect2 = _pause_layout()
-	var k: float = _ease_out(_ov_t / 0.22)
-	var r := Rect2(p.position + Vector2(0, (1.0 - k) * 30.0), p.size)
-	_panel(r, Color(0.11, 0.14, 0.28), 28, LINE_STRONG, 1.0, 24, 10)
-	_gloss(r, 28, 0.04)
-	_txt_c("توقف بازی", Rect2(r.position.x, r.position.y + 18, r.size.x, 36), 24, TEXT, true)
-	_txt_c(str(_game_info(selected_game).get("name", "")), Rect2(r.position.x, r.position.y + 54, r.size.x, 24), 14, TEXT_DIM)
-	if not vs_cpu:
-		_txt_c("بازی برای حریف متوقف نمی‌شود", Rect2(r.position.x, r.end.y - 38, r.size.x, 24), 12, ACCENT)
-
-const CONN_HELP := [
-	"بدون مودم: روی یک گوشی هات‌اسپات را روشن کنید و گوشی دوم را به وای‌فای همان هات‌اسپات وصل کنید. اینترنت لازم نیست.",
-	"گوشی میزبان: وارد لابی شود و IP نمایش‌داده‌شده را به دوستش بدهد. (دکمه‌ی کپی کنار IP است.) IP هات‌اسپات معمولاً 192.168.43.1 است.",
-	"گوشی مهمان: گزینه‌ی پیوستن را بزند و IP میزبان را کامل وارد کند. مثل 192.168.43.1",
-	"اگر وای‌فای معمولی دارید، هر دو گوشی باید به همان وای‌فای وصل باشند. VPN را هم خاموش کنید.",
-	"اگر IP کار نکرد، آن را از تنظیمات وای‌فای گوشی میزبان بخوانید. IP باید با 192.168 یا 10 یا 172 شروع شود.",
-	"اگر «اتصال ناموفق بود» آمد، یعنی دو گوشی همدیگر را نمی‌بینند. از هات‌اسپات استفاده کنید یا گزینه‌ی AP/Client Isolation روتر را خاموش کنید.",
-	"اگر «خطا در اتصال» همراه با یک کد آمد، آن کد را برای سازنده بفرستید.",
-]
-
-const RULES_PAGE_SIZE := 4
+	_pause_screen.render(self, _ui_screen_theme)
 
 func _conn_help_active() -> bool:
 	return rules_open and (state == State.LOBBY or state == State.IP_ENTRY)
 
+# Backwards-compatible entry points: state and navigation live here, while the
+# help content and its layout/rendering live in RulesScreen.
 func _rules_lines() -> Array:
-	if _conn_help_active():
-		return CONN_HELP
-	match rules_context:
-		"general": return UIContentScript.GENERAL_HELP
-		"online": return UIContentScript.ONLINE_HELP
-		"dashboard": return UIContentScript.DASHBOARD_HELP
-		"rankings": return UIContentScript.RANKINGS_HELP
-		_: return UIContentScript.RULES.get(selected_game, [])
+	return _rules_screen.lines(self)
 
 func _rules_title() -> String:
-	if _conn_help_active():
-		return "راهنمای اتصال"
-	match rules_context:
-		"general": return "راهنمای برنامه"
-		"online": return "راهنمای بازی آنلاین"
-		"dashboard": return "راهنمای آمار"
-		"rankings": return "راهنمای رتبه‌بندی"
-		_: return "راهنمای " + str(_game_info(selected_game).get("name", "بازی"))
+	return _rules_screen.title(self)
 
 func _rules_layout() -> Dictionary:
-	var all_lines: Array = _rules_lines()
-	var page_count: int = maxi(1, int(ceil(float(all_lines.size()) / float(RULES_PAGE_SIZE))))
-	rules_page = clampi(rules_page, 0, page_count - 1)
-	var start_index: int = rules_page * RULES_PAGE_SIZE
-	var page_lines: Array = []
-	for i in range(start_index, mini(start_index + RULES_PAGE_SIZE, all_lines.size())):
-		page_lines.append(all_lines[i])
-	var tw: float = 392.0
-	var total: float = 0.0
-	var hs: Array = []
-	for t in page_lines:
-		var h: float = _wrap_h(str(t), tw, 15)
-		hs.append(h)
-		total += h + 16.0
-	var footer_h: float = 132.0 if page_count > 1 else 84.0
-	var ph: float = minf(VIEW_H - 48.0, 96.0 + total + footer_h)
-	var py: float = maxf(24.0, (VIEW_H - ph) * 0.5)
-	return {"rect": Rect2(24, py, VIEW_W - 48, ph), "hs": hs, "tw": tw, "lines": page_lines, "page": rules_page, "pages": page_count}
+	return _rules_screen.layout(self, _ui_screen_theme)
 
 func _btns_rules() -> void:
-	var l: Dictionary = _rules_layout()
-	var r: Rect2 = l.rect
-	if int(l.pages) > 1:
-		var nav_y: float = r.end.y - 122.0
-		_add_ov_btn(Rect2(r.position.x + 20, nav_y, 130, 42), "قبلی", _rules_prev_page, TEXT_DIM, "ghost", "back", "r_prev", rules_page > 0)
-		_add_ov_btn(Rect2(r.end.x - 150, nav_y, 130, 42), "بعدی", _rules_next_page, ACCENT, "soft", "next", "r_next", rules_page < int(l.pages) - 1)
-	_add_ov_btn(Rect2(r.position.x + 24, r.end.y - 64, r.size.x - 48, 48), "متوجه شدم", _close_rules, GREEN, "solid", "check", "r_ok")
+	_rules_screen.build_buttons(self, _ui_screen_theme)
 
 func _close_rules() -> void:
 	rules_open = false
@@ -3815,58 +3753,18 @@ func _close_rules() -> void:
 	_rebuild_buttons()
 
 func _draw_rules() -> void:
-	_scrim(0.70)
-	var l: Dictionary = _rules_layout()
-	var r: Rect2 = l.rect
-	var col: Color = _game_info(selected_game).get("icon_col", ACCENT)
-	if rules_context != "game":
-		col = BLUE if rules_context == "online" or rules_context == "connection" else ACCENT
-	_panel(r, Color(0.11, 0.14, 0.28), 28, Color(col.r, col.g, col.b, 0.5), 1.5, 24, 10)
-	_gloss(r, 28, 0.04)
-	_txt_c(_rules_title(), Rect2(r.position.x, r.position.y + 18, r.size.x, 40), 22, TEXT, true)
-	draw_rect(Rect2(r.position.x + 28, r.position.y + 68, r.size.x - 56, 1), LINE)
-	var lines: Array = l.lines
-	var hs: Array = l.hs
-	var y: float = r.position.y + 90.0
-	for i in lines.size():
-		var h: float = hs[i]
-		var dc := Vector2(r.end.x - 40, y + 12)
-		draw_circle(dc, 13, Color(col.r, col.g, col.b, 0.25))
-		_txt_c(_fa(int(l.page) * RULES_PAGE_SIZE + i + 1), Rect2(dc.x - 13, dc.y - 13, 26, 26), 13, col.lightened(0.35), true)
-		_wrap(str(lines[i]), r.position.x + 24, y + 16, float(l.tw), 15, TEXT, HORIZONTAL_ALIGNMENT_RIGHT)
-		y += h + 16.0
-	if int(l.pages) > 1:
-		_txt_c("صفحه %s از %s" % [_fa(int(l.page) + 1), _fa(int(l.pages))], Rect2(r.position.x + 154, r.end.y - 122, r.size.x - 308, 42), 13, TEXT_DIM, true)
+	_rules_screen.render(self, _ui_screen_theme)
 
+# Generic dialog rendering is a reusable component. Confirm/cancel callbacks and
+# their state effects deliberately remain in main.gd.
 func _dialog_layout() -> Dictionary:
-	var body: String = str(dialog.get("body", ""))
-	var bh: float = _wrap_h(body, 360.0, 15)
-	var h: float = 150.0 + bh + 24.0 + 54.0 + 12.0 + 50.0 + 24.0
-	return {"rect": Rect2(40, (VIEW_H - h) * 0.5, VIEW_W - 80, h), "bh": bh}
+	return _dialog_component.layout(self, _ui_screen_theme)
 
 func _btns_dialog() -> void:
-	var l: Dictionary = _dialog_layout()
-	var r: Rect2 = l.rect
-	var danger: bool = dialog.get("danger", true)
-	var y: float = r.end.y - 24 - 50 - 12 - 54
-	_add_ov_btn(Rect2(r.position.x + 24, y, r.size.x - 48, 54), str(dialog.confirm), _dialog_confirm, RED if danger else GREEN, "solid", "", "d_confirm")
-	_add_ov_btn(Rect2(r.position.x + 24, y + 66, r.size.x - 48, 50), str(dialog.cancel), _go_back, TEXT_DIM, "ghost", "", "d_cancel")
+	_dialog_component.build_buttons(self, _ui_screen_theme)
 
 func _draw_dialog() -> void:
-	_scrim(0.74)
-	var l: Dictionary = _dialog_layout()
-	var r0: Rect2 = l.rect
-	var k: float = _ease_back(_ov_t / 0.28)
-	var r: Rect2 = Rect2(r0.get_center() - r0.size * 0.5 * (0.88 + 0.12 * k), r0.size * (0.88 + 0.12 * k))
-	var danger: bool = dialog.get("danger", true)
-	var col: Color = RED if danger else GREEN
-	_panel(r, Color(0.11, 0.14, 0.28), 28, Color(col.r, col.g, col.b, 0.5), 1.5, 26, 10)
-	var ic := Vector2(VIEW_W * 0.5, r.position.y + 54)
-	draw_circle(ic, 34, Color(col.r, col.g, col.b, 0.18))
-	_ring(ic, 34, Color(col.r, col.g, col.b, 0.6), 1.5)
-	_draw_icon(str(dialog.get("icon", "warning")), ic, 32, col.lightened(0.15), 2.6)
-	_txt_c(str(dialog.get("title", "")), Rect2(r.position.x, r.position.y + 96, r.size.x, 40), 23, TEXT, true)
-	_wrap(str(dialog.get("body", "")), r.position.x + 40, r.position.y + 150, r.size.x - 80, 15, TEXT_DIM, HORIZONTAL_ALIGNMENT_CENTER)
+	_dialog_component.render(self, _ui_screen_theme)
 
 # ---------------- MASTER DRAW ----------------
 func _draw() -> void:

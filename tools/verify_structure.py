@@ -212,6 +212,51 @@ for screen_path, preload_line, entry_point in (
     if entry_point not in main:
         errors.append(f"main.gd does not delegate rendering to {screen_path}")
 
+# Pause, rules/help and generic confirmation dialogs are presentation modules.
+overlay_modules = (
+    ("ui/screens/pause_screen.gd", 'preload("res://ui/screens/pause_screen.gd")', "_pause_screen", ("layout", "build_buttons", "render")),
+    ("ui/screens/rules_screen.gd", 'preload("res://ui/screens/rules_screen.gd")', "_rules_screen", ("lines", "title", "page_count", "layout", "build_buttons", "render")),
+    ("ui/components/dialog_component.gd", 'preload("res://ui/components/dialog_component.gd")', "_dialog_component", ("layout", "build_buttons", "render")),
+)
+for module_path, preload_line, instance_name, methods in overlay_modules:
+    path = ROOT / module_path
+    if not path.is_file():
+        errors.append(f"missing overlay presentation module: {module_path}")
+        continue
+    source = path.read_text(encoding="utf-8")
+    if not source.startswith("extends RefCounted"):
+        errors.append(f"{module_path} should extend RefCounted")
+    if preload_line not in main or f"var {instance_name} =" not in main:
+        errors.append(f"main.gd does not load/instantiate {module_path}")
+    for method in methods:
+        if not re.search(rf"^func\s+{method}\(", source, re.M):
+            errors.append(f"{module_path} is missing {method}()")
+    if "host.dialog =" in source or "host.pause_open =" in source or "host.rules_open =" in source:
+        errors.append(f"{module_path} must not own overlay open/close state")
+
+# The controller's old entry points remain stable but delegate presentation work.
+for entry_point in (
+    "return _pause_screen.layout(self, _ui_screen_theme)",
+    "_pause_screen.build_buttons(self, _ui_screen_theme)",
+    "_pause_screen.render(self, _ui_screen_theme)",
+    "return _rules_screen.lines(self)",
+    "_rules_screen.build_buttons(self, _ui_screen_theme)",
+    "_rules_screen.render(self, _ui_screen_theme)",
+    "return _dialog_component.layout(self, _ui_screen_theme)",
+    "_dialog_component.build_buttons(self, _ui_screen_theme)",
+    "_dialog_component.render(self, _ui_screen_theme)",
+):
+    if entry_point not in main:
+        errors.append(f"main.gd missing overlay delegation: {entry_point}")
+
+# Stateful operations intentionally remain on the controller, not view presenters.
+for entry_point in (
+    "func _show_confirm(", "func _dialog_confirm()", "func _close_pause()",
+    "func _close_rules()", "func _rules_prev_page()", "func _rules_next_page()",
+):
+    if entry_point not in main:
+        errors.append(f"main.gd missing overlay state/action entry point: {entry_point}")
+
 if errors:
     print("STRUCTURE CHECK FAILED")
     for error in errors:
@@ -223,5 +268,5 @@ print(f"- {len(expected_modules)} independent game rule modules")
 print(f"- {module_method_count} app-facing module calls checked for compatibility")
 print(f"- {state_count} module-owned state fields checked")
 print("- scoring, ranking, and game catalog services found")
-print("- dashboard and rankings UI delegated to screen modules")
+print("- dashboard, rankings, pause, rules and dialogs delegated to UI modules")
 print("NOTE: this is a static structural check, not a Godot runtime test.")

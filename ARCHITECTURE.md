@@ -13,9 +13,13 @@ Pendar/
 ├── ui/
 │   ├── illustration_renderer.gd  # آیکون‌ها و تصویر کارت انتخاب بازی
 │   ├── tabletop_art_renderer.gd  # کارت، تاس، مهره و قطعه شطرنج
+│   ├── components/
+│   │   └── dialog_component.gd   # layout، دکمه‌ها و ترسیم دیالوگ عمومی
 │   └── screens/
 │       ├── dashboard_screen.gd   # دکمه‌ها و ترسیم صفحه آمار
-│       └── rankings_screen.gd    # دکمه‌ها و ترسیم صفحه رتبه‌بندی
+│       ├── rankings_screen.gd    # دکمه‌ها و ترسیم صفحه رتبه‌بندی
+│       ├── pause_screen.gd      # ارائه رابط توقف بازی
+│       └── rules_screen.gd      # محتوای راهنما، صفحه‌بندی و ترسیم
 ├── games/
 │   ├── othello/rules.gd
 │   ├── pentago/rules.gd
@@ -46,7 +50,8 @@ Pendar/
 - **امتیازدهی:** `services/scoring_service.gd` مستقل از قوانین بازی است و نتیجه هر بازی را با شناسه خودش ثبت می‌کند. تاریخچه هر بازی جداست و امتیاز کلی بازیکن نیز جداگانه نگهداری می‌شود.
 - **رتبه‌بندی:** `services/ranking_service.gd` صرفاً ردیف‌های رتبه‌بندی بازی‌ها را مرتب می‌کند و منطق سطح رتبه کلی را تعیین می‌کند؛ ثبت امتیاز در این سرویس انجام نمی‌شود.
 - **رندر مشترک:** `ui/illustration_renderer.gd` و `ui/tabletop_art_renderer.gd` از همان CanvasItem اصلی برای ترسیم استفاده می‌کنند؛ بنابراین ترتیب لایه‌ها و مختصات فعلی حفظ می‌شود. `main.gd` فقط wrapperهای سازگاری را نگه می‌دارد.
-- **صفحه‌های رابط کاربری:** `ui/screens/dashboard_screen.gd` و `ui/screens/rankings_screen.gd` ساخت دکمه‌ها و منطق ترسیم همین دو صفحه را در اختیار دارند. داده‌های رتبه و امتیاز همچنان از سرویس‌های موجود خوانده می‌شود و مالکیت state و ناوبری در `main.gd` باقی می‌ماند. رنگ‌ها و ابعاد پایه با یک style dictionary صریح به screen presenterها داده می‌شود تا دسترسی غیرمستقیم به ثابت‌های خصوصی اسکریپت اصلی لازم نباشد.
+- **صفحه‌های رابط کاربری:** `ui/screens/dashboard_screen.gd` و `ui/screens/rankings_screen.gd` ساخت دکمه‌ها و ترسیم صفحه‌های آمار و رتبه‌بندی را در اختیار دارند. `ui/screens/pause_screen.gd` چیدمان، دکمه‌ها و ترسیم توقف بازی را انجام می‌دهد و `ui/screens/rules_screen.gd` محتوای راهنما، صفحه‌بندی، چیدمان و ترسیم را مدیریت می‌کند. رنگ‌ها و ابعاد پایه از طریق `_ui_screen_theme` صریح تزریق می‌شوند.
+- **دیالوگ عمومی:** `ui/components/dialog_component.gd` فقط چیدمان، ساخت دکمه‌ها و ترسیم دیالوگ‌های تأیید را انجام می‌دهد. اجرای callback، بستن پنجره و تغییر `dialog`/`pause_open`/`rules_open` در `main.gd` باقی می‌ماند؛ presenterها state مسابقه یا باز/بسته بودن overlay را مالک نمی‌شوند.
 
 ## سازگاری ذخیره‌سازی
 
@@ -92,3 +97,11 @@ python tools/verify_structure.py
 - `main.gd` entry pointهای قبلی `_btns_dashboard`, `_draw_dashboard`, `_btns_rankings` و `_draw_rankings` را به‌عنوان wrapper نگه می‌دارد تا dispatch صفحه‌ها تغییر نکند.
 - این screen presenterها قوانین بازی، ذخیره‌سازی امتیاز یا وضعیت مسابقه را مالک نمی‌شوند. ابعاد و رنگ‌های مشترک از طریق `_ui_screen_theme` به‌صورت صریح تزریق می‌شود.
 - `tools/verify_structure.py` وجود این ماژول‌ها، entry point و delegation را به‌صورت ایستا بررسی می‌کند؛ تأیید رندر واقعی همچنان به اجرای Godot نیاز دارد.
+
+## پنجره‌های رابط جداشده (مرحله سوم بازآرایی)
+
+- `ui/screens/pause_screen.gd` مسئول چیدمان، ساخت دکمه‌ها و ترسیم پنجره توقف است؛ callbackها همچنان به متدهای کنترلر اصلی ارجاع می‌دهند.
+- `ui/screens/rules_screen.gd` محتوای راهنمای اتصال و صفحات راهنمای عمومی/اختصاصی، صفحه‌بندی، چیدمان، دکمه‌های قبلی/بعدی و ترسیم را در اختیار دارد. باز/بسته‌شدن راهنما و تغییر صفحه در `main.gd` حفظ شده است.
+- `ui/components/dialog_component.gd` رندر عمومی دیالوگ را انجام می‌دهد؛ اجرای عملیات تأیید، callback و cleanup state در `main.gd` باقی مانده است.
+- wrapperهای قدیمی برای دیالوگ، مکث و راهنما حفظ شده‌اند تا dispatcher فعلی و callbackهای دکمه‌ها نیاز به تغییر نداشته باشند.
+- `tests/test_ui_overlays.py` و `tools/verify_structure.py` جداسازی presentation و حفظ مرز state را به‌صورت ایستا کنترل می‌کنند. برای تأیید کامل، اجرای پروژه در Godot و بازکردن عملی هر overlay همچنان لازم است.

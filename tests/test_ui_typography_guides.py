@@ -10,6 +10,7 @@ class TypographyAndGuideTests(unittest.TestCase):
         cls.main = (ROOT / "main.gd").read_text(encoding="utf-8")
         cls.ui_content = (ROOT / "core" / "ui_content.gd").read_text(encoding="utf-8")
         cls.catalog = (ROOT / "core" / "game_catalog.gd").read_text(encoding="utf-8")
+        cls.rules_screen = (ROOT / "ui" / "screens" / "rules_screen.gd").read_text(encoding="utf-8")
         cls.readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
     def test_every_catalog_game_has_a_guide(self):
@@ -25,13 +26,13 @@ class TypographyAndGuideTests(unittest.TestCase):
         for helper in ["_open_general_help", "_open_online_help", "_open_dashboard_help", "_open_rankings_help"]:
             with self.subTest(helper=helper):
                 self.assertIn(f"func {helper}()", self.main)
-        self.assertIn('"general": return UIContentScript.GENERAL_HELP', self.main)
-        self.assertIn('"online": return UIContentScript.ONLINE_HELP', self.main)
-        self.assertIn('"dashboard": return UIContentScript.DASHBOARD_HELP', self.main)
-        self.assertIn('"rankings": return UIContentScript.RANKINGS_HELP', self.main)
+        self.assertIn('"general": return UIContentScript.GENERAL_HELP', self.rules_screen)
+        self.assertIn('"online": return UIContentScript.ONLINE_HELP', self.rules_screen)
+        self.assertIn('"dashboard": return UIContentScript.DASHBOARD_HELP', self.rules_screen)
+        self.assertIn('"rankings": return UIContentScript.RANKINGS_HELP', self.rules_screen)
         self.assertIn("func _rules_prev_page()", self.main)
         self.assertIn("func _rules_next_page()", self.main)
-        self.assertIn("const RULES_PAGE_SIZE := 4", self.main)
+        self.assertIn("const RULES_PAGE_SIZE := 4", self.rules_screen)
 
     def test_persian_normalization_and_direction_are_centralized(self):
         self.assertIn('value.replace("ي", "ی").replace("ى", "ی").replace("ك", "ک")', self.main)
