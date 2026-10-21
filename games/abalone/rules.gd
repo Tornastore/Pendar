@@ -278,7 +278,7 @@ func _aba_cpu_move_score(move: Dictionary, player: int = 2) -> float:
 			if _aba_value(neighbor.x, neighbor.y) == player:
 				adjacent_friends += 1
 		score += float(adjacent_friends) * cohesion_weights[level - 1]
-	var noise_by_level: Array[float] = [0.0, 18.0, 8.0, 3.5, 1.4, 0.25]
+	var noise_by_level: Array[float] = [0.0, 18.0, 8.0, 3.5, 0.6, 0.0]
 	var noise: float = noise_by_level[level - 1]
 	return score + randf_range(-noise, noise)
 
@@ -335,26 +335,68 @@ func _aba_cpu() -> void:
 			var candidate: Dictionary = ranked[index].move
 			aba_board = saved_board.duplicate(true)
 			aba_out = saved_out.duplicate()
-			aba_turn = saved_turn
+			aba_turn = 2
 			_aba_simulate_move_for_ai(candidate, 2)
 			var score: float = float(ranked[index].score)
 			if aba_out[0] >= 6:
 				score += 100000.0
+			elif aba_out[1] >= 6:
+				score -= 200000.0
 			else:
+				var candidate_board: Array = aba_board.duplicate(true)
+				var candidate_out: Array = aba_out.duplicate()
 				aba_turn = 1
 				var replies: Array = _aba_generate_all_moves(1)
+				var reply_ranked: Array = _aba_rank_actions(replies, 1, 10 if level == 5 else 12)
 				var strongest_reply: float = -INF
-				for reply in replies:
-					strongest_reply = maxf(strongest_reply, _aba_cpu_move_score(reply, 1))
-				if strongest_reply > -INF:
-					score -= strongest_reply * (0.82 if level == 5 else 1.12)
+				for reply_entry in reply_ranked:
+					strongest_reply = maxf(strongest_reply, float(reply_entry.score))
+				if strongest_reply > -INF and level == 5:
+					score -= strongest_reply * 0.82
+				if level == 6:
+					# Grandmaster continues after the opponent's strongest plausible replies.
+					var worst_line: float = INF
+					for reply_entry in reply_ranked.slice(0, mini(8, reply_ranked.size())):
+						aba_board = candidate_board.duplicate(true)
+						aba_out = candidate_out.duplicate()
+						aba_turn = 1
+						_aba_simulate_move_for_ai(reply_entry.move, 1)
+						var line_value: float
+						if aba_out[1] >= 6:
+							line_value = -100000.0
+						elif aba_out[0] >= 6:
+							line_value = 100000.0
+						else:
+							aba_turn = 2
+							var cpu_replies: Array = _aba_generate_all_moves(2)
+							var cpu_ranked: Array = _aba_rank_actions(cpu_replies, 2, 7)
+							var continuation: float = -INF
+							for cpu_entry in cpu_ranked:
+								continuation = maxf(continuation, float(cpu_entry.score))
+							line_value = -float(reply_entry.score) * 0.72 + (continuation if continuation > -INF else 0.0) * 0.55
+						worst_line = minf(worst_line, line_value)
+					if worst_line < INF:
+						score += worst_line * 0.58
 			if score > best_score:
 				best_score = score
 				chosen = candidate
 		aba_board = saved_board
 		aba_out = saved_out
 		aba_turn = saved_turn
+
 	_aba_apply_group_move(chosen.cells, int(chosen.dx), int(chosen.dy), 2)
+
+
+func _aba_rank_actions(moves: Array, player: int, limit: int) -> Array:
+	var result: Array = []
+	for move in moves:
+		result.append({"move": move, "score": _aba_cpu_move_score(move, player)})
+	result.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a.score) > float(b.score)
+	)
+	if limit > 0 and result.size() > limit:
+		result.resize(limit)
+	return result
 
 func _aba_me() -> int:
 	return app._my_seat() + 1

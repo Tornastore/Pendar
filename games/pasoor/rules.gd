@@ -271,9 +271,13 @@ func _pas_card_point_value(card: Dictionary) -> float:
 	return value
 
 func _pas_exposure_cost(card: Dictionary) -> float:
-	# برای کارت دورریختنی، تخمین می‌زند چند رتبه‌ی احتمالی می‌توانند از میز بگیرند.
-	# این محاسبه از کارت‌های مخفی حریف استفاده نمی‌کند.
+	# Evaluate the table after a discard; don't consult the hidden opponent hand.
 	pas_table.append(card)
+	var risk: float = _pas_table_capture_risk()
+	pas_table.pop_back()
+	return risk
+
+func _pas_table_capture_risk() -> float:
 	var risk: float = 0.0
 	for rank in range(1, 14):
 		var candidate: Dictionary = {"r": rank, "s": 1}
@@ -282,9 +286,27 @@ func _pas_exposure_cost(card: Dictionary) -> float:
 			var max_taken: int = 0
 			for cap in captures:
 				max_taken = maxi(max_taken, cap.size())
+			# More cards available to sweep, especially a large set, raise exposure risk.
 			risk += 1.0 + minf(float(max_taken), 5.0) * 0.15
-	pas_table.pop_back()
 	return risk
+
+func _pas_future_table_risk(card: Dictionary, captures: Array) -> float:
+	var original_table: Array = pas_table
+	var future_table: Array = pas_table.duplicate(true)
+	if captures.is_empty():
+		future_table.append(card)
+	else:
+		var descending: Array = captures.duplicate()
+		descending.sort()
+		descending.reverse()
+		for raw_index in descending:
+			var table_index: int = int(raw_index)
+			if table_index >= 0 and table_index < future_table.size():
+				future_table.remove_at(table_index)
+	pas_table = future_table
+	var result: float = _pas_table_capture_risk()
+	pas_table = original_table
+	return result
 
 func _pas_cpu_move() -> void:
 	if pas_hands[1].is_empty() or pas_game_over:
@@ -321,8 +343,13 @@ func _pas_cpu_move() -> void:
 				score -= _pas_exposure_cost(card) * (0.45 + float(level) * 0.42)
 			if level >= 6 and card.s == 0:
 				score -= 0.8 # حفظ کنترل خاج برای امتیاز هفت خاج
-		# سطوح آسان خطای بیشتری دارند؛ سطح استادتمام تقریباً بدون نویز انتخاب می‌کند.
-		var noise: float = [0.0, 16.0, 9.0, 5.0, 2.5, 1.0][level - 1]
+		if level >= 5:
+			# Compare the resulting table, not only the immediate capture. A move is
+			# penalized if it leaves a high-probability capture/sweep for the next turn.
+			var future_risk: float = _pas_future_table_risk(card, cap)
+			score -= future_risk * (1.1 if level == 5 else 1.9)
+		# Lower levels stay varied; Master/Grandmaster should be reproducible.
+		var noise: float = [0.0, 16.0, 9.0, 5.0, 0.45, 0.0][level - 1]
 		score += randf_range(-noise, noise)
 		if score > best_score:
 			best_score = score

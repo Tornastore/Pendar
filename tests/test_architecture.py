@@ -25,10 +25,11 @@ def test_quoridor_ai_has_six_difficulty_profiles_and_master_search() -> None:
     assert "func choose_action(game, difficulty: int)" in ai
     assert "if level == 1" in ai
     assert "if level == 2" in ai
-    assert "if level == 6:" in ai
+    assert "if level >= 5:" in ai
     assert "func _minimax(" in ai
     assert "func _search_actions(" in ai
     assert "MASTER_SEARCH_DEPTH: int = 4" in ai
+    assert "_active_search_depth = 3 if level == 5 else MASTER_SEARCH_DEPTH" in ai
     for level in ("\t\t3:", "\t\t4:", "\t\t5:"):
         assert level in ai
     assert "QuoridorAIScript = preload(\"res://games/quoridor/ai.gd\")" in rules
@@ -66,8 +67,8 @@ def test_othello_ai_has_six_levels_and_supports_twelve_by_twelve() -> None:
     rules = (project_root / "games" / "othello" / "rules.gd").read_text(encoding="utf-8")
     main = (project_root / "main.gd").read_text(encoding="utf-8")
     assert "func choose_move(board: Array, board_size: int, player: int, difficulty: int) -> Vector2i" in ai
-    assert "var depth_by_level: Array[int] = [0, 0, 2, 3, 4, 5]" in ai
-    assert "_node_limit = [0, 0, 650, 1500, 2900, 4600][level - 1]" in ai
+    assert "var depth_by_level: Array[int] = [0, 0, 2, 3, 5, 6]" in ai
+    assert "_node_limit = [0, 0, 1200, 5000, 15000, 24000][level - 1]" in ai
     assert "func _search(" in ai
     assert "func _evaluate(" in ai
     assert "func _legal_moves(" in ai
@@ -108,7 +109,7 @@ def test_chess_ai_has_six_difficulty_levels_and_alpha_beta_search() -> None:
     rules = (project_root / "games" / "chess" / "rules.gd").read_text(encoding="utf-8")
     main = (project_root / "main.gd").read_text(encoding="utf-8")
     assert "func choose_move(game, difficulty: int) -> Array" in ai
-    assert "var depths: Array[int] = [0, 0, 1, 2, 3, 4]" in ai
+    assert "var depths: Array[int] = [0, 0, 1, 2, 4, 5]" in ai
     assert "func _search(" in ai
     assert "func _evaluate(" in ai
     assert "ChessAIScript = preload(\"res://games/chess/ai.gd\")" in rules
@@ -272,7 +273,7 @@ def test_gobblet_and_abalone_have_six_ai_difficulty_levels():
     assert "strongest_reply" in gobblet and "_gob_action_score(reply, 1)" in gobblet
     assert "func _aba_simulate_move_for_ai(move: Dictionary, player: int) -> void:" in abalone
     assert "if level == 1:" in abalone and "if level >= 5:" in abalone
-    assert "_aba_cpu_move_score(reply, 1)" in abalone
+    assert "_aba_rank_actions(replies, 1" in abalone and "worst_line" in abalone
 
 
 def test_quoridor_master_ai_penalizes_repeated_cpu_pawn_positions() -> None:
@@ -293,4 +294,4 @@ def test_quoridor_master_ai_penalizes_repeated_cpu_pawn_positions() -> None:
     assert "RECENT_REVISIT_PENALTY: float = 42.0" in ai
     assert "score += _master_root_preference(game, action, root_distance)" in ai
     assert "quality -= _move_repetition_penalty(game, target)" in ai
-    assert "_minimax(game, 0, MASTER_SEARCH_DEPTH - 1, -INF, INF)" in ai
+    assert "_minimax(game, 0, _active_search_depth - 1, -INF, INF)" in ai

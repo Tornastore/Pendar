@@ -198,6 +198,9 @@ func _hokm_cpu() -> void:
 	var led_card: Dictionary = {}
 	if hokm_trick.size() == 1:
 		led_card = hokm_trick[0].c
+	var sampled_opponent_hands: Array = []
+	if level >= 5 and hokm_trick.is_empty():
+		sampled_opponent_hands = _hokm_sample_opponent_hands(24 if level == 5 else 48)
 	for i in legal_indices:
 		var card: Dictionary = hokm_hands[1][i]
 		var score: float
@@ -205,12 +208,70 @@ func _hokm_cpu() -> void:
 			score = _hokm_response_score(card, led_card, level)
 		else:
 			score = _hokm_lead_score(card, level)
-		var noise: float = [0.0, 7.0, 4.5, 2.5, 1.1, 0.35][level - 1]
+			if level >= 5 and not sampled_opponent_hands.is_empty():
+				var risk: float = _hokm_lead_beaten_probability(card, sampled_opponent_hands)
+				score -= risk * (26.0 if level == 5 else 38.0)
+		var noise: float = [0.0, 7.0, 4.5, 2.5, 0.7, 0.0][level - 1]
 		score += randf_range(-noise, noise)
 		if score > best_score:
 			best_score = score
 			best_idx = i
 	_hokm_play(1, best_idx)
+
+
+func _hokm_card_key(card: Dictionary) -> String:
+	return "%d:%d" % [int(card.s), int(card.r)]
+
+func _hokm_sample_opponent_hands(sample_count: int) -> Array:
+	# Determinized samples improve lead selection without peeking at the real
+	# opponent hand. Played cards and our current hand are removed from the pool.
+	var known: Dictionary = {}
+	for card in hokm_hands[1]:
+		known[_hokm_card_key(card)] = true
+	for card in hokm_seen_cards:
+		known[_hokm_card_key(card)] = true
+	var pool_template: Array = []
+	for suit in range(4):
+		if hokm_voids[0].has(suit):
+			continue
+		for rank in range(1, 14):
+			var candidate: Dictionary = {"s": suit, "r": rank}
+			if not known.has(_hokm_card_key(candidate)):
+				pool_template.append(candidate)
+	var hand_size: int = hokm_hands[0].size()
+	if pool_template.size() < hand_size or hand_size <= 0:
+		return []
+	var samples: Array = []
+	for sample_index in range(sample_count):
+		var pool: Array = pool_template.duplicate(true)
+		pool.shuffle()
+		var sampled_hand: Array = []
+		for index in range(hand_size):
+			sampled_hand.append(pool[index])
+		samples.append(sampled_hand)
+	return samples
+
+func _hokm_lead_beaten_probability(card: Dictionary, sampled_hands: Array) -> float:
+	if sampled_hands.is_empty():
+		return 0.0
+	var beaten_count: int = 0
+	for sampled_hand_value in sampled_hands:
+		var sampled_hand: Array = sampled_hand_value
+		var has_led_suit: bool = false
+		for hidden_card in sampled_hand:
+			if int(hidden_card.s) == int(card.s):
+				has_led_suit = true
+				break
+		var can_beat: bool = false
+		for hidden_card in sampled_hand:
+			if has_led_suit and int(hidden_card.s) != int(card.s):
+				continue
+			if _hokm_card_beats(hidden_card, card, int(card.s), hokm_trump):
+				can_beat = true
+				break
+		if can_beat:
+			beaten_count += 1
+	return float(beaten_count) / float(sampled_hands.size())
 
 func _hokm_me() -> int:
 	return app._my_seat()

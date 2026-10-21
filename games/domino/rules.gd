@@ -166,8 +166,10 @@ func _dom_choose_cpu_action(playable: Array) -> Dictionary:
 		var score: float = float(option.get("score", 0.0))
 		if dom_difficulty <= 3:
 			score += randf_range(-2.5, 2.5)
-		elif dom_difficulty <= 5:
+		elif dom_difficulty == 4:
 			score += randf_range(-0.8, 0.8)
+		elif dom_difficulty == 5:
+			score += randf_range(-0.12, 0.12)
 		if score > best_score:
 			best_score = score
 			best = option
@@ -203,7 +205,10 @@ func _dom_score_cpu_option(idx: int, tile: Vector2i, end: String) -> Dictionary:
 		6:
 			unknown_pressure = _dom_unknown_matches(next_left, remaining, tile) + _dom_unknown_matches(next_right, remaining, tile)
 			followup = _dom_followup_potential(remaining, next_left, next_right)
-			score = float(pips) * 1.55 + float(mobility) * 3.6 + float(left_matches + right_matches) * 1.4 - float(unknown_pressure) * 0.58 + followup * 1.25
+			var second_ply: float = _dom_second_ply_value(remaining, next_left, next_right)
+			# Grandmaster balances shedding pips, preserving exits from the hand,
+			# and steering the open ends toward values the unseen pool may lack.
+			score = float(pips) * 1.45 + float(mobility) * 3.4 + float(left_matches + right_matches) * 1.8 - float(unknown_pressure) * 0.72 + followup * 0.9 + second_ply * 1.35
 		_:
 			score = float(pips) + (1.0 if is_double else 0.0)
 	return {"index": idx, "end": end, "score": score}
@@ -270,6 +275,31 @@ func _dom_followup_potential(hand: Array, left_end: int, right_end: int) -> floa
 			if tile.x == tile.y:
 				candidate_score += 1.0
 			best = maxf(best, candidate_score)
+	return best
+
+
+func _dom_second_ply_value(hand: Array, left_end: int, right_end: int) -> float:
+	var best: float = 0.0
+	for i in range(hand.size()):
+		var tile: Vector2i = hand[i]
+		for end in ["L", "R"]:
+			var matches_end: bool = (tile.x == left_end or tile.y == left_end) if end == "L" else (tile.x == right_end or tile.y == right_end)
+			if not matches_end:
+				continue
+			var next_left: int = left_end
+			var next_right: int = right_end
+			if end == "L":
+				next_left = tile.x if tile.y == left_end else tile.y
+			else:
+				next_right = tile.y if tile.x == right_end else tile.x
+			var remaining: Array = hand.duplicate()
+			remaining.remove_at(i)
+			var mobility: int = _dom_count_playable_for_ends(remaining, next_left, next_right)
+			var endpoint_control: int = _dom_count_matching(remaining, next_left) + _dom_count_matching(remaining, next_right)
+			var value: float = float(mobility) * 1.7 + float(endpoint_control) * 1.2 + float(tile.x + tile.y) * 0.35
+			if tile.x == tile.y:
+				value += 2.0
+			best = maxf(best, value)
 	return best
 
 func _dom_pass(p: int) -> void:

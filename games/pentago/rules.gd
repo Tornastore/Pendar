@@ -159,8 +159,10 @@ func _pent_choose_cpu_plan() -> Dictionary:
 						score = _pent_evaluate_board(2, pent_difficulty)
 						var centre_bonus: float = 5.0 - abs(float(x) - 2.5) - abs(float(y) - 2.5)
 						score += centre_bonus * float(pent_difficulty) * 0.6
-						# Lower tiers accept more randomness; stronger tiers are more consistent.
-						score += randf_range(-8.0, 8.0) / float(pent_difficulty)
+						# Strong profiles follow the evaluation consistently; only lower tiers
+						# retain randomness, so a near-equal move doesn't overrule a tactic.
+						var noise_scale: float = 0.35 if pent_difficulty == 5 else (0.0 if pent_difficulty >= 6 else 8.0 / float(pent_difficulty))
+						score += randf_range(-noise_scale, noise_scale)
 					plans.append({"place": Vector2i(x, y), "quad": quad, "clockwise": clockwise, "score": score, "board": pent_board.duplicate(true)})
 	pent_board = base_board
 	if plans.is_empty():
@@ -170,7 +172,7 @@ func _pent_choose_cpu_plan() -> Dictionary:
 	)
 	var best_plan: Dictionary = plans[0]
 	var best_score: float = -INF
-	var lookahead_count: int = mini(10, plans.size()) if pent_difficulty >= 5 else 0
+	var lookahead_count: int = mini(24 if pent_difficulty == 5 else 64, plans.size()) if pent_difficulty >= 5 else 0
 	for i in range(plans.size()):
 		var candidate: Dictionary = plans[i]
 		var score: float = float(candidate["score"])

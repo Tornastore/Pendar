@@ -243,23 +243,28 @@ func _blk_move_score(move: Dictionary, player: int, difficulty: int) -> float:
 	if difficulty >= 6:
 		# Prefer moves that widen multiple diagonal entry points for later pentominoes.
 		score += float(corner_set.size()) * 4.0
-	score += randf() * (7.0 - float(difficulty)) * 5.0
+	var noise_by_level: Array[float] = [0.0, 12.0, 7.0, 3.0, 0.35, 0.0]
+	score += randf_range(-noise_by_level[clampi(difficulty, 1, 6) - 1], noise_by_level[clampi(difficulty, 1, 6) - 1])
 	return score
 
-func _blk_cpu() -> void:
-	if blk_game_over or blk_turn != 1:
-		return
-	var moves: Array = []
+func _blk_generate_ai_moves(player: int) -> Array:
+	var result: Array = []
 	for i in range(blk_pieces.size()):
-		if bool(blk_used[1][i]):
+		if bool(blk_used[player][i]):
 			continue
 		for flipped_value in range(2):
 			for r in range(4):
 				var cells: Array = _blk_cells(i, r, flipped_value == 1)
 				for y in range(BOARD_SIZE):
 					for x in range(BOARD_SIZE):
-						if _blk_can_place(x, y, cells, 1, i):
-							moves.append({"x": x, "y": y, "i": i, "r": r, "f": flipped_value == 1})
+						if _blk_can_place(x, y, cells, player, i):
+							result.append({"x": x, "y": y, "i": i, "r": r, "f": flipped_value == 1})
+	return result
+
+func _blk_cpu() -> void:
+	if blk_game_over or blk_turn != 1:
+		return
+	var moves: Array = _blk_generate_ai_moves(1)
 	if moves.is_empty():
 		if _blk_has_move(0):
 			blk_turn = 0
@@ -278,6 +283,41 @@ func _blk_cpu() -> void:
 		var ratios: Array[float] = [1.0, 0.50, 0.25, 0.12, 0.05, 0.015]
 		var pool: int = maxi(1, int(ceil(float(moves.size()) * ratios[level - 1])))
 		chosen = moves[randi() % pool]
+		if level >= 5:
+			# Expert/Grandmaster weigh the opponent's best reply instead of only
+			# maximising our own frontier. Use a narrow beam to keep 14x14 fast.
+			var look_count: int = mini(moves.size(), 6 if level == 5 else 8)
+			var saved_grid: Array = blk_grid.duplicate(true)
+			var saved_used: Array = blk_used.duplicate(true)
+			var best_value: float = -INF
+			for idx in range(look_count):
+				var candidate: Dictionary = moves[idx]
+				blk_grid = saved_grid.duplicate(true)
+				blk_used = saved_used.duplicate(true)
+				var candidate_cells: Array = _blk_cells(int(candidate.i), int(candidate.r), bool(candidate.f))
+				for offset in candidate_cells:
+					blk_grid[int(candidate.y) + offset.y][int(candidate.x) + offset.x] = 2
+				blk_used[1][int(candidate.i)] = true
+				var reply_moves: Array = _blk_generate_ai_moves(0)
+				var opponent_best: float = 0.0
+				if not reply_moves.is_empty():
+					opponent_best = -INF
+					var reply_limit: int = mini(reply_moves.size(), 160)
+					var reply_ranked: Array = []
+					for reply in reply_moves:
+						var reply_score: float = _blk_move_score(reply, 0, level)
+						reply_ranked.append({"move": reply, "score": reply_score})
+					reply_ranked.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a.score) > float(b.score))
+					for reply_index in range(mini(reply_limit, reply_ranked.size())):
+						opponent_best = maxf(opponent_best, float(reply_ranked[reply_index].score))
+				var our_future_moves: int = _blk_generate_ai_moves(1).size()
+				var response_weight: float = 0.34 if level == 5 else 0.52
+				var value: float = float(candidate.score) - opponent_best * response_weight + float(our_future_moves) * 0.08
+				if value > best_value:
+					best_value = value
+					chosen = candidate
+			blk_grid = saved_grid
+			blk_used = saved_used
 	_blk_place(int(chosen.x), int(chosen.y), _blk_cells(int(chosen.i), int(chosen.r), bool(chosen.f)), 1, int(chosen.i), int(chosen.r), bool(chosen.f))
 
 func _blk_apply_net(px: int, py: int, sel: int, rot: int, flipped: bool, player: int) -> void:

@@ -4,16 +4,23 @@ extends RefCounted
 const DIRS: Array[Vector2i] = [
 	Vector2i(0, -1), Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1)
 ]
-const MASTER_SEARCH_DEPTH: int = 4 # CPU move plus up to three opponent/CPU replies.
-const MASTER_WALL_BRANCH: int = 2 # Keep search practical while retaining tactical wall choices.
+const MASTER_SEARCH_DEPTH: int = 4 # Grandmaster looks four plies ahead where branching permits.
+const MASTER_WALL_BRANCH: int = 2
 const WIN_SCORE: float = 100000.0
+var _active_search_depth: int = MASTER_SEARCH_DEPTH
+var _active_wall_branch: int = MASTER_WALL_BRANCH
+var _root_wall_branch: int = 3
 const IMMEDIATE_REVERSAL_PENALTY: float = 175.0
 const RECENT_REVISIT_PENALTY: float = 42.0
 const HISTORY_LOOKBACK: int = 9
 
 func choose_action(game, difficulty: int) -> Dictionary:
 	var level: int = clampi(difficulty, 1, 6)
-	if level == 6:
+	if level >= 5:
+		# Expert searches a shorter line; Grandmaster widens and deepens the tree.
+		_active_search_depth = 3 if level == 5 else MASTER_SEARCH_DEPTH
+		_active_wall_branch = 1 if level == 5 else MASTER_WALL_BRANCH
+		_root_wall_branch = 2 if level == 5 else 3
 		return _choose_master_grandmaster(game)
 	var cpu_pos: Vector2i = game.quo_pawns[1]
 	var human_pos: Vector2i = game.quo_pawns[0]
@@ -68,7 +75,7 @@ func _first_legal_wall(game, player: int) -> Dictionary:
 ## Level 6: adversarial alpha-beta search across pawn moves and tactically useful walls.
 ## The live board is temporarily mutated and restored for each branch; only the final action is returned.
 func _choose_master_grandmaster(game) -> Dictionary:
-	var actions: Array[Dictionary] = _search_actions(game, 1, 3)
+	var actions: Array[Dictionary] = _search_actions(game, 1, _root_wall_branch)
 	if actions.is_empty():
 		var forced_wall: Dictionary = _first_legal_wall(game, 1)
 		return forced_wall if not forced_wall.is_empty() else {"type": "pass"}
@@ -81,7 +88,7 @@ func _choose_master_grandmaster(game) -> Dictionary:
 		# Use a full window for every root action: the history penalty is applied
 		# after minimax, so sharing an alpha adjusted for another root action could
 		# prune a move whose anti-repetition bonus makes it the better choice.
-		var score: float = _minimax(game, 0, MASTER_SEARCH_DEPTH - 1, -INF, INF)
+		var score: float = _minimax(game, 0, _active_search_depth - 1, -INF, INF)
 		_restore_search_state(game, snapshot)
 		# The search evaluates a finite horizon and can tie strategically similar
 		# positions. Penalize repeated pawn positions at the root so the CPU
@@ -128,7 +135,7 @@ func _minimax(game, player: int, depth: int, alpha: float, beta: float) -> float
 	if depth <= 0:
 		return _evaluate_master_position(game)
 
-	var actions: Array[Dictionary] = _search_actions(game, player, MASTER_WALL_BRANCH)
+	var actions: Array[Dictionary] = _search_actions(game, player, _active_wall_branch)
 	if actions.is_empty():
 		return _evaluate_master_position(game)
 	if player == 1:
@@ -242,12 +249,22 @@ func _evaluate_master_position(game) -> float:
 		return -WIN_SCORE * 0.5
 	if human_distance >= 999:
 		return WIN_SCORE * 0.5
-	var score: float = float(human_distance - cpu_distance) * 75.0
-	score += float(int(game.quo_walls_left[1]) - int(game.quo_walls_left[0])) * 4.0
-	# Prefer useful mobility but keep it a small tie-breaker behind race distance.
+	# Route distance dominates. The weights become more tactical when either pawn
+	# is close to the finish, and retaining walls is valuable only while they can matter.
+	var urgency: float = clampf((4.0 - float(human_distance)) / 4.0, 0.0, 1.0)
+	var score: float = float(human_distance - cpu_distance) * (88.0 + urgency * 24.0)
+	var cpu_walls: int = int(game.quo_walls_left[1])
+	var human_walls: int = int(game.quo_walls_left[0])
+	var wall_value: float = 3.0 + urgency * 3.5
+	score += float(cpu_walls - human_walls) * wall_value
+	if cpu_distance <= 2:
+		score += float(3 - cpu_distance) * 22.0
+	if human_distance <= 2:
+		score -= float(3 - human_distance) * 28.0
+	# Prefer useful mobility but keep it a secondary tie-breaker behind route distance.
 	var cpu_options: int = _legal_move_count(game, 1)
 	var human_options: int = _legal_move_count(game, 0)
-	score += float(cpu_options - human_options) * 0.35
+	score += float(cpu_options - human_options) * 0.7
 	return score
 
 func _legal_move_count(game, player: int) -> int:

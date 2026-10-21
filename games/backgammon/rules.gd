@@ -58,11 +58,16 @@ func _bg_cpu() -> void:
 		if bg_game_over or bg_moves_left.is_empty():
 			break
 		var step: Dictionary = step_value
-		var die: int = int(bg_moves_left[0])
-		if int(step.get("die", die)) != die:
-			# A stale or malformed plan must never make an unrelated move.
-			bg_moves_left.remove_at(0)
+		var requested_die: int = int(step.get("die", bg_moves_left[0]))
+		var die_index: int = bg_moves_left.find(requested_die)
+		if die_index < 0:
+			# A stale plan may not consume a die that is no longer available.
 			continue
+		if die_index > 0:
+			var reordered_die: int = int(bg_moves_left[die_index])
+			bg_moves_left.remove_at(die_index)
+			bg_moves_left.insert(0, reordered_die)
+		var die: int = int(bg_moves_left[0])
 		var source: int = int(step.get("source", -1))
 		if source < 0:
 			bg_moves_left.remove_at(0)

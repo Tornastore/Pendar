@@ -200,7 +200,7 @@ func _gob_action_score(action: Dictionary, player: int) -> float:
 			score += (0.8 + float(gob_difficulty) * 0.25) - Vector2(dest.x, dest.y).distance_to(Vector2(1.5, 1.5)) * (0.15 + float(gob_difficulty) * 0.07)
 	gob_board = saved_board
 	gob_hand = saved_hand
-	var noise_by_level: Array[float] = [0.0, 19.0, 10.0, 4.0, 1.2, 0.2]
+	var noise_by_level: Array[float] = [0.0, 19.0, 10.0, 4.0, 0.35, 0.0]
 	var noise: float = noise_by_level[clampi(gob_difficulty, 1, 6) - 1]
 	return score + randf_range(-noise, noise)
 
@@ -266,7 +266,7 @@ func _gob_cpu() -> void:
 	)
 	var chosen: Dictionary = ranked[0].action
 	if level >= 5:
-		var search_count: int = mini(ranked.size(), 10 if level == 5 else 18)
+		var search_count: int = mini(ranked.size(), 10 if level == 5 else 20)
 		var saved_board: Array = gob_board.duplicate(true)
 		var saved_hand: Array = gob_hand.duplicate(true)
 		var best_score: float = -INF
@@ -276,26 +276,69 @@ func _gob_cpu() -> void:
 			gob_hand = saved_hand.duplicate(true)
 			_gob_simulate_action(candidate, 2)
 			var score: float = float(ranked[index].score)
-			if _gob_check_win(2):
-				score += 100000.0
-			elif _gob_check_win(1):
+			# Match the real move resolver: exposing an opponent's four-in-a-row
+			# takes precedence over completing our own line on the same action.
+			if _gob_check_win(1):
 				score -= 200000.0
+			elif _gob_check_win(2):
+				score += 100000.0
 			else:
+				var candidate_board: Array = gob_board.duplicate(true)
+				var candidate_hand: Array = gob_hand.duplicate(true)
 				var replies: Array = _gob_generate_actions(1)
-				var strongest_reply: float = -INF
-				for reply in replies:
-					strongest_reply = maxf(strongest_reply, _gob_action_score(reply, 1))
-				if strongest_reply > -INF:
-					score -= strongest_reply * (0.72 if level == 5 else 1.0)
+				if level == 5:
+					var strongest_reply: float = -INF
+					for reply in replies:
+						strongest_reply = maxf(strongest_reply, _gob_action_score(reply, 1))
+					if strongest_reply > -INF:
+						score -= strongest_reply * 0.92
+				else:
+					# Grandmaster: inspect the opponent's strongest tactical replies and
+					# then search our best continuation instead of stopping at one reply.
+					var reply_ranked: Array = _gob_rank_actions(replies, 1, 8)
+					var worst_continuation: float = INF
+					for reply_entry in reply_ranked:
+						gob_board = candidate_board.duplicate(true)
+						gob_hand = candidate_hand.duplicate(true)
+						var reply: Dictionary = reply_entry.action
+						_gob_simulate_action(reply, 1)
+						var branch_value: float
+						if _gob_check_win(1):
+							branch_value = -100000.0
+						elif _gob_check_win(2):
+							branch_value = 100000.0
+						else:
+							var cpu_actions: Array = _gob_generate_actions(2)
+							var cpu_ranked: Array = _gob_rank_actions(cpu_actions, 2, 6)
+							var cpu_best: float = -INF
+							for cpu_entry in cpu_ranked:
+								cpu_best = maxf(cpu_best, float(cpu_entry.score))
+							branch_value = -float(reply_entry.score) * 0.72 + (cpu_best if cpu_best > -INF else 0.0) * 0.62
+						worst_continuation = minf(worst_continuation, branch_value)
+					if worst_continuation < INF:
+						score += worst_continuation * 0.48
 			if score > best_score:
 				best_score = score
 				chosen = candidate
 		gob_board = saved_board
 		gob_hand = saved_hand
+
 	if str(chosen.kind) == "place":
 		_gob_place(int(chosen.x), int(chosen.y), int(chosen.size), 2)
 	else:
 		_gob_move(chosen.from, chosen.to, 2)
+
+
+func _gob_rank_actions(actions: Array, player: int, limit: int) -> Array:
+	var ranked_actions: Array = []
+	for action in actions:
+		ranked_actions.append({"action": action, "score": _gob_action_score(action, player)})
+	ranked_actions.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a.score) > float(b.score)
+	)
+	if limit > 0 and ranked_actions.size() > limit:
+		ranked_actions.resize(limit)
+	return ranked_actions
 
 func _gob_me() -> int:
 	return app._my_seat() + 1
