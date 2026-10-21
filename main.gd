@@ -9,6 +9,9 @@ const VIEW_H := 960.0
 const GameCatalogScript = preload("res://core/game_catalog.gd")
 const ScoringServiceScript = preload("res://services/scoring_service.gd")
 const RankingServiceScript = preload("res://services/ranking_service.gd")
+const UIContentScript = preload("res://core/ui_content.gd")
+const IllustrationRendererScript = preload("res://ui/illustration_renderer.gd")
+const TabletopArtRendererScript = preload("res://ui/tabletop_art_renderer.gd")
 const GAME_MODULE_SCRIPTS := {
 	"othello": preload("res://games/othello/rules.gd"),
 	"pentago": preload("res://games/pentago/rules.gd"),
@@ -26,6 +29,8 @@ const GAME_MODULE_SCRIPTS := {
 	"uno": preload("res://games/uno/rules.gd"),
 }
 var scoring_service = ScoringServiceScript.new()
+var _illustration_renderer = IllustrationRendererScript.new()
+var _tabletop_art_renderer = TabletopArtRendererScript.new()
 var _game_modules: Dictionary = {}
 
 
@@ -1419,152 +1424,6 @@ func _blk_can_place(px: int, py: int, piece: Array, player: int) -> bool:
 # ======================================================================
 #  UI CORE — Theme · helpers · buttons · input · navigation · overlays
 # ======================================================================
-const RULES := {
-	"othello": [
-		"هدف: در پایان بازی بیشترین مهره‌ی هم‌رنگ را روی صفحه داشته باشید.",
-		"روی خانه‌ای بازی کنید که حداقل یک مهره‌ی حریف را بین مهره‌ی تازه و یکی از مهره‌های خودتان محصور کند؛ مهره‌های محصورشده برمی‌گردند.",
-		"نقطه‌های روشن حرکت‌های مجازند. اگر حرکتی ندارید، نوبت خودکار رد می‌شود؛ وقتی هیچ‌کس حرکت ندارد، بازی تمام است.",
-		"این نسخه روی صفحه‌ی ۸×۸ یا ۱۲×۱۲ اجرا می‌شود. در بازی شبکه‌ای، حریف رنگ مقابل را دارد.",
-		"نکته: گوشه‌ها معمولاً بسیار ارزشمندند؛ مهره‌های کناری را بی‌دلیل در معرض محاصره قرار ندهید.",
-	],
-	"othello12": [
-		"هدف: در پایان بازی بیشترین مهره‌ی هم‌رنگ را روی صفحه‌ی ۱۲×۱۲ داشته باشید.",
-		"روی خانه‌ای بازی کنید که حداقل یک مهره‌ی حریف را بین مهره‌ی تازه و یکی از مهره‌های خودتان محصور کند؛ مهره‌های محصورشده برمی‌گردند.",
-		"نقطه‌های روشن حرکت‌های مجازند. اگر حرکتی ندارید، نوبت خودکار رد می‌شود؛ وقتی هیچ‌کس حرکت ندارد، بازی تمام است.",
-		"گوشه‌ها را برای خود نگه دارید و پیش از گذاشتن مهره بررسی کنید که لبه‌ی بیرونی حریف را در دسترس قرار ندهید.",
-		"در بازی شبکه‌ای، حریف رنگ مقابل را کنترل می‌کند و هر حرکت پس از ثبت به صفحه‌ی او می‌رسد.",
-	],
-	"pentago": [
-		"هدف: پنج مهره‌ی هم‌رنگ را در یک خط افقی، عمودی یا مورب قرار دهید.",
-		"در هر نوبت، ابتدا یک مهره روی خانه‌ی خالی بگذارید و سپس یکی از چهار بخش ۳×۳ را ۹۰ درجه بچرخانید.",
-		"چرخاندن بخش جزئی از نوبت اجباری است؛ بعد از چرخش، خط پنج‌تایی دوباره بررسی می‌شود.",
-		"قبل از چرخش، اثر آن روی مهره‌های هر چهار بخش را بررسی کنید و مراقب تهدید فوری حریف باشید.",
-		"در بازی شبکه‌ای، نوبت‌ها یکی در میان است و حرکت پس از ثبت به حریف نمایش داده می‌شود.",
-	],
-	"quoridor": [
-		"هدف: زودتر از حریف به ردیف مقابلِ محل شروع برسید.",
-		"در هر نوبت فقط یکی را انجام دهید: یک خانه حرکت کنید یا یک دیوار بگذارید. نقطه‌های روشن حرکت‌های مجاز را نشان می‌دهند.",
-		"می‌توانید از مهره‌ی کنار خود بپرید؛ اگر خانه‌ی پشت آن بسته باشد، حرکت مورب مجاز می‌شود.",
-		"دیوار باید دو گذر را ببندد، نباید تقاطع یا هم‌پوشانی داشته باشد و نباید مسیر هیچ بازیکنی را کاملاً مسدود کند.",
-		"در حالت دونفره هر نفر ۱۰ دیوار و در حالت چهارنفره هر نفر ۵ دیوار دارد. مسیر خود را هم کوتاه کنید، نه فقط مسیر حریف را.",
-	],
-	"chess": [
-		"برای حرکت، مهره را انتخاب کنید؛ خانه‌های مجاز روشن می‌شوند. سپس خانه‌ی مقصد را انتخاب کنید.",
-		"هر مهره حرکت مخصوص خودش را دارد. پیاده در رسیدن به انتهای صفحه به وزیر تبدیل می‌شود.",
-		"نسخه‌ی فعلی ساده‌شده است: قلعه‌رفتن و آن‌پاسان پشتیبانی نمی‌شوند و پایان بازی با گرفتن شاه تشخیص داده می‌شود؛ قوانین رسمی کیش‌ومات کامل نیستند.",
-		"در بازی شبکه‌ای، حریف رنگ مقابل را کنترل می‌کند. قبل از هر حرکت، مهره‌های در معرض گرفتن را بررسی کنید.",
-	],
-	"domino": [
-		"هدف: زودتر از حریف همه‌ی مهره‌های دومینوی خود را بازی کنید؛ در بن‌بست، نقطه‌های باقی‌مانده تعیین‌کننده‌اند.",
-		"هر نفر با ۷ مهره شروع می‌کند. یک سمت مهره‌ی انتخابی باید با عددِ سرِ زنجیر برابر باشد.",
-		"مهره را انتخاب کنید و سپس سرِ چپ یا راست زنجیر را بزنید. اگر امکان بازی ندارید، از انبار بردارید؛ اگر انبار خالی است نوبت را رد کنید.",
-		"نگه‌داشتن مهره‌های دارای عددهای نادر می‌تواند گزینه‌های حریف را محدود کند.",
-		"در بازی شبکه‌ای، پیش از تأیید سمت زنجیر، عددِ سرِ انتخاب‌شده را دوباره بررسی کنید.",
-	],
-	"pasoor": [
-		"هدف: زودتر از حریف به ۶۲ امتیاز برسید. هر نوبت یک کارت از دست خود انتخاب کنید.",
-		"کارت عددی می‌تواند یک یا چند کارت میز را بگیرد، اگر جمع دقیقاً ۱۱ شود؛ آس تا ۱۰ مقدار عددی دارند. شاه با شاه و بی‌بی با بی‌بی گرفته می‌شود.",
-		"سرباز معمولاً کارت‌های میز را جمع می‌کند، اما شاه و بی‌بی را نمی‌گیرد. اگر گرفتن ممکن باشد، کارت را برای گرفتن بازی کنید.",
-		"امتیازهای ویژه شامل سور، هفت‌خاج، ده خشت، دو گشنیز، آس و سرباز است؛ امتیازهای روی صفحه را بعد از هر دست بررسی کنید.",
-		"برای انتخاب کارت روی آن بزنید؛ اگر انتخاب دوم لازم بود، کارت‌های میز را نیز انتخاب کنید یا از دکمه‌ی تأیید پایین استفاده کنید.",
-	],
-	"hokm": [
-		"نسخه‌ی فعلی حکم در این پروژه ساده‌شده و دونفره است؛ نسخه‌ی استاندارد چهار نفره در این پیاده‌سازی فعال نیست.",
-		"خال حکم در بالای صفحه دیده می‌شود. اگر کارت هم‌خالِ کارت آغازگر دارید، باید همان خال را بازی کنید.",
-		"اگر هم‌خال ندارید، می‌توانید حکم یا خال دیگری بازی کنید. حکم از خال‌های دیگر قوی‌تر است.",
-		"هر دست را کارت برنده می‌برد؛ پس از پایان دور، امتیاز ثبت می‌شود. کارت‌های بزرگ را بدون دلیل زود مصرف نکنید.",
-		"روی کارت موردنظر بزنید تا بازی شود. کارت‌های کم‌رنگ‌شده در آن نوبت مجاز نیستند.",
-	],
-	"backgammon": [
-		"هدف: هر ۱۵ مهره‌ی خود را طبق جهت حرکت از صفحه خارج کنید.",
-		"تاس‌ها به‌صورت خودکار ریخته می‌شوند و بازی حرکت قانونی را با کنترل‌های فعلی انتخاب می‌کند؛ انتخاب دستی همه‌ی مهره‌ها هنوز کامل نیست.",
-		"عدد هر تاس به اندازه‌ی حرکت مربوط است. خانه‌ی تنها ممکن است زده شود؛ قانون ورود دوباره‌ی مهره از بار در این نسخه ساده‌شده است.",
-		"ساختن خانه‌های بسته و قرارندادن مهره‌های تنها در معرض ضربه، معمولاً خطر را کم می‌کند.",
-		"این نسخه هنوز تمام قواعد مسابقاتی تخته‌نرد را ندارد؛ آن را به‌عنوان نسخه‌ی ساده‌شده در نظر بگیرید.",
-	],
-	"gobblet": [
-		"هدف: چهار مهره‌ی هم‌رنگ را در یک ردیف افقی، عمودی یا مورب قرار دهید.",
-		"هر بازیکن ۱۲ مهره دارد: سه مهره از هر کدام از چهار اندازه. مهره‌ی بزرگ‌تر می‌تواند مهره‌ی کوچک‌تر را بپوشاند.",
-		"برای گذاشتن مهره، اندازه را انتخاب و خانه را لمس کنید. برای جابه‌جایی، بالاترین مهره‌ی خود را انتخاب و مقصد مجاز را بزنید.",
-		"برداشتن یک مهره ممکن است ردیف زیر آن را آشکار کند. اگر با این کار ردیف چهار‌تاییِ حریف برنده شود و حرکت همان ردیف را نپوشاند، شما می‌بازید.",
-		"قبل از جابه‌جایی، مهره‌های پنهان و ردیف‌هایی را که با برداشتن مهره آشکار می‌شوند بررسی کنید.",
-	],
-	"mastermind": [
-		"هدف: کد مخفی را با کمترین زمان و تلاش پیدا کنید. در هر سطح، طول کد و تعداد رنگ‌ها از ۴ تا ۹ افزایش می‌یابد؛ تکرار رنگ مجاز است.",
-		"خانه‌های ردیف جاری را از پالت رنگ انتخاب کنید و حدس را ثبت کنید. حداکثر ۱۰ تلاش دارید.",
-		"مهره‌های بازخورد دقیقاً زیر همان خانه‌ی حدس قرار می‌گیرند: سیاه یعنی رنگ و جای درست؛ سفید یعنی رنگ درست اما جای دیگر.",
-		"در مسابقه‌ی آنلاین، هر بازیکن حدس‌های خودش را در صفحه‌ی خصوصی می‌بیند. دیگران فقط نام، رتبه و تعداد خانه‌های دقیق را می‌بینند، نه کد یا ردیف‌های حدس شما.",
-		"رتبه‌ی زنده بر اساس خانه‌های دقیق و پیشرفت به‌روز می‌شود؛ در رتبه‌ی نهایی، زمان حل و تعداد تلاش‌ها معیار مقایسه‌اند.",
-		"برای مسابقه‌ی شبکه‌ای، همه باید فکر بکر را انتخاب کنند و در همان اتاق/صف بمانند تا رقابت آغاز شود.",
-	],
-	"abalone": [
-		"هدف: با بیرون‌راندن شش مهره‌ی حریف از صفحه برنده شوید. هر بازیکن با ۱۴ مهره شروع می‌کند.",
-		"یک تا سه مهره‌ی هم‌رنگ و پیوسته را انتخاب کنید. گروه در یک خط مستقیم یا به پهلو یک خانه حرکت می‌کند.",
-		"هل‌دادن فقط در امتداد خط و با برتری عددی ممکن است: دو مهره در برابر یک، سه در برابر یک یا سه در برابر دو.",
-		"گروه‌های پهلو به پهلو نمی‌توانند مهره‌ی حریف را هل دهند؛ برای هل‌دادن، پشت مهره‌ی حریف باید فضای آزاد یا لبه‌ی صفحه باشد.",
-		"برای انتخاب گروه، مهره‌ها را به ترتیب انتخاب کنید و سپس یکی از خانه‌های علامت‌خورده را لمس کنید.",
-	],
-	"quarto": [
-		"هدف: ردیفی از چهار مهره بسازید که همگی دست‌کم یک ویژگی مشترک داشته باشند؛ بلند/کوتاه، گرد/مربع، روشن/تیره یا توپر/توخالی.",
-		"۱۶ مهره‌ی یکتا وجود دارد و هر مهره دقیقاً چهار ویژگی دودویی دارد. در هر نوبت یک بازیکن مهره‌ای را انتخاب می‌کند که حریف باید آن را روی صفحه بگذارد.",
-		"پس از گذاشتن مهره، اگر ردیف چهارتایی با ویژگی مشترک ساخته نشد، همان بازیکنی که مهره را گذاشته، مهره‌ی بعدی را برای حریف انتخاب می‌کند.",
-		"برنده کسی است که با جای‌گذاری مهره، ردیف چهارتاییِ دارای ویژگی مشترک را کامل کند؛ مهره‌های آن ردیف می‌توانند انتخاب‌شده توسط هر دو بازیکن باشند.",
-		"مهره‌های استفاده‌شده دوباره قابل انتخاب نیستند. اگر تمام خانه‌ها پر شود و کسی ردیف برنده نسازد، بازی مساوی است.",
-		"برای انتخاب مهره روی یکی از ۱۶ گزینه پایین صفحه بزنید؛ برای قرار دادن، خانه‌ی خالی صفحه را لمس کنید. سطح هوش CPU را پیش از شروع انتخاب کنید.",
-	],
-	"blockace": [
-		"هدف: با گذاشتن قطعه‌های بیشتری از حریف امتیاز بگیرید. صفحه ۱۴×۱۴ و هر بازیکن ۲۱ قطعه دارد.",
-		"قطعه‌ی اول باید خانه‌ی شروع خود را بپوشاند؛ هر قطعه‌ی بعدی باید از گوشه به قطعه‌ی هم‌رنگ شما وصل شود، نه از ضلع.",
-		"تماس قطعات شما با ضلع یا گوشه‌ی قطعات حریف مجاز است. قطعه را انتخاب کنید و در صورت نیاز بچرخانید یا وارونه کنید.",
-		"وقتی هیچ بازیکنی حرکت قانونی ندارد، امتیاز نهایی از خانه‌های استفاده‌نشده کم می‌شود؛ استفاده از تمام قطعات و گذاشتن تک‌خانه‌ای در آخر پاداش دارد.",
-		"در حالت تک‌نفره سطح CPU را پیش از شروع انتخاب کنید. بازی شبکه‌ای نوبتی است و هر حرکت باید قانون اتصال گوشه‌ای را رعایت کند.",
-	],
-	"uno": [
-		"هدف: کارت‌های دست خود را زودتر تمام کنید. در مسابقه‌ی کامل، برنده‌ی هر دست امتیاز کارت‌های باقی‌مانده‌ی دیگران را می‌گیرد؛ اولین بازیکن با ۵۰۰ امتیاز برنده‌ی مسابقه است.",
-		"بازی استاندارد برای ۲ تا ۱۰ نفر است و هر بازیکن با ۷ کارت شروع می‌کند. کارت بالای دورریز را با رنگ، عدد یا نماد کارت دست خود جور کنید؛ اگر ندارید، یک کارت بکشید.",
-		"کارت +۲ بازیکن بعدی را مجبور می‌کند دو کارت بکشد و نوبتش رد می‌شود. کارت رد نوبت نوبت نفر بعدی را می‌پراند؛ معکوس، جهت را تغییر می‌دهد.",
-		"وایلد رنگ فعال را عوض می‌کند. وایلد +۴ فقط وقتی قانونی است که کارت هم‌رنگ با رنگ فعلی در دست نداشته باشید؛ بازیکن بعدی می‌تواند آن را به چالش بکشد.",
-		"هنگام بازی‌کردن کارت دوم از آخر، «اعلام UNO» را بزنید. اگر اعلام نکنید و حریف پیش از شروع نوبت بعدی شما را بگیرد، دو کارت جریمه می‌گیرید.",
-		"امتیاز کارت‌های عددی برابر عدد آن‌هاست؛ +۲، معکوس و رد نوبت ۲۰ امتیاز؛ وایلد و +۴ هر کدام ۵۰ امتیاز دارند. قانون جمع‌کردن چند +۲ یا +۴ در این نسخه غیرفعال است.",
-		"در صفحه‌ی حالت بازی تعداد بازیکنان و درجه‌ی سختی CPU را انتخاب کنید. سطح‌های بالاتر در انتخاب رنگ، کارت‌های جریمه و تشخیص موقعیت حریف بهتر تصمیم می‌گیرند.",
-	],
-}
-
-const GENERAL_HELP := [
-	"در صفحه‌ی بازی‌ها، فیلترهای دسته‌بندی را به‌کار ببرید و کارت بازی را لمس کنید تا صفحه‌ی انتخاب حالت باز شود.",
-	"در صفحه‌ی حالت، بازی با کامپیوتر یا شبکه را انتخاب کنید؛ اگر بازی سطح سختی دارد، پیش از شروع آن را تعیین کنید.",
-	"حین بازی از منوی توقف برای ادامه، راهنما، تنظیم صدا، شروع مجدد، تسلیم یا بازگشت به منوی اصلی استفاده کنید.",
-	"نوار پایین به چهار بخش بازی‌ها، آنلاین، رتبه‌بندی و آمار می‌رود. نام کاربری و وضعیت سرور در بخش آنلاین مدیریت می‌شود.",
-	"پایان بازی به شکل پنجره روی همان صفحه نشان داده می‌شود تا نتیجه و آخرین وضعیت صفحه را ببینید. برای بازی تازه از دکمه‌ی مربوط استفاده کنید.",
-]
-const ONLINE_HELP := [
-	"در بخش آنلاین، نام کاربری را ثبت کنید و بازی موردنظر را انتخاب کنید. حریف باید همان بازی را انتخاب کرده باشد.",
-	"برای مسابقه‌ی وب، «جستجوی هم‌بازی آنلاین» را بزنید و تا جفت‌شدن در صف بمانید. این روش به سرور WSS نیاز دارد.",
-	"اتصال مستقیم IP از طریق ENet/UDP فقط در خروجی APK و دسکتاپ است؛ دو گوشی باید روی همان وای‌فای یا هات‌اسپات باشند.",
-	"در طول مسابقه، دکمه‌ی ایموجی برای ارسال واکنش‌های آماده به حریف است. پیام متنی آزاد در این نسخه وجود ندارد.",
-	"اگر وضعیت اتصال تغییر نکرد، سرور و اینترنت را بررسی کنید. تا وقتی نشانی سرور در تنظیمات قرار نگرفته، صف آنلاین کار نخواهد کرد.",
-]
-const DASHBOARD_HELP := [
-	"در صفحه‌ی آمار، هر ردیف مربوط به یک بازی است و برد، مساوی، باخت و امتیاز آن بازی را نمایش می‌دهد.",
-	"تمام‌دوران امتیاز جمع‌شده‌ی همیشگی را نشان می‌دهد؛ این هفته رویدادهای هفت روز گذشته و ماه جاری امتیاز لیگ این فصل را نشان می‌دهد.",
-	"امتیاز لیگ در آغاز ماه میلادی صفر می‌شود اما رتبه‌ی مهارتی و آمار تمام‌دوران باقی می‌مانند.",
-	"آمار در این نسخه روی همان دستگاه یا مرورگر نگهداری می‌شود؛ پاک‌کردن داده‌های برنامه یا مرورگر ممکن است آن را حذف کند.",
-]
-const RANKINGS_HELP := [
-	"امتیاز لیگ در ابتدای هر ماه میلادی از نو شروع می‌شود؛ امتیازهای تمام‌دوران و رتبه‌ی مهارتی دائمی جداگانه نگهداری می‌شوند.",
-	"هر بازی رتبه‌ی مهارتی مستقل دارد. این رتبه برای پیشنهاد حریف هم‌سطح مناسب است؛ رتبه‌ی کلی خلاصه‌ای از عملکرد در همه‌ی بازی‌هاست.",
-	"برد امتیاز بیشتری می‌دهد، مساوی امتیاز مثبت کوچک دارد و باخت امتیاز لیگ را کم می‌کند. برد مقابل انسان آنلاین از بازی CPU باارزش‌تر است.",
-	"بازی CPU فقط امتیاز لیگ با ضریب سطح سختی می‌دهد و رتبه‌ی مهارتی رقابتی را تغییر نمی‌دهد؛ بازی دوستانه‌ی روی یک دستگاه هم رتبه‌ای نیست.",
-	"جدول فعلی روی همین دستگاه ذخیره می‌شود و هنوز جدول جهانی مشترک بین همه‌ی کاربران نیست؛ برای آن به حساب و پایگاه داده‌ی سمت سرور نیاز است.",
-]
-
-const CAT_LABELS := {"all": "همه", "strategy": "استراتژی", "cards": "کارتی", "classic": "کلاسیک"}
-const MM_COLORS := [
-	Color(1.0, 0.36, 0.42), Color(0.24, 0.86, 0.60), Color(0.30, 0.55, 1.0),
-	Color(1.0, 0.82, 0.30), Color(0.71, 0.48, 1.0), Color(1.0, 0.62, 0.26),
-	Color(0.20, 0.82, 0.84), Color(1.0, 0.42, 0.73), Color(0.72, 0.80, 0.91)
-]
-
 # ---------- UI state ----------
 var _result_logged: bool = false
 var _time: float = 0.0
@@ -1846,142 +1705,7 @@ func _music_label() -> String:
 
 # ---------- icons ----------
 func _draw_icon(n: String, c: Vector2, s: float, col: Color, w: float = 2.4) -> void:
-	var h: float = s * 0.5
-	match n:
-		"back":
-			draw_polyline(PackedVector2Array([c + Vector2(-h * 0.35, -h * 0.75), c + Vector2(h * 0.4, 0), c + Vector2(-h * 0.35, h * 0.75)]), col, w, true)
-		"forward":
-			draw_polyline(PackedVector2Array([c + Vector2(h * 0.35, -h * 0.75), c + Vector2(-h * 0.4, 0), c + Vector2(h * 0.35, h * 0.75)]), col, w, true)
-		"close":
-			draw_line(c + Vector2(-h * 0.6, -h * 0.6), c + Vector2(h * 0.6, h * 0.6), col, w, true)
-			draw_line(c + Vector2(h * 0.6, -h * 0.6), c + Vector2(-h * 0.6, h * 0.6), col, w, true)
-		"music", "music_off":
-			draw_line(c + Vector2(h * 0.35, -h * 0.75), c + Vector2(h * 0.35, h * 0.4), col, w, true)
-			draw_line(c + Vector2(h * 0.35, -h * 0.75), c + Vector2(-h * 0.45, -h * 0.5), col, w, true)
-			draw_line(c + Vector2(-h * 0.45, -h * 0.5), c + Vector2(-h * 0.45, h * 0.6), col, w, true)
-			draw_circle(c + Vector2(h * 0.1, h * 0.45), h * 0.3, col)
-			draw_circle(c + Vector2(-h * 0.7, h * 0.65), h * 0.3, col)
-			if n == "music_off":
-				draw_line(c + Vector2(-h * 0.9, -h * 0.9), c + Vector2(h * 0.9, h * 0.9), Color(1.0, 0.45, 0.5), w * 1.2, true)
-		"help":
-			_ring(c, h * 0.9, col, w * 0.8)
-			_txt_c("؟", Rect2(c - Vector2(h, h), Vector2(s, s)), int(s * 0.7), col, true)
-		"pause":
-			_panel(Rect2(c + Vector2(-h * 0.55, -h * 0.65), Vector2(h * 0.42, h * 1.3)), col, 2)
-			_panel(Rect2(c + Vector2(h * 0.13, -h * 0.65), Vector2(h * 0.42, h * 1.3)), col, 2)
-		"play":
-			draw_colored_polygon(PackedVector2Array([c + Vector2(-h * 0.45, -h * 0.7), c + Vector2(h * 0.7, 0), c + Vector2(-h * 0.45, h * 0.7)]), col)
-		"door":
-			draw_polyline(PackedVector2Array([c + Vector2(-h * 0.1, -h * 0.8), c + Vector2(-h * 0.7, -h * 0.8), c + Vector2(-h * 0.7, h * 0.8), c + Vector2(-h * 0.1, h * 0.8)]), col, w, true)
-			draw_line(c + Vector2(-h * 0.1, 0), c + Vector2(h * 0.8, 0), col, w, true)
-			draw_polyline(PackedVector2Array([c + Vector2(h * 0.45, -h * 0.35), c + Vector2(h * 0.8, 0), c + Vector2(h * 0.45, h * 0.35)]), col, w, true)
-		"flag":
-			draw_line(c + Vector2(-h * 0.5, -h * 0.8), c + Vector2(-h * 0.5, h * 0.8), col, w, true)
-			draw_colored_polygon(PackedVector2Array([c + Vector2(-h * 0.5, -h * 0.75), c + Vector2(h * 0.7, -h * 0.4), c + Vector2(-h * 0.5, h * 0.1)]), col)
-		"cpu":
-			_panel(Rect2(c - Vector2(h * 0.55, h * 0.55), Vector2(h * 1.1, h * 1.1)), Color(0, 0, 0, 0), 3, col, w * 0.8)
-			for i in 3:
-				var o: float = (i - 1) * h * 0.45
-				draw_line(c + Vector2(o, -h * 0.55), c + Vector2(o, -h * 0.95), col, w * 0.7)
-				draw_line(c + Vector2(o, h * 0.55), c + Vector2(o, h * 0.95), col, w * 0.7)
-				draw_line(c + Vector2(-h * 0.55, o), c + Vector2(-h * 0.95, o), col, w * 0.7)
-				draw_line(c + Vector2(h * 0.55, o), c + Vector2(h * 0.95, o), col, w * 0.7)
-			draw_circle(c, h * 0.18, col)
-		"wifi":
-			for i in 3:
-				var rr: float = h * (0.45 + i * 0.42)
-				draw_arc(c + Vector2(0, h * 0.6), rr, deg_to_rad(-135), deg_to_rad(-45), 14, col, w * 0.85, true)
-			draw_circle(c + Vector2(0, h * 0.6), h * 0.12, col)
-		"globe":
-			_ring(c, h * 0.9, col, w * 0.8)
-			draw_arc(c, h * 0.9, deg_to_rad(-90), deg_to_rad(90), 12, col, 1.2, true)
-			draw_line(c + Vector2(-h * 0.9, 0), c + Vector2(h * 0.9, 0), col, 1.4, true)
-			draw_line(c + Vector2(0, -h * 0.9), c + Vector2(0, h * 0.9), col, 1.4, true)
-			var pts := PackedVector2Array()
-			for i in 17:
-				var a: float = -PI * 0.5 + PI * i / 16.0
-				pts.append(c + Vector2(cos(a) * h * 0.42, sin(a) * h * 0.9))
-			draw_polyline(pts, col, 1.4, true)
-			var pts2 := PackedVector2Array()
-			for i in 17:
-				var a2: float = PI * 0.5 + PI * i / 16.0
-				pts2.append(c + Vector2(cos(a2) * h * 0.42, sin(a2) * h * 0.9))
-			draw_polyline(pts2, col, 1.4, true)
-		"keypad":
-			for i in 9:
-				draw_circle(c + Vector2((i % 3 - 1) * h * 0.62, (i / 3 - 1) * h * 0.62), h * 0.17, col)
-		"trophy":
-			draw_colored_polygon(PackedVector2Array([c + Vector2(-h * 0.55, -h * 0.75), c + Vector2(h * 0.55, -h * 0.75), c + Vector2(h * 0.4, h * 0.05), c + Vector2(h * 0.12, h * 0.3), c + Vector2(-h * 0.12, h * 0.3), c + Vector2(-h * 0.4, h * 0.05)]), col)
-			draw_arc(c + Vector2(-h * 0.55, -h * 0.4), h * 0.3, deg_to_rad(90), deg_to_rad(270), 10, col, w * 0.7, true)
-			draw_arc(c + Vector2(h * 0.55, -h * 0.4), h * 0.3, deg_to_rad(-90), deg_to_rad(90), 10, col, w * 0.7, true)
-			draw_rect(Rect2(c + Vector2(-h * 0.1, h * 0.3), Vector2(h * 0.2, h * 0.3)), col)
-			_panel(Rect2(c + Vector2(-h * 0.5, h * 0.58), Vector2(h, h * 0.22)), col, 2)
-		"chart":
-			_panel(Rect2(c + Vector2(-h * 0.75, h * 0.0), Vector2(h * 0.4, h * 0.8)), col, 2)
-			_panel(Rect2(c + Vector2(-h * 0.2, -h * 0.8), Vector2(h * 0.4, h * 1.6)), col, 2)
-			_panel(Rect2(c + Vector2(h * 0.35, -h * 0.35), Vector2(h * 0.4, h * 1.15)), col, 2)
-		"gamepad":
-			_panel(Rect2(c + Vector2(-h * 0.95, -h * 0.5), Vector2(h * 1.9, h * 1.05)), Color(0, 0, 0, 0), h * 0.5, col, w * 0.8)
-			draw_line(c + Vector2(-h * 0.5, -h * 0.2), c + Vector2(-h * 0.5, h * 0.25), col, w * 0.8)
-			draw_line(c + Vector2(-h * 0.72, h * 0.02), c + Vector2(-h * 0.28, h * 0.02), col, w * 0.8)
-			draw_circle(c + Vector2(h * 0.4, -h * 0.05), h * 0.1, col)
-			draw_circle(c + Vector2(h * 0.65, h * 0.2), h * 0.1, col)
-		"home":
-			draw_colored_polygon(PackedVector2Array([c + Vector2(0, -h * 0.9), c + Vector2(h * 0.95, -h * 0.05), c + Vector2(-h * 0.95, -h * 0.05)]), col)
-			draw_rect(Rect2(c + Vector2(-h * 0.6, -h * 0.05), Vector2(h * 1.2, h * 0.85)), col)
-		"power":
-			draw_arc(c, h * 0.75, deg_to_rad(-60), deg_to_rad(240), 20, col, w, true)
-			draw_line(c + Vector2(0, -h * 0.95), c + Vector2(0, -h * 0.1), col, w, true)
-		"restart":
-			draw_arc(c, h * 0.7, deg_to_rad(-40), deg_to_rad(270), 20, col, w, true)
-			draw_colored_polygon(PackedVector2Array([c + Vector2(h * 0.55, -h * 0.9), c + Vector2(h * 0.95, -h * 0.25), c + Vector2(h * 0.2, -h * 0.35)]), col)
-		"check":
-			draw_polyline(PackedVector2Array([c + Vector2(-h * 0.7, 0), c + Vector2(-h * 0.2, h * 0.5), c + Vector2(h * 0.7, -h * 0.5)]), col, w * 1.15, true)
-		"copy":
-			_panel(Rect2(c + Vector2(-h * 0.2, -h * 0.75), Vector2(h * 0.95, h * 1.1)), Color(0, 0, 0, 0), 3, col, w * 0.7)
-			_panel(Rect2(c + Vector2(-h * 0.75, -h * 0.35), Vector2(h * 0.95, h * 1.1)), Color(0, 0, 0, 0), 3, col, w * 0.7)
-		"backspace":
-			draw_polyline(PackedVector2Array([c + Vector2(-h * 0.2, -h * 0.6), c + Vector2(h * 0.8, -h * 0.6), c + Vector2(h * 0.8, h * 0.6), c + Vector2(-h * 0.2, h * 0.6), c + Vector2(-h * 0.85, 0), c + Vector2(-h * 0.2, -h * 0.6)]), col, w * 0.8, true)
-			draw_line(c + Vector2(0, -h * 0.25), c + Vector2(h * 0.5, h * 0.25), col, w * 0.7, true)
-			draw_line(c + Vector2(h * 0.5, -h * 0.25), c + Vector2(0, h * 0.25), col, w * 0.7, true)
-		"rot_cw":
-			draw_arc(c, h * 0.7, deg_to_rad(-60), deg_to_rad(210), 18, col, w, true)
-			draw_colored_polygon(PackedVector2Array([c + Vector2(-h * 0.95, h * 0.3), c + Vector2(-h * 0.35, h * 0.2), c + Vector2(-h * 0.7, h * 0.9)]), col)
-		"rot_ccw":
-			draw_arc(c, h * 0.7, deg_to_rad(-30), deg_to_rad(240), 18, col, w, true)
-			draw_colored_polygon(PackedVector2Array([c + Vector2(h * 0.95, h * 0.3), c + Vector2(h * 0.35, h * 0.2), c + Vector2(h * 0.7, h * 0.9)]), col)
-		"user":
-			draw_circle(c + Vector2(0, -h * 0.35), h * 0.38, col)
-			draw_arc(c + Vector2(0, h * 0.95), h * 0.8, deg_to_rad(200), deg_to_rad(340), 12, col, w * 1.6, true)
-		"warning":
-			draw_colored_polygon(PackedVector2Array([c + Vector2(0, -h * 0.9), c + Vector2(h * 0.95, h * 0.75), c + Vector2(-h * 0.95, h * 0.75)]), col)
-			draw_line(c + Vector2(0, -h * 0.3), c + Vector2(0, h * 0.25), BG_TOP, w * 0.9, true)
-			draw_circle(c + Vector2(0, h * 0.5), w * 0.5, BG_TOP)
-		"crown":
-			draw_colored_polygon(PackedVector2Array([c + Vector2(-h * 0.8, h * 0.55), c + Vector2(-h * 0.85, -h * 0.5), c + Vector2(-h * 0.35, -h * 0.05), c + Vector2(0, -h * 0.75), c + Vector2(h * 0.35, -h * 0.05), c + Vector2(h * 0.85, -h * 0.5), c + Vector2(h * 0.8, h * 0.55)]), col)
-		"star":
-			var sp := PackedVector2Array()
-			for i in 10:
-				var rr2: float = h * (0.95 if i % 2 == 0 else 0.42)
-				var a3: float = -PI * 0.5 + i * PI / 5.0
-				sp.append(c + Vector2(cos(a3), sin(a3)) * rr2)
-			draw_colored_polygon(sp, col)
-		"lock":
-			_panel(Rect2(c + Vector2(-h * 0.6, -h * 0.1), Vector2(h * 1.2, h * 0.9)), col, 3)
-			draw_arc(c + Vector2(0, -h * 0.1), h * 0.4, PI, TAU, 12, col, w, true)
-		"info":
-			_ring(c, h * 0.9, col, w * 0.8)
-			draw_circle(c + Vector2(0, -h * 0.4), 1.8, col)
-			draw_line(c + Vector2(0, -h * 0.1), c + Vector2(0, h * 0.5), col, w * 0.9, true)
-		"plus":
-			draw_line(c + Vector2(-h * 0.6, 0), c + Vector2(h * 0.6, 0), col, w, true)
-			draw_line(c + Vector2(0, -h * 0.6), c + Vector2(0, h * 0.6), col, w, true)
-		"undo":
-			draw_arc(c + Vector2(0, h * 0.1), h * 0.65, deg_to_rad(180), deg_to_rad(400), 18, col, w, true)
-			draw_colored_polygon(PackedVector2Array([c + Vector2(-h * 0.95, -h * 0.1), c + Vector2(-h * 0.25, -h * 0.2), c + Vector2(-h * 0.6, h * 0.5)]), col)
-		"swap":
-			draw_line(c + Vector2(-h * 0.7, -h * 0.35), c + Vector2(h * 0.7, -h * 0.35), col, w, true)
-			draw_line(c + Vector2(h * 0.7, h * 0.35), c + Vector2(-h * 0.7, h * 0.35), col, w, true)
+	_illustration_renderer.draw_icon(self, n, c, s, col, w, BG_TOP)
 
 # ---------- background & chrome ----------
 func _draw_bg(accent: Color = ACCENT) -> void:
@@ -2853,7 +2577,7 @@ func _btns_menu() -> void:
 	_add_btn(Rect2(16, 72, 104, 34), "راهنما", _open_general_help, true, BLUE, "soft", "help", "menu_help")
 	var x: float = VIEW_W - 16.0
 	for key in ["all", "strategy", "cards", "classic"]:
-		var label: String = CAT_LABELS[key]
+		var label: String = UIContentScript.CAT_LABELS[key]
 		var w: float = _txt_w(label, 16, true) + 32.0
 		x -= w
 		_add_btn(Rect2(x, 124, w, 38), label, _set_filter.bind(key), true, ACCENT, "seg_on" if key == menu_filter else "ghost", "", "chip_" + key)
@@ -2926,159 +2650,8 @@ func _draw_game_tile(g: Dictionary, r: Rect2, pressed: bool) -> void:
 	_txt_r(str(g.short), r.end.x - 14, art.end.y + 52, 13, TEXT_DIM, false, w)
 
 # ---------------- GAME ART (mini illustrations) ----------------
-func _art_xf(c: Vector2, o: Vector2, s: float, ang: float = 0.0) -> void:
-	draw_set_transform(c + o * s, ang, Vector2(s, s))
-
-func _art_end() -> void:
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
 func _draw_game_art(id: String, rect: Rect2, col: Color) -> void:
-	var c: Vector2 = rect.get_center()
-	var s: float = minf(rect.size.x / 228.0, rect.size.y / 98.0)
-	match id:
-		"othello", "othello12":
-			var n: int = 5 if id == "othello" else 8
-			var rows: int = 3 if id == "othello" else 4
-			var cs: float = 24.0 if id == "othello" else 15.0
-			_art_xf(c, Vector2.ZERO, s)
-			var ox: float = -cs * n * 0.5
-			var oy: float = -cs * rows * 0.5
-			for yy in rows:
-				for xx in n:
-					var rr := Rect2(ox + xx * cs, oy + yy * cs, cs - 1.5, cs - 1.5)
-					draw_rect(rr, Color(0.14, 0.50, 0.32))
-					var v: int = (xx * 3 + yy * 5 + xx * yy) % 4
-					if v == 0 or v == 1:
-						var cc: Vector2 = rr.get_center()
-						_draw_disc(cc, cs * 0.38, v == 1)
-			_art_end()
-		"pentago":
-			_art_xf(c, Vector2.ZERO, s)
-			for q in 4:
-				var qx: float = -40.0 + (q % 2) * 42.0
-				var qy: float = -40.0 + int(q / 2) * 42.0
-				_panel(Rect2(qx, qy, 38, 38), Color(0.40, 0.28, 0.16), 6, Color(0.7, 0.5, 0.25, 0.6), 1.0)
-				_draw_disc(Vector2(qx + 11, qy + 11), 6.5, false)
-				_draw_disc(Vector2(qx + 27, qy + 27), 6.5, true)
-			draw_arc(Vector2.ZERO, 54, deg_to_rad(-60), deg_to_rad(40), 14, col.lightened(0.3), 3.0, true)
-			draw_colored_polygon(PackedVector2Array([Vector2(54 * cos(deg_to_rad(40)) + 5, 54 * sin(deg_to_rad(40)) - 6), Vector2(54 * cos(deg_to_rad(40)) + 5, 54 * sin(deg_to_rad(40)) + 9), Vector2(54 * cos(deg_to_rad(40)) - 9, 54 * sin(deg_to_rad(40)) + 2)]), col.lightened(0.3))
-			_art_end()
-		"quoridor":
-			_art_xf(c, Vector2.ZERO, s)
-			for yy in 3:
-				for xx in 5:
-					_panel(Rect2(-60 + xx * 25, -36 + yy * 25, 21, 21), Color(1, 1, 1, 0.12), 5)
-			_panel(Rect2(-37, -17, 46, 6), Color(1.0, 0.78, 0.35), 3)
-			_panel(Rect2(15, 8, 6, 22), Color(1.0, 0.78, 0.35), 3)
-			_draw_disc(Vector2(-47.5, 36 - 14), 8, true)
-			draw_circle(Vector2(27.5, -25.5), 8.5, Color(1.0, 0.45, 0.5))
-			_art_end()
-		"chess":
-			_art_xf(c, Vector2.ZERO, s)
-			for yy in 4:
-				for xx in 8:
-					var lt: bool = (xx + yy) % 2 == 0
-					draw_rect(Rect2(-96 + xx * 24, -48 + yy * 24, 24, 24), Color(1, 1, 1, 0.10) if lt else Color(1, 1, 1, 0.03))
-			_draw_chess_piece(2, true, Vector2(-26, 3), 78)
-			_draw_chess_piece(6, false, Vector2(34, 3), 78)
-			_art_end()
-		"domino":
-			_art_xf(c, Vector2(-30, 4), s, deg_to_rad(-14))
-			_draw_dom_tile(Rect2(-22, -34, 44, 68), 6, 4, false, false, false)
-			_art_xf(c, Vector2(32, 0), s, deg_to_rad(12))
-			_draw_dom_tile(Rect2(-22, -34, 44, 68), 3, 5, false, false, false)
-			_art_end()
-		"pasoor":
-			var ang := [-0.30, 0.0, 0.30]
-			var cards := [{"r": 11, "s": 3}, {"r": 7, "s": 0}, {"r": 1, "s": 1}]
-			for i in 3:
-				_art_xf(c, Vector2((i - 1) * 40, 8 - abs(i - 1) * 4), s, ang[i])
-				_draw_card(Rect2(-24, -38, 48, 70), cards[i], false, false, false)
-			_art_end()
-		"hokm":
-			var cs2 := [{"r": 13, "s": 0}, {"r": 12, "s": 1}]
-			for i in 2:
-				_art_xf(c, Vector2(-26 + i * 52, 10), s, -0.2 + i * 0.4)
-				_draw_card(Rect2(-24, -38, 48, 70), cs2[i], false, false, false)
-			_art_xf(c, Vector2(0, -30), s)
-			_draw_icon("crown", Vector2.ZERO, 26, Color(1.0, 0.82, 0.3))
-			_art_end()
-		"backgammon":
-			_art_xf(c, Vector2.ZERO, s)
-			for i in 8:
-				var x0: float = -92.0 + i * 23.0
-				var tcol := Color(0.85, 0.62, 0.35) if i % 2 == 0 else Color(0.35, 0.22, 0.14)
-				draw_colored_polygon(PackedVector2Array([Vector2(x0, 44), Vector2(x0 + 21, 44), Vector2(x0 + 10.5, -20)]), tcol)
-			_draw_disc(Vector2(-81.5, 34), 9, true)
-			_draw_disc(Vector2(-81.5, 15), 9, true)
-			_draw_disc(Vector2(57, 34), 9, false)
-			_draw_dice_face(Rect2(-14, -42, 30, 30), 5)
-			_draw_dice_face(Rect2(24, -34, 30, 30), 2)
-			_art_end()
-		"gobblet":
-			_art_xf(c, Vector2.ZERO, s)
-			var cols := [Color(1.0, 0.45, 0.35), Color(0.35, 0.58, 1.0), Color(1.0, 0.78, 0.30)]
-			for i in 3:
-				var cx: float = (i - 1) * 62.0
-				for j in 3:
-					var rad: float = 34.0 - j * 11.0
-					draw_circle(Vector2(cx, 4), rad, cols[(i + j) % 3].darkened(0.1 + j * 0.0))
-					draw_circle(Vector2(cx, 4), rad - 3.5, cols[(i + j) % 3].lightened(0.1 * j))
-			_art_end()
-		"mastermind":
-			_art_xf(c, Vector2.ZERO, s)
-			for i in 4:
-				var mc: Color = MM_COLORS[(i * 2 + 1) % 6]
-				draw_circle(Vector2(-60 + i * 36, -10), 14, mc.darkened(0.25))
-				draw_circle(Vector2(-60 + i * 36, -11), 12, mc)
-			for i in 4:
-				draw_circle(Vector2(-32 + (i % 2) * 14 + 40, 22 + int(i / 2) * 14 - 4), 5, Color(1, 1, 1) if i < 2 else Color(0.1, 0.1, 0.14))
-			_art_end()
-		"abalone":
-			_art_xf(c, Vector2.ZERO, s)
-			var pts: Array = [Vector2.ZERO]
-			for i in 6:
-				pts.append(Vector2(cos(i * PI / 3.0), sin(i * PI / 3.0)) * 30.0)
-			for i in pts.size():
-				_draw_disc(pts[i], 13, i % 2 == 0)
-			_art_end()
-		"uno":
-			var uno_cols: Array[Color] = [Color("#e9434f"), Color("#2289e8"), Color("#32a765"), Color("#f3c735")]
-			for i in 4:
-				_art_xf(c, Vector2((-1.5 + i) * 31.0, 5 - absf(1.5 - i) * 3.0), s, (i - 1.5) * 0.09)
-				_panel(Rect2(-23, -37, 46, 74), uno_cols[i], 9, Color.WHITE, 1.4)
-				_panel(Rect2(-17, -30, 34, 60), Color(0.06, 0.07, 0.12), 18, Color(1,1,1,0.65), 0.8)
-				_txt_c(["1", "+۲", "↻", "۷"][i], Rect2(-17, -22, 34, 45), 18, uno_cols[i], true)
-			_art_end()
-		"quarto":
-			_art_xf(c, Vector2.ZERO, s)
-			for yy in range(4):
-				for xx in range(4):
-					var qr := Rect2(-42 + xx * 22, -42 + yy * 22, 19, 19)
-					_panel(qr, Color(0.20, 0.22, 0.36), 4, Color(0.75, 0.62, 0.92, 0.45), 0.7)
-					if (xx + yy) % 3 == 0:
-						draw_circle(qr.get_center(), 5.0 if (xx + yy) % 2 == 0 else 4.0, col.lightened(0.12))
-						if (xx + yy) % 2 == 1:
-							draw_circle(qr.get_center(), 2.2, Color(0.10, 0.11, 0.18))
-			_art_end()
-		"blockace":
-			_art_xf(c, Vector2.ZERO, s)
-			var shapes: Array = [
-				[[0, 0], [1, 0], [2, 0], [2, 1]],
-				[[0, 0], [1, 0], [0, 1], [1, 1]],
-				[[0, 0], [1, 0], [2, 0], [1, 1]],
-			]
-			var scol := [Color(0.30, 0.82, 0.76), Color(1.0, 0.62, 0.35), Color(0.62, 0.50, 1.0)]
-			var offs := [Vector2(-82, -26), Vector2(-14, -26), Vector2(30, 6)]
-			for si in 3:
-				for cell in shapes[si]:
-					var cp := Rect2(offs[si] + Vector2(cell[0], cell[1]) * 21.0, Vector2(19, 19))
-					_panel(cp, scol[si], 4)
-					_gloss(cp, 4, 0.18)
-			_art_end()
-		_:
-			_draw_icon("gamepad", c, 40, col)
-	_art_end()
+	_illustration_renderer.draw_game_art(self, id, rect, col, BG_TOP, UIContentScript.MM_COLORS)
 
 # ---------------- MODE ----------------
 func _open_rules() -> void:
@@ -4000,7 +3573,7 @@ func _draw_result() -> void:
 			var py: float = fposmod(-40.0 + t * spd + fposmod(sin(seed_v * 2.3) * 1111.1, 1.0) * 300.0, 560.0) + 40.0
 			if t * spd > 600.0:
 				py = 2000.0
-			var cc: Color = MM_COLORS[i % 6]
+			var cc: Color = UIContentScript.MM_COLORS[i % 6]
 			var rot: float = t * (2.0 + px * 3.0) + i
 			var cp := Vector2(24.0 + px * (VIEW_W - 48.0), py)
 			draw_set_transform(cp, rot, Vector2.ONE)
@@ -4027,7 +3600,7 @@ func _draw_result() -> void:
 		var result_gap: float = minf(56.0, float(VIEW_W - 56) / float(maxi(1, mm_code_len)))
 		if mm_secret.size() == mm_code_len:
 			for i in range(mm_code_len):
-				var mc: Color = MM_COLORS[mm_secret[i]]
+				var mc: Color = UIContentScript.MM_COLORS[mm_secret[i]]
 				var sc := Vector2(VIEW_W * 0.5 + (float(i) - float(mm_code_len - 1) * 0.5) * result_gap, sy + 54)
 				draw_circle(sc, 22 if mm_code_len <= 7 else 17, mc.darkened(0.3))
 				draw_circle(sc + Vector2(0, -1), 19 if mm_code_len <= 7 else 14, mc)
@@ -4294,11 +3867,11 @@ func _rules_lines() -> Array:
 	if _conn_help_active():
 		return CONN_HELP
 	match rules_context:
-		"general": return GENERAL_HELP
-		"online": return ONLINE_HELP
-		"dashboard": return DASHBOARD_HELP
-		"rankings": return RANKINGS_HELP
-		_: return RULES.get(selected_game, [])
+		"general": return UIContentScript.GENERAL_HELP
+		"online": return UIContentScript.ONLINE_HELP
+		"dashboard": return UIContentScript.DASHBOARD_HELP
+		"rankings": return UIContentScript.RANKINGS_HELP
+		_: return UIContentScript.RULES.get(selected_game, [])
 
 func _rules_title() -> String:
 	if _conn_help_active():
@@ -4434,138 +4007,45 @@ func _draw() -> void:
 
 
 # ======================================================================
-#  GAME VISUALS — shared pieces
+#  GAME VISUALS — delegated to ui/tabletop_art_renderer.gd
 # ======================================================================
 func _draw_disc(c: Vector2, r: float, light: bool) -> void:
-	draw_circle(c + Vector2(0, r * 0.16), r, Color(0, 0, 0, 0.35))
-	if light:
-		draw_circle(c, r, Color(0.74, 0.77, 0.84))
-		draw_circle(c + Vector2(0, -r * 0.05), r * 0.92, Color(0.95, 0.96, 0.99))
-		draw_circle(c + Vector2(-r * 0.30, -r * 0.34), r * 0.26, Color(1, 1, 1, 0.75))
-	else:
-		draw_circle(c, r, Color(0.02, 0.03, 0.05))
-		draw_circle(c + Vector2(0, -r * 0.05), r * 0.92, Color(0.15, 0.17, 0.24))
-		draw_circle(c + Vector2(-r * 0.30, -r * 0.34), r * 0.24, Color(1, 1, 1, 0.22))
+	_tabletop_art_renderer.draw_disc(self, c, r, light, ACCENT, PAS_RANKS)
 
 func _draw_marble(c: Vector2, r: float, col: Color) -> void:
-	draw_circle(c + Vector2(0, r * 0.16), r, Color(0, 0, 0, 0.35))
-	draw_circle(c, r, col.darkened(0.35))
-	draw_circle(c + Vector2(0, -r * 0.05), r * 0.92, col)
-	draw_circle(c + Vector2(-r * 0.28, -r * 0.34), r * 0.26, Color(1, 1, 1, 0.55))
+	_tabletop_art_renderer.draw_marble(self, c, r, col, ACCENT, PAS_RANKS)
+
+func _pip_positions(n: int, rect: Rect2) -> Array:
+	return _tabletop_art_renderer.pip_positions(n, rect)
+
+func _draw_pips(rect: Rect2, n: int, col: Color) -> void:
+	_tabletop_art_renderer.draw_pips(self, rect, n, col, ACCENT, PAS_RANKS)
+
+func _draw_dice_face(r: Rect2, n: int, dim: bool = false) -> void:
+	_tabletop_art_renderer.draw_dice_face(self, r, n, dim, ACCENT, PAS_RANKS)
+
+func _draw_dom_tile(r: Rect2, a: int, b: int, selected: bool, dim: bool, horizontal: bool, glow: Color = Color(0, 0, 0, 0)) -> void:
+	_tabletop_art_renderer.draw_dom_tile(self, r, a, b, selected, dim, horizontal, glow, ACCENT, PAS_RANKS)
+
+func _draw_dom_back(r: Rect2) -> void:
+	_tabletop_art_renderer.draw_dom_back(self, r, ACCENT, PAS_RANKS)
+
+func _draw_suit(s: int, c: Vector2, sz: float, col: Color) -> void:
+	_tabletop_art_renderer.draw_suit(self, s, c, sz, col, ACCENT, PAS_RANKS)
+
+func _draw_card(r: Rect2, c: Dictionary, selected: bool = false, dim: bool = false, hl: bool = false) -> void:
+	_tabletop_art_renderer.draw_card(self, r, c, selected, dim, hl, ACCENT, PAS_RANKS)
+
+func _draw_card_back(r: Rect2) -> void:
+	_tabletop_art_renderer.draw_card_back(self, r, ACCENT, PAS_RANKS)
+
+func _draw_chess_piece(typ: int, white: bool, c: Vector2, size: float) -> void:
+	_tabletop_art_renderer.draw_chess_piece(self, typ, white, c, size, ACCENT, PAS_RANKS)
 
 func _hint_dot(c: Vector2, r: float, col: Color) -> void:
 	var k: float = 0.5 + 0.5 * sin(_time * 4.0)
 	draw_circle(c, r + 3.0 * k, Color(col.r, col.g, col.b, 0.14))
 	draw_circle(c, r, Color(col.r, col.g, col.b, 0.55))
-
-func _pip_positions(n: int, rect: Rect2) -> Array:
-	var c: Vector2 = rect.get_center()
-	var dx: float = rect.size.x * 0.27
-	var dy: float = rect.size.y * 0.27
-	match n:
-		1: return [c]
-		2: return [c + Vector2(-dx, -dy), c + Vector2(dx, dy)]
-		3: return [c + Vector2(-dx, -dy), c, c + Vector2(dx, dy)]
-		4: return [c + Vector2(-dx, -dy), c + Vector2(dx, -dy), c + Vector2(-dx, dy), c + Vector2(dx, dy)]
-		5: return [c + Vector2(-dx, -dy), c + Vector2(dx, -dy), c, c + Vector2(-dx, dy), c + Vector2(dx, dy)]
-		6: return [c + Vector2(-dx, -dy), c + Vector2(dx, -dy), c + Vector2(-dx, 0), c + Vector2(dx, 0), c + Vector2(-dx, dy), c + Vector2(dx, dy)]
-	return []
-
-func _draw_pips(rect: Rect2, n: int, col: Color) -> void:
-	var rad: float = maxf(2.0, minf(rect.size.x, rect.size.y) * 0.085)
-	for p in _pip_positions(n, rect):
-		draw_circle(p, rad, col)
-
-func _draw_dice_face(r: Rect2, n: int, dim: bool = false) -> void:
-	_panel(Rect2(r.position + Vector2(0, 2.5), r.size), Color(0, 0, 0, 0.35), r.size.x * 0.22)
-	_panel(r, Color(0.95, 0.95, 0.97) if not dim else Color(0.55, 0.57, 0.65), r.size.x * 0.22)
-	_draw_pips(r.grow(-r.size.x * 0.06), n, Color(0.12, 0.13, 0.20))
-
-func _draw_dom_tile(r: Rect2, a: int, b: int, selected: bool, dim: bool, horizontal: bool, glow: Color = Color(0, 0, 0, 0)) -> void:
-	var rad: float = minf(r.size.x, r.size.y) * 0.18
-	_panel(Rect2(r.position + Vector2(0, 2.5), r.size), Color(0, 0, 0, 0.38), rad)
-	var bg := Color(0.96, 0.94, 0.88)
-	if dim:
-		bg = bg.darkened(0.42)
-	var bc: Color = ACCENT if selected else Color(0.25, 0.20, 0.14, 0.55)
-	if glow.a > 0.0:
-		bc = glow
-	_panel(r, bg, rad, bc, 2.5 if (selected or glow.a > 0.0) else 1.0)
-	var h1: Rect2
-	var h2: Rect2
-	var pc := Color(0.13, 0.12, 0.17) if not dim else Color(0.30, 0.28, 0.30)
-	if horizontal:
-		h1 = Rect2(r.position, Vector2(r.size.x * 0.5, r.size.y))
-		h2 = Rect2(r.position + Vector2(r.size.x * 0.5, 0), Vector2(r.size.x * 0.5, r.size.y))
-		draw_line(r.position + Vector2(r.size.x * 0.5, r.size.y * 0.16), r.position + Vector2(r.size.x * 0.5, r.size.y * 0.84), Color(0.3, 0.25, 0.2, 0.6), 1.5)
-	else:
-		h1 = Rect2(r.position, Vector2(r.size.x, r.size.y * 0.5))
-		h2 = Rect2(r.position + Vector2(0, r.size.y * 0.5), Vector2(r.size.x, r.size.y * 0.5))
-		draw_line(r.position + Vector2(r.size.x * 0.16, r.size.y * 0.5), r.position + Vector2(r.size.x * 0.84, r.size.y * 0.5), Color(0.3, 0.25, 0.2, 0.6), 1.5)
-	_draw_pips(h1.grow(-2), a, pc)
-	_draw_pips(h2.grow(-2), b, pc)
-
-func _draw_dom_back(r: Rect2) -> void:
-	var rad: float = minf(r.size.x, r.size.y) * 0.18
-	_panel(r, Color(0.16, 0.19, 0.36), rad, Color(0.38, 0.45, 0.80, 0.6), 1.0, 4, 2)
-	draw_circle(r.get_center(), minf(r.size.x, r.size.y) * 0.12, Color(0.45, 0.55, 0.95, 0.7))
-
-# ---------- cards ----------
-func _draw_suit(s: int, c: Vector2, sz: float, col: Color) -> void:
-	var u: float = sz * 0.5
-	match s:
-		0:
-			draw_circle(c + Vector2(-u * 0.44, u * 0.14), u * 0.48, col)
-			draw_circle(c + Vector2(u * 0.44, u * 0.14), u * 0.48, col)
-			draw_colored_polygon(PackedVector2Array([c + Vector2(0, -u), c + Vector2(-u * 0.92, u * 0.2), c + Vector2(u * 0.92, u * 0.2)]), col)
-			draw_colored_polygon(PackedVector2Array([c + Vector2(-u * 0.12, u * 0.1), c + Vector2(-u * 0.34, u * 0.98), c + Vector2(u * 0.34, u * 0.98), c + Vector2(u * 0.12, u * 0.1)]), col)
-		1:
-			draw_circle(c + Vector2(-u * 0.46, -u * 0.3), u * 0.5, col)
-			draw_circle(c + Vector2(u * 0.46, -u * 0.3), u * 0.5, col)
-			draw_colored_polygon(PackedVector2Array([c + Vector2(-u * 0.96, -u * 0.1), c + Vector2(u * 0.96, -u * 0.1), c + Vector2(0, u * 0.98)]), col)
-		2:
-			draw_colored_polygon(PackedVector2Array([c + Vector2(0, -u), c + Vector2(u * 0.72, 0), c + Vector2(0, u), c + Vector2(-u * 0.72, 0)]), col)
-		3:
-			draw_circle(c + Vector2(0, -u * 0.46), u * 0.44, col)
-			draw_circle(c + Vector2(-u * 0.52, u * 0.2), u * 0.44, col)
-			draw_circle(c + Vector2(u * 0.52, u * 0.2), u * 0.44, col)
-			draw_circle(c + Vector2(0, u * 0.06), u * 0.3, col)
-			draw_colored_polygon(PackedVector2Array([c + Vector2(-u * 0.12, u * 0.1), c + Vector2(-u * 0.34, u * 0.98), c + Vector2(u * 0.34, u * 0.98), c + Vector2(u * 0.12, u * 0.1)]), col)
-
-func _draw_card(r: Rect2, c: Dictionary, selected: bool = false, dim: bool = false, hl: bool = false) -> void:
-	var rad: float = minf(r.size.x * 0.14, 11.0)
-	_panel(Rect2(r.position + Vector2(0, 3), r.size), Color(0, 0, 0, 0.38), rad)
-	var bg := Color(0.98, 0.97, 0.94)
-	if dim:
-		bg = bg.darkened(0.36)
-	var bcol: Color = Color(0.2, 0.18, 0.16, 0.45)
-	var bw: float = 1.0
-	if selected or hl:
-		bcol = ACCENT
-		bw = 3.0
-	_panel(r, bg, rad, bcol, bw)
-	var red: bool = (int(c.s) == 1 or int(c.s) == 2)
-	var col: Color = Color(0.82, 0.13, 0.20) if red else Color(0.09, 0.10, 0.16)
-	if dim:
-		col = col.lerp(bg, 0.40)
-	var label: String = PAS_RANKS[int(c.r)]
-	var fs: int = int(r.size.x * 0.30)
-	_txt(label, r.position.x + r.size.x * 0.10, r.position.y + fs + 3, fs, col, HORIZONTAL_ALIGNMENT_LEFT, -1, true)
-	_draw_suit(int(c.s), Vector2(r.position.x + r.size.x * 0.10 + fs * 0.34, r.position.y + fs + 3 + fs * 0.55), fs * 0.55, col)
-	if int(c.r) >= 11:
-		_txt_c(label, Rect2(r.position.x, r.position.y + r.size.y * 0.30, r.size.x, r.size.y * 0.5), int(r.size.x * 0.62), col, true)
-	else:
-		_draw_suit(int(c.s), r.get_center() + Vector2(0, r.size.y * 0.1), r.size.x * 0.46, col)
-
-func _draw_card_back(r: Rect2) -> void:
-	var rad: float = minf(r.size.x * 0.14, 11.0)
-	_panel(Rect2(r.position + Vector2(0, 2), r.size), Color(0, 0, 0, 0.35), rad)
-	_panel(r, Color(0.20, 0.16, 0.42), rad, Color(0.96, 0.96, 1.0, 0.85), 2.0)
-	var inner: Rect2 = r.grow(-r.size.x * 0.14)
-	_panel(inner, Color(0.30, 0.24, 0.62), rad * 0.6, Color(0.7, 0.65, 1.0, 0.5), 1.0)
-	var c: Vector2 = r.get_center()
-	var h: float = minf(inner.size.x, inner.size.y) * 0.28
-	draw_colored_polygon(PackedVector2Array([c + Vector2(0, -h), c + Vector2(h * 0.7, 0), c + Vector2(0, h), c + Vector2(-h * 0.7, 0)]), Color(0.75, 0.70, 1.0, 0.55))
 
 func _fan_rects(n: int, cw: float, ch: float, y: float, max_w: float = 508.0, gap: float = 8.0) -> Array:
 	var rects: Array = []
@@ -4588,56 +4068,6 @@ func _fan_hit(rects: Array, p: Vector2, lift: float = 26.0) -> int:
 	return -1
 
 # ---------- chess pieces (vector) ----------
-func _cpoly(pts: Array, c: Vector2, u: float, fill: Color, edge: Color) -> void:
-	var arr := PackedVector2Array()
-	for p in pts:
-		arr.append(c + (p as Vector2) * u)
-	draw_colored_polygon(arr, fill)
-	arr.append(arr[0])
-	draw_polyline(arr, edge, 1.6, true)
-
-func _ccirc(p: Vector2, r: float, c: Vector2, u: float, fill: Color, edge: Color) -> void:
-	draw_circle(c + p * u, r * u + 1.4, edge)
-	draw_circle(c + p * u, r * u, fill)
-
-func _draw_chess_piece(typ: int, white: bool, c: Vector2, size: float) -> void:
-	var fill: Color = Color(0.97, 0.95, 0.90) if white else Color(0.17, 0.18, 0.24)
-	var edge: Color = Color(0.10, 0.09, 0.10) if white else Color(0.88, 0.90, 0.96)
-	var u: float = size / 100.0
-	_panel(Rect2(c + Vector2(-34, 30) * u, Vector2(68, 12) * u), Color(0, 0, 0, 0.28), 6.0 * u)
-	_panel(Rect2(c + Vector2(-30, 26) * u, Vector2(60, 14) * u), fill, 6.0 * u, edge, 1.5)
-	match typ:
-		1:
-			_cpoly([Vector2(-10, -8), Vector2(10, -8), Vector2(18, 26), Vector2(-18, 26)], c, u, fill, edge)
-			_panel(Rect2(c + Vector2(-16, -12) * u, Vector2(32, 8) * u), fill, 3.0 * u, edge, 1.5)
-			_ccirc(Vector2(0, -24), 13, c, u, fill, edge)
-		2:
-			_cpoly([Vector2(-22, 28), Vector2(-18, 6), Vector2(-8, -4), Vector2(-16, -10), Vector2(-8, -26), Vector2(0, -38), Vector2(5, -30), Vector2(13, -37), Vector2(15, -24), Vector2(24, -2), Vector2(22, 28)], c, u, fill, edge)
-			draw_circle(c + Vector2(3, -22) * u, 2.8 * u, edge)
-			draw_line(c + Vector2(-14, -12) * u, c + Vector2(-8, -10) * u, edge, 1.8, true)
-		3:
-			_cpoly([Vector2(-18, 26), Vector2(-8, -4), Vector2(8, -4), Vector2(18, 26)], c, u, fill, edge)
-			var hp: Array = []
-			for i in 16:
-				var a: float = TAU * i / 16.0
-				hp.append(Vector2(cos(a) * 12.0, -22.0 + sin(a) * 18.0))
-			_cpoly(hp, c, u, fill, edge)
-			_ccirc(Vector2(0, -44), 5, c, u, fill, edge)
-			draw_line(c + Vector2(-3, -30) * u, c + Vector2(6, -16) * u, edge, 2.0, true)
-		4:
-			_cpoly([Vector2(-18, 26), Vector2(-14, -8), Vector2(14, -8), Vector2(18, 26)], c, u, fill, edge)
-			_cpoly([Vector2(-21, -8), Vector2(-21, -34), Vector2(-12, -34), Vector2(-12, -26), Vector2(-4, -26), Vector2(-4, -34), Vector2(4, -34), Vector2(4, -26), Vector2(12, -26), Vector2(12, -34), Vector2(21, -34), Vector2(21, -8)], c, u, fill, edge)
-		5:
-			_cpoly([Vector2(-18, 26), Vector2(-12, -6), Vector2(12, -6), Vector2(18, 26)], c, u, fill, edge)
-			_cpoly([Vector2(-22, -8), Vector2(-26, -32), Vector2(-12, -20), Vector2(-7, -38), Vector2(0, -22), Vector2(7, -38), Vector2(12, -20), Vector2(26, -32), Vector2(22, -8)], c, u, fill, edge)
-			for px in [-26.0, -7.0, 7.0, 26.0]:
-				_ccirc(Vector2(px, -36 if abs(px) < 10 else -33), 4, c, u, fill, edge)
-		6:
-			_cpoly([Vector2(-20, 26), Vector2(-14, -4), Vector2(14, -4), Vector2(20, 26)], c, u, fill, edge)
-			_panel(Rect2(c + Vector2(-17, -22) * u, Vector2(34, 18) * u), fill, 6.0 * u, edge, 1.5)
-			_panel(Rect2(c + Vector2(-3.5, -46) * u, Vector2(7, 26) * u), fill, 2.0 * u, edge, 1.5)
-			_panel(Rect2(c + Vector2(-11, -39) * u, Vector2(22, 7) * u), fill, 2.0 * u, edge, 1.5)
-
 # ======================================================================
 #  OTHELLO
 # ======================================================================

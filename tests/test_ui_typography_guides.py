@@ -8,6 +8,7 @@ class TypographyAndGuideTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.main = (ROOT / "main.gd").read_text(encoding="utf-8")
+        cls.ui_content = (ROOT / "core" / "ui_content.gd").read_text(encoding="utf-8")
         cls.catalog = (ROOT / "core" / "game_catalog.gd").read_text(encoding="utf-8")
         cls.readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
@@ -18,16 +19,16 @@ class TypographyAndGuideTests(unittest.TestCase):
         ]
         for game_id in game_ids:
             with self.subTest(game_id=game_id):
-                self.assertIn(f'"{game_id}": [', self.main)
+                self.assertIn(f'"{game_id}": [', self.ui_content)
 
     def test_general_sections_have_context_help(self):
         for helper in ["_open_general_help", "_open_online_help", "_open_dashboard_help", "_open_rankings_help"]:
             with self.subTest(helper=helper):
                 self.assertIn(f"func {helper}()", self.main)
-        self.assertIn('"general": return GENERAL_HELP', self.main)
-        self.assertIn('"online": return ONLINE_HELP', self.main)
-        self.assertIn('"dashboard": return DASHBOARD_HELP', self.main)
-        self.assertIn('"rankings": return RANKINGS_HELP', self.main)
+        self.assertIn('"general": return UIContentScript.GENERAL_HELP', self.main)
+        self.assertIn('"online": return UIContentScript.ONLINE_HELP', self.main)
+        self.assertIn('"dashboard": return UIContentScript.DASHBOARD_HELP', self.main)
+        self.assertIn('"rankings": return UIContentScript.RANKINGS_HELP', self.main)
         self.assertIn("func _rules_prev_page()", self.main)
         self.assertIn("func _rules_next_page()", self.main)
         self.assertIn("const RULES_PAGE_SIZE := 4", self.main)

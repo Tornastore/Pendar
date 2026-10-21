@@ -48,10 +48,10 @@ def test_quarto_actions_are_wired_to_lan_and_websocket_paths():
 
 
 def test_quarto_rules_and_persian_help_exist():
-    rules = (ROOT / "main.gd").read_text(encoding="utf-8")
+    help_content = (ROOT / "core/ui_content.gd").read_text(encoding="utf-8")
     readme = (ROOT / "games/quarto/README.md").read_text(encoding="utf-8")
-    assert '"quarto": [' in rules
-    assert "توخالی" in rules
+    assert '"quarto": [' in help_content
+    assert "توخالی" in help_content
     assert "هر مهره فقط یک‌بار استفاده می‌شود" in readme
     assert "هوش CPU" in readme
 
