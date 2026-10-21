@@ -1,7 +1,7 @@
 رفع هنگ مرورگر هنگام فکرکردن CPU در کریدور
 
 ۱. این بسته را استخراج کنید.
-۲. محتویات پوشه‌ی MindBastion_Modular را روی پوشه‌ی محلی پروژه کپی کنید و فایل‌های هم‌نام را جایگزین کنید؛ پوشه‌ی .git را نگه دارید.
+۲. محتویات پوشه‌ی Pendar را روی پوشه‌ی محلی پروژه کپی کنید و فایل‌های هم‌نام را جایگزین کنید؛ پوشه‌ی .git را نگه دارید.
 ۳. در Git Bash و از ریشه‌ی مخزن اجرا کنید:
 
  git add games/quoridor/ai.gd games/quoridor/README.md tests/test_ai_strength.py README.md APPLY_QUORIDOR_WEB_RESPONSIVENESS_FIX_FA.txt

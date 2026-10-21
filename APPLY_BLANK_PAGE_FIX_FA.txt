@@ -10,7 +10,7 @@
 - افزودن مرحله‌ی بررسی ساختار و smoke-test اجرای Godot به Deploy Web App to GitHub Pages.
 
 برای انتشار:
-1) محتویات MindBastion_Modular را روی ریشه‌ی مخزن محلی جایگزین کنید؛ پوشه‌ی .git را نگه دارید.
+1) محتویات Pendar را روی ریشه‌ی مخزن محلی جایگزین کنید؛ پوشه‌ی .git را نگه دارید.
 2) اجرا کنید:
    git add games/abalone/rules.gd tools/verify_structure.py .github/workflows/deploy-web.yml APPLY_BLANK_PAGE_FIX_FA.txt
    git commit -m "Fix blank web canvas caused by Abalone script parse error"

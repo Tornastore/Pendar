@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build PENDAR Android APK
 
 on:
   workflow_dispatch:
@@ -93,7 +93,7 @@ jobs:
         timeout-minutes: 3
         run: |
           set -euo pipefail
-          LOG_FILE="/tmp/mind-bastion-apk-startup.log"
+          LOG_FILE="/tmp/pendar-apk-startup.log"
           godot --headless --verbose --path . --quit-after 2 2>&1 | tee "$LOG_FILE"
           if grep -E 'SCRIPT ERROR|Parse Error|Parser Error|Failed loading resource|Failed to load script|Cannot load script' "$LOG_FILE"; then
             echo "ERROR: Godot reported script or resource loading errors during startup." >&2
@@ -111,10 +111,10 @@ jobs:
       - name: Export debug APK
         run: |
           mkdir -v -p build/android
-          godot --headless --verbose --export-debug "Android" build/android/MindBastion.apk
+          godot --headless --verbose --export-debug "Android" build/android/Pendar.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MindBastion-apk
-          path: build/android/MindBastion.apk
+          name: Pendar-apk
+          path: build/android/Pendar.apk

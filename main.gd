@@ -1,5 +1,5 @@
 extends Node2D
-# Mind Bastion - مجموعه بازی‌های فکری بزرگسال
+# PENDAR — مجموعه بازی‌های فکری و رقابتی
 # سبک: procedural drawing مثل Last Bastion، موبایل عمودی 540×960
 
 const S := 1.0
@@ -1572,6 +1572,7 @@ var _state_t: float = 0.0
 var font_bold: Font
 var _bg_tex: GradientTexture2D
 var _glow_tex: GradientTexture2D
+var _brand_logo: Texture2D
 var _sb_cache: Dictionary = {}
 var _ptr: Vector2 = Vector2(-999, -999)
 var ov_buttons: Array = []
@@ -1649,6 +1650,7 @@ func _setup_fonts() -> void:
 	font_bold = sb
 
 func _setup_textures() -> void:
+	_brand_logo = load("res://branding/pendar_logo.png") as Texture2D
 	var g := Gradient.new()
 	g.set_color(0, BG_TOP)
 	g.set_color(1, BG_BOT)
@@ -2354,7 +2356,7 @@ func _dialog_confirm() -> void:
 	_rebuild_buttons()
 
 func _confirm_exit_app() -> void:
-	_show_confirm("exit", "خروج از برنامه؟", "آیا می‌خواهید از Mind Bastion خارج شوید؟", "خروج", _quit_app, true, "ماندن", "power")
+	_show_confirm("exit", "خروج از برنامه؟", "آیا می‌خواهید از پندار خارج شوید؟", "خروج", _quit_app, true, "ماندن", "power")
 
 func _confirm_exit_game() -> void:
 	var body := "بازی جاری ناتمام می‌ماند و نتیجه‌ای ثبت نمی‌شود."
@@ -2882,9 +2884,9 @@ func _draw_menu() -> void:
 			continue
 		_draw_game_tile(games[i], r, _press_active and _press_id == "game_" + str(games[i].id))
 	_draw_bar_top(170.0)
-	_draw_emblem(Vector2(VIEW_W - 16 - 28, 56), 56.0)
-	_txt_r("MIND BASTION", VIEW_W - 16 - 56 - 14, 56, 27, TEXT, true, 300)
-	_txt_r("مجموعه بازی‌های فکری", VIEW_W - 16 - 56 - 14, 80, 14, TEXT_DIM, false, 300)
+	# Official PENDAR logo lockup (same artwork as app icon and browser favicon).
+	if _brand_logo != null:
+		draw_texture_rect(_brand_logo, Rect2(VIEW_W - 184.0, 2.0, 166.0, 166.0), false)
 	var tier: Array = _tier_info()
 	var tc: Color = tier[1]
 	var pill := Rect2(68, 26, 138, 36)

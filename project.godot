@@ -14,7 +14,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 
 [application]
 
-config/name="Mind Bastion"
+config/name="PENDAR | پندار"
 config/icon="res://icon.png"
 run/main_scene="res://main.tscn"
 config/quit_on_go_back=false
@@ -41,4 +41,4 @@ pointing/emulate_mouse_from_touch=true
 pointing/emulate_touch_from_mouse=false
 
 [network]
-matchmaking_url="wss://REPLACE-WITH-YOUR-LIARA-APP-DOMAIN/ws"
+matchmaking_url="wss://REPLACE-WITH-YOUR-PENDAR-APP-DOMAIN/ws"

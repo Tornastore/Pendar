@@ -1,4 +1,4 @@
-راهنمای راه‌اندازی بازی آنلاین Mind Bastion (سرور داخل ایران)
+راهنمای راه‌اندازی بازی آنلاین Pendar (سرور داخل ایران)
 ==========================================================
 
 وضعیت فعلی
@@ -18,7 +18,7 @@ https://github.com/liara-cloud/docs/blob/master/src/pages/paas/nodejs/how-tos/cr
 ----------------------
 1. وارد https://console.liara.ir شوید یا از https://liara.ir وارد پنل شوید.
 2. یک برنامه جدید با پلتفرم NodeJS بسازید؛ اگر پنل محل استقرار را می‌پرسد، منطقه/دیتاسنتر ایران را انتخاب کنید.
-3. برای شناسه برنامه یک نام یکتا انتخاب کنید؛ نمونه: mind-bastion-matchmaker-123. شناسه واقعی خودتان را یادداشت کنید.
+3. برای شناسه برنامه یک نام یکتا انتخاب کنید؛ نمونه: pendar-matchmaker-123. شناسه واقعی خودتان را یادداشت کنید.
 
 ۲) روش ساده‌تر: انتشار خودکار با GitHub Actions
 -----------------------------------------------
@@ -38,25 +38,25 @@ Node.js را روی کامپیوتر نصب کنید، سپس در PowerShell ی
 
 به پوشه online-server در همین پروژه بروید. مثال در ویندوز (مسیر را با مسیر واقعی خودتان عوض کنید):
 
-  cd C:\path\to\MindBastion_Modular\online-server
+  cd C:\path\to\Pendar\online-server
   liara deploy --app YOUR_LIARA_APP_ID
 
 به‌جای YOUR_LIARA_APP_ID شناسه‌ی برنامه‌ای را قرار دهید که در مرحله‌ی اول ساختید. فایل liara.json در این پوشه پورت 3000 و Node.js 22 را تنظیم می‌کند.
 
 ۳) آزمایش سرویس
 ----------------
-اگر شناسه‌ی برنامه شما مثلا mind-bastion-matchmaker-123 باشد، نشانی سلامت باید شبیه این باشد:
+اگر شناسه‌ی برنامه شما مثلا pendar-matchmaker-123 باشد، نشانی سلامت باید شبیه این باشد:
 
-  https://mind-bastion-matchmaker-123.liara.run/health
+  https://pendar-matchmaker-123.liara.run/health
 
-پاسخ باید یک JSON با ok=true و service=mind-bastion-matchmaker باشد. اگر خطای 404 یا خطای سرویس دریافت کردید، لاگ استقرار را در پنل Liara بررسی کنید.
+پاسخ باید یک JSON با ok=true و service=pendar-matchmaker باشد. اگر خطای 404 یا خطای سرویس دریافت کردید، لاگ استقرار را در پنل Liara بررسی کنید.
 
 ۴) اتصال نسخه وب به سرور
 -----------------------
 فایل project.godot را باز کنید و بخش network را پیدا کنید. مقدار matchmaking_url فعلی نمونه است و باید با دامنه واقعی شما جایگزین شود. مثال:
 
   [network]
-  matchmaking_url="wss://mind-bastion-matchmaker-123.liara.run/ws"
+  matchmaking_url="wss://pendar-matchmaker-123.liara.run/ws"
 
 نام نمونه را با نام واقعی برنامه خودتان عوض کنید. برای سایت GitHub Pages با دامنه tornastore.github.io، مقدار پیش‌فرض سرور، Origin همین سایت را مجاز می‌کند. اگر سایت را با دامنه‌ی دیگری هم اجرا می‌کنید، متغیر محیطی ALLOWED_ORIGINS را در Liara تنظیم کنید و Origin دقیق سایت‌ها را با کاما جدا کنید.
 

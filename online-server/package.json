@@ -1,8 +1,8 @@
 {
-  "name": "mind-bastion-matchmaker",
+  "name": "pendar-matchmaker",
   "version": "1.0.0",
   "private": true,
-  "description": "WebSocket matchmaking relay for Mind Bastion",
+  "description": "WebSocket matchmaking relay for Pendar",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

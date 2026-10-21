@@ -18,7 +18,7 @@
 
 اعمال روی GitHub:
 1) ZIP را استخراج کنید.
-2) محتویات پوشه‌ی MindBastion_Modular را در پوشه‌ی مخزن محلی جایگزین کنید؛ پوشه‌ی .git خود را نگه دارید.
+2) محتویات پوشه‌ی Pendar را در پوشه‌ی مخزن محلی جایگزین کنید؛ پوشه‌ی .git خود را نگه دارید.
 3) از ریشه‌ی پروژه در Git Bash اجرا کنید:
 
    git add main.gd core/game_catalog.gd games/gobblet/rules.gd games/gobblet/README.md games/abalone/rules.gd games/abalone/README.md tests/test_architecture.py APPLY_GOBBLET_ABALONE_RULES_FA.txt

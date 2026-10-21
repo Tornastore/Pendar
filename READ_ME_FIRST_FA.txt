@@ -1,4 +1,4 @@
-اصلاح خطای ساخت وب MindBastion — فونت فارسی
+اصلاح خطای ساخت وب Pendar — فونت فارسی
 
 علت خطا:
 مرحلهٔ «Download embedded Persian fonts» از curl استفاده می‌کرد، اما تصویر Docker مربوط به barichello/godot-ci ابزار wget دارد و curl در آن موجود نیست. به همین دلیل مرحله با exit code 127 متوقف شد.

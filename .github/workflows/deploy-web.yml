@@ -1,4 +1,4 @@
-name: Deploy Web App to GitHub Pages
+name: Deploy PENDAR to GitHub Pages
 
 on:
   push:
@@ -92,7 +92,7 @@ jobs:
         timeout-minutes: 3
         run: |
           set -euo pipefail
-          LOG_FILE="/tmp/mind-bastion-godot-startup.log"
+          LOG_FILE="/tmp/pendar-godot-startup.log"
           godot --headless --verbose --path . --quit-after 2 2>&1 | tee "$LOG_FILE"
           if grep -E 'SCRIPT ERROR|Parse Error|Parser Error|Failed loading resource|Failed to load script|Cannot load script' "$LOG_FILE"; then
             echo "ERROR: Godot reported script or resource loading errors during startup." >&2
@@ -110,6 +110,7 @@ jobs:
             echo "ERROR: Web export did not create build/web/index.html." >&2
             exit 1
           }
+          python3 tools/brand_web_export.py build/web
           echo "--- Exported files ---"
           find build/web -maxdepth 1 -type f -printf '%f %k KB\n' | sort
           echo "--- Export size ---"

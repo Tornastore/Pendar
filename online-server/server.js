@@ -434,14 +434,14 @@ function handleMessage(socket, raw) {
 const httpServer = http.createServer((request, response) => {
   const url = new URL(request.url || '/', `http://${request.headers.host || 'localhost'}`);
   if (request.method === 'GET' && url.pathname === '/health') {
-    const body = JSON.stringify({ ok: true, service: 'mind-bastion-matchmaker', protocol: 2,
+    const body = JSON.stringify({ ok: true, service: 'pendar-matchmaker', protocol: 2,
       waiting: [...queues.values()].reduce((total, queue) => total + queue.length, 0), rooms: rooms.size });
     response.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
     response.end(body);
     return;
   }
   response.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
-  response.end('Mind Bastion Matchmaker is running. Connect to /ws.\n');
+  response.end('Pendar Matchmaker is running. Connect to /ws.\n');
 });
 
 const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD, perMessageDeflate: false });
@@ -466,7 +466,7 @@ wss.on('connection', socket => {
     socket, state: 'idle', username: 'بازیکن', game: null, queueKey: null,
     seat: -1, room: null, mastermindDifficulty: 3, blockaceDifficulty: 3, lastEmojiAt: 0
   });
-  send(socket, { type: 'hello', protocol: 2, service: 'mind-bastion-matchmaker' });
+  send(socket, { type: 'hello', protocol: 2, service: 'pendar-matchmaker' });
   socket.on('message', raw => handleMessage(socket, raw));
   socket.on('error', () => {});
   socket.on('close', () => {
@@ -491,7 +491,7 @@ wss.on('connection', socket => {
   socket.on('pong', () => { socket._mbAlive = true; });
 });
 
-httpServer.listen(PORT, '0.0.0.0', () => process.stdout.write(`Mind Bastion Matchmaker listening on ${PORT}\n`));
+httpServer.listen(PORT, '0.0.0.0', () => process.stdout.write(`Pendar Matchmaker listening on ${PORT}\n`));
 
 function shutdown() {
   clearInterval(heartbeat);

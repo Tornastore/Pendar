@@ -1,4 +1,6 @@
-# Mind Bastion — مجموعه بازی‌های فکری
+# PENDAR | پندار — مجموعه بازی‌های فکری و رقابتی
+
+![لوگوی رسمی پندار](branding/pendar_logo.png)
 
 ## اتصال چندنفره (وای‌فای محلی)
 
@@ -66,10 +68,10 @@ Godot 4.3+ → Import → Run
 ساختار تفکیک‌شده و راهنمای ادامه توسعه در `ARCHITECTURE.md` قرار دارد. منطق و state بازی‌ها در `games/<game_id>/rules.gd`، کاتالوگ در `core/game_catalog.gd` و امتیازدهی/رتبه‌بندی در `services/` قرار گرفته‌اند. برای کنترل ساختاری سریع، از ریشه پروژه دستور `python tools/verify_structure.py` را اجرا کنید.
 
 ## خروجی وب و انتشار روی GitHub Pages
-- با هر push به شاخه `main`، workflow با نام **Deploy Web App to GitHub Pages** به‌طور خودکار خروجی وب را می‌سازد و منتشر می‌کند؛ اجرای دستی از **Actions → Deploy Web App to GitHub Pages → Run workflow** هم پشتیبانی می‌شود.
+- با هر push به شاخه `main`، workflow با نام **Deploy PENDAR to GitHub Pages** به‌طور خودکار خروجی وب را می‌سازد و منتشر می‌کند؛ اجرای دستی از **Actions → Deploy PENDAR to GitHub Pages → Run workflow** هم پشتیبانی می‌شود.
 - قبل از اولین انتشار، در **Settings → Pages → Build and deployment**، گزینه **Source** را روی **GitHub Actions** بگذارید.
-- برای ساخت فایل وب بدون انتشار، از **Actions → Build Web App (artifact only) → Run workflow** استفاده کنید و artifact با نام `MindBastion-Web` را دانلود کنید.
-- برای خروجی Android، از **Actions → Build Android APK → Run workflow** استفاده کنید؛ این workflow دیگر با هر push وب هم‌زمان اجرا نمی‌شود.
+- برای ساخت فایل وب بدون انتشار، از **Actions → Build PENDAR Web App (artifact only) → Run workflow** استفاده کنید و artifact با نام `Pendar-Web` را دانلود کنید.
+- برای خروجی Android، از **Actions → Build PENDAR Android APK → Run workflow** استفاده کنید؛ این workflow دیگر با هر push وب هم‌زمان اجرا نمی‌شود.
 - خروجی وب با PWA تنظیم شده و در مرورگرهای پشتیبانی‌شده امکان نصب روی صفحه اصلی و کش آفلاین دارد. برای اجرای محلی، فایل‌ها را از طریق وب‌سرور باز کنید (مثلاً `python -m http.server 8000` در پوشه خروجی)؛ بازکردن مستقیم `index.html` با `file://` قابل اتکا نیست.
 - **شبکه وب:** مرورگر از ENet/UDP مستقیم پشتیبانی نمی‌کند؛ نسخه وب از WebSocket امن و صف انتظار استفاده می‌کند. سرور Node.js در `online-server/` قرار دارد و برای راه‌اندازی در ایران، راهنمای `ONLINE_SERVER_FA.txt` را ببینید. ابتدا برنامه Liara را بسازید، GitHub Actions variables/secrets را تنظیم کنید و URL واقعی WSS را در `project.godot` قرار دهید؛ قبل از این کار matchmaking آنلاین هنوز به سرور متصل نیست.
 - آمار و رتبه‌بندی محلی در مرورگر به مجوز ذخیره‌سازی مرورگر وابسته است؛ در حالت ناشناس یا با مسدودکردن IndexedDB ممکن است ماندگار نباشد.
@@ -81,7 +83,7 @@ Godot 4.3+ → Import → Run
 
 ## راه‌اندازی بازی آنلاین وب
 - صف انتظار کاربران را بر اساس شناسه‌ی بازی جفت می‌کند؛ نام نمایشی و هشت ایموجی رایج پشتیبانی می‌شوند. راه‌اندازی سرور Node.js در پوشه‌ی `online-server/` و مراحل کامل استقرار در ایران در `ONLINE_SERVER_FA.txt` است.
-- برای Deploy خودکار سرور، شناسه برنامه Liara را به‌عنوان Repository variable با نام `LIARA_MATCHMAKER_APP` و API token را در Repository secret با نام `LIARA_API_TOKEN` ثبت کنید. سپس Workflow با نام `Deploy Online Matchmaker to Liara` را اجرا کنید.
+- برای Deploy خودکار سرور، شناسه برنامه Liara را به‌عنوان Repository variable با نام `LIARA_MATCHMAKER_APP` و API token را در Repository secret با نام `LIARA_API_TOKEN` ثبت کنید. سپس Workflow با نام `Deploy PENDAR Online Matchmaker to Liara` را اجرا کنید.
 - پس از انتشار سرور، مقدار `network/matchmaking_url` در `project.godot` را با `wss://YOUR_APP_ID.liara.run/ws` جایگزین کنید و Push کنید تا نسخه‌ی وب دوباره build شود.
 
 ## بازنگری هوش مصنوعی — سطح استاد و استادتمام

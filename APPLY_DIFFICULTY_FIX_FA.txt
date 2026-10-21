@@ -10,7 +10,7 @@
 
 مراحل:
 1. ZIP را باز کن.
-2. محتوای پوشه MindBastion_Modular را روی پوشه محلی مخزن خودت کپی کن و فایل‌های هم‌نام را جایگزین کن. پوشه .git پروژه محلی خودت را حذف یا جایگزین نکن.
+2. محتوای پوشه Pendar را روی پوشه محلی مخزن خودت کپی کن و فایل‌های هم‌نام را جایگزین کن. پوشه .git پروژه محلی خودت را حذف یا جایگزین نکن.
 3. در Git Bash، داخل پوشه اصلی مخزن این دستورات را اجرا کن:
 
    git add main.gd games/pentago games/domino .github/workflows README.md tests/test_architecture.py APPLY_DIFFICULTY_FIX_FA.txt

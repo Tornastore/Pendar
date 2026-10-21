@@ -8,7 +8,7 @@
 - یک تست رگرسیون به tests/test_mastermind_features.py اضافه شده تا فراخوانی بدون app. دوباره وارد این فایل نشود.
 
 اعمال تغییرات:
-1) ZIP را استخراج کن و محتوای پوشه MindBastion_Modular را روی پوشه محلی پروژه کپی کن.
+1) ZIP را استخراج کن و محتوای پوشه Pendar را روی پوشه محلی پروژه کپی کن.
 2) پوشه .git را نگه دار.
 3) از ریشه مخزن اجرا کن:
    git add games/mastermind/rules.gd tests/test_mastermind_features.py APPLY_MASTERMIND_DRAW_API_FIX_FA.txt

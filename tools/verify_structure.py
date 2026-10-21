@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static architecture check for Mind Bastion's modular Godot source tree.
+"""Static architecture check for Pendar's modular Godot source tree.
 
 This check deliberately needs only Python 3; it does not replace a Godot runtime test.
 Run from the project root: python tools/verify_structure.py
@@ -166,7 +166,7 @@ for method in ("record_match_result", "points_in_period", "total_wins_losses", "
 for method in ("build_game_rows", "tier_info"):
     if not re.search(rf"^static func\s+{method}\(", ranking, re.M):
         errors.append(f"RankingService is missing {method}()")
-if 'user://mind_bastion_scores.cfg' not in scoring:
+if 'user://pendar_scores.cfg' not in scoring or 'LEGACY_SCORE_PATH := "user://mind_bastion_scores.cfg"' not in scoring:
     errors.append("ScoringService no longer uses the legacy save path")
 if not re.search(r"static func all_games\(\) -> Array", catalog):
     errors.append("GameCatalog does not expose all_games()")

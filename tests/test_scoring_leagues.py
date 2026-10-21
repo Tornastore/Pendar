@@ -9,6 +9,8 @@ def test_scoring_service_separates_monthly_points_from_skill_mmr():
     assert 'const WIN_PTS := 24' in scoring
     assert 'const DRAW_PTS := 4' in scoring
     assert 'const LOSS_PTS := -12' in scoring
+    assert 'const SCORE_PATH := "user://pendar_scores.cfg"' in scoring
+    assert 'const LEGACY_SCORE_PATH := "user://mind_bastion_scores.cfg"' in scoring
     assert '"season_points": 0' in scoring
     assert '"rating": INITIAL_RATING' in scoring
     assert 'func _roll_season_if_needed()' in scoring

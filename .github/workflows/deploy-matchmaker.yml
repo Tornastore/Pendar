@@ -1,4 +1,4 @@
-name: Deploy Online Matchmaker to Liara
+name: Deploy PENDAR Online Matchmaker to Liara
 
 on:
   workflow_dispatch:

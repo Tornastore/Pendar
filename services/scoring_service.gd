@@ -1,7 +1,8 @@
 extends RefCounted
 ## Fair, transparent scoring: monthly league points are separate from persistent skill rating.
 ## CPU games earn smaller season points by difficulty; only human online matches change MMR.
-const SCORE_PATH := "user://mind_bastion_scores.cfg"
+const SCORE_PATH := "user://pendar_scores.cfg"
+const LEGACY_SCORE_PATH := "user://mind_bastion_scores.cfg" # One-time migration for existing players.
 const WIN_PTS := 24
 const DRAW_PTS := 4
 const LOSS_PTS := -12
@@ -246,7 +247,12 @@ func total_wins_losses() -> Array:
 
 func load_scores(game_ids: Array) -> void:
 	var config := ConfigFile.new()
-	var loaded_ok: bool = config.load(SCORE_PATH) == OK
+	var load_path := SCORE_PATH
+	var loaded_ok: bool = config.load(load_path) == OK
+	if not loaded_ok:
+		load_path = LEGACY_SCORE_PATH
+		loaded_ok = config.load(load_path) == OK
+	var has_saved_lifetime_total := loaded_ok and config.has_section_key("player", "lifetime_points")
 	var rating_schema_version := int(config.get_value("player", "rating_schema_version", 0)) if loaded_ok else 0
 	if loaded_ok:
 		global_rating = int(config.get_value("player", "rating", INITIAL_RATING))
@@ -271,7 +277,7 @@ func load_scores(game_ids: Array) -> void:
 		if config.has_section("seen"):
 			for key in config.get_section_keys("seen"):
 				seen_rules[str(key)] = true
-	var had_lifetime_total := config_has_saved_lifetime_total()
+	var had_lifetime_total := has_saved_lifetime_total
 	ensure_game_stats(game_ids)
 	if not had_lifetime_total:
 		global_lifetime_points = 0
@@ -282,7 +288,10 @@ func load_scores(game_ids: Array) -> void:
 
 func config_has_saved_lifetime_total() -> bool:
 	var config := ConfigFile.new()
-	return config.load(SCORE_PATH) == OK and config.has_section_key("player", "lifetime_points")
+	if config.load(SCORE_PATH) == OK:
+		return config.has_section_key("player", "lifetime_points")
+	var legacy := ConfigFile.new()
+	return legacy.load(LEGACY_SCORE_PATH) == OK and legacy.has_section_key("player", "lifetime_points")
 
 func save_scores() -> void:
 	var config := ConfigFile.new()
