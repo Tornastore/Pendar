@@ -86,10 +86,10 @@ for script_path in sorted((ROOT / "games").rglob("rules.gd")):
                 f"{script_path.relative_to(ROOT)}:{index}: CanvasItem draw command must be called through app."
             )
 
-# The shipped app currently has 13 independent rule modules; Othello 8x8 and 12x12 share one engine.
+# The shipped app has 14 independent rule modules; Othello 8x8 and 12x12 share one engine.
 expected_modules = {
     "othello", "pentago", "quoridor", "domino", "chess", "pasoor",
-    "mastermind", "gobblet", "hokm", "backgammon", "abalone", "blockace", "quarto",
+    "mastermind", "gobblet", "hokm", "backgammon", "abalone", "blockace", "quarto", "uno",
 }
 module_paths = re.findall(r'"([a-z]+)": preload\("res://games/([a-z]+)/rules\.gd"\)', main)
 preloaded = {key for key, folder in module_paths if key == folder}
@@ -137,6 +137,14 @@ for game_id in sorted(expected_modules):
         aliased_module_members |= {"bg_legal_cache_key", "bg_legal_cache"}
     if game_id == "quoridor":
         aliased_module_members |= {"quo_cpu_position_history_by_player"}
+    if game_id == "uno":
+        aliased_module_members |= {
+            "uno_catch_seat", "uno_challenge_target", "uno_current_color", "uno_direction",
+            "uno_drawn_card_index", "uno_hand_page", "uno_last_action", "uno_last_round_points",
+            "uno_last_wild4_actor", "uno_last_wild4_illegal", "uno_pending_color",
+            "uno_pending_round_winner", "uno_round_started_msec", "uno_round_winner",
+            "uno_scores", "uno_status",
+        }
     missing_proxies = sorted(state_vars - state_proxies - direct_module_members - aliased_module_members)
     if missing_proxies:
         errors.append(f"{game_id}: state fields without compatibility properties: {missing_proxies}")
@@ -164,8 +172,8 @@ if not re.search(r"static func all_games\(\) -> Array", catalog):
     errors.append("GameCatalog does not expose all_games()")
 
 catalog_ids = re.findall(r'\{"id":\s*"([a-z0-9]+)"', catalog)
-if len(catalog_ids) != 14 or len(set(catalog_ids)) != 14:
-    errors.append(f"catalog should define 14 unique game IDs, got {len(catalog_ids)} entries")
+if len(catalog_ids) != 15 or len(set(catalog_ids)) != 15:
+    errors.append(f"catalog should define 15 unique game IDs, got {len(catalog_ids)} entries")
 if "scoring_service.record_result" not in main or "RankingServiceScript.build_game_rows" not in main:
     errors.append("main.gd is not delegating result recording and ranking to separate services")
 if "GAMES = GameCatalogScript.all_games()" not in main:

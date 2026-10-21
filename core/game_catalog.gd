@@ -16,4 +16,5 @@ static func all_games() -> Array:
 		{"id": "abalone", "name": "ابلون", "desc": "قواعد استاندارد هل‌دادن مهره‌ها", "short": "هل بده بیرون", "players": "2 نفر", "max_p": 2, "icon_col": Color(0.55, 0.5, 0.95), "cat": "strategy", "net": true, "beta": false},
 		{"id": "blockace", "name": "بلاک‌آس", "desc": "Blokus Duo · صفحه ۱۴×۱۴ و ۲۱ قطعه‌ی استاندارد", "short": "گسترش از گوشه‌ها", "players": "2 نفر", "max_p": 2, "icon_col": Color(0.3, 0.78, 0.72), "cat": "strategy", "net": true, "beta": false},
 		{"id": "quarto", "name": "کوارتو (Quarto)", "desc": "مهره‌ای به حریف بده؛ ردیف ویژگی مشترک را بساز", "short": "انتخاب کن و چهار ردیف بساز", "players": "2 نفر", "max_p": 2, "icon_col": Color(0.75, 0.62, 0.92), "cat": "strategy", "net": true, "beta": false},
+		{"id": "uno", "name": "اونو (UNO)", "desc": "کارت بازی کن، رنگ را عوض کن و زودتر دستت را خالی کن", "short": "کارت آخر را زودتر بازی کن", "players": "۲ تا ۱۰ نفر", "max_p": 10, "icon_col": Color(0.92, 0.25, 0.32), "cat": "cards", "net": true, "beta": false},
 	]

@@ -8,7 +8,7 @@ const {
 } = require('../lib/protocol');
 
 test('supports every game listed in the Godot online chooser', () => {
-  for (const game of ['othello', 'othello12', 'pentago', 'chess', 'domino', 'pasoor', 'quoridor', 'hokm', 'backgammon', 'gobblet', 'mastermind', 'abalone', 'blockace', 'quarto']) {
+  for (const game of ['othello', 'othello12', 'pentago', 'chess', 'domino', 'pasoor', 'quoridor', 'hokm', 'backgammon', 'gobblet', 'mastermind', 'abalone', 'blockace', 'quarto', 'uno']) {
     assert.ok(ALLOWED_GAMES.has(game), `missing ${game}`);
   }
 });
@@ -86,4 +86,23 @@ test('Quarto online actions validate seat, piece IDs and board coordinates', () 
   assert.equal(isActionFromSeat('_rpc_quarto_place', [1, 4, 3], 1), false);
   assert.equal(isActionFromSeat('_rpc_quarto_place', [1, 0, 0], 0), false);
   assert.equal(playerCapacityForGame('quarto'), 2);
+});
+
+
+test('UNO supports up to ten players and queue fallback rooms from two to ten', () => {
+  assert.equal(playerCapacityForGame('uno'), 10);
+  assert.equal(fallbackRoomSizeForQueue('uno', 1), 0);
+  assert.equal(fallbackRoomSizeForQueue('uno', 2), 2);
+  assert.equal(fallbackRoomSizeForQueue('uno', 7), 7);
+  assert.equal(fallbackRoomSizeForQueue('uno', 13), 10);
+});
+
+test('UNO actions validate seat, card index, color and action payloads', () => {
+  assert.equal(isActionFromSeat('_rpc_uno_play', [2, 111, 3, true], 2, 10), true);
+  assert.equal(isActionFromSeat('_rpc_uno_play', [2, 112, 3, true], 2, 10), false);
+  assert.equal(isActionFromSeat('_rpc_uno_play', [1, 2, 3, true], 2, 10), false);
+  assert.equal(isActionFromSeat('_rpc_uno_draw', [4], 4, 10), true);
+  assert.equal(isActionFromSeat('_rpc_uno_challenge', [4, 'true'], 4, 10), false);
+  assert.equal(isActionFromSeat('_rpc_uno_next_round', [0, 123], 0, 10), true);
+  assert.equal(isActionFromSeat('_rpc_uno_next_round', [1, 123], 1, 10), false);
 });

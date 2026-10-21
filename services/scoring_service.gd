@@ -16,6 +16,7 @@ const GAME_WEIGHTS := {
 	"abalone": 1.20,
 	"blockace": 1.15,
 	"quarto": 1.05,
+	"uno": 1.20,
 	"backgammon": 1.10,
 	"othello12": 1.10,
 	"pentago": 1.05,
@@ -96,6 +97,12 @@ func _result_base(outcome: String) -> int:
 		"draw": return DRAW_PTS
 		_: return LOSS_PTS
 
+func _duration_multiplier(duration_seconds: float) -> float:
+	# Positive season rewards grow with match duration, capped at +25% after 30 minutes.
+	# This rewards deeper games without letting artificially waiting forever inflate points.
+	var safe_seconds: float = clampf(duration_seconds, 0.0, 1800.0)
+	return 1.0 + 0.25 * (safe_seconds / 1800.0)
+
 func _actual_result(outcome: String) -> float:
 	match outcome:
 		"win": return 1.0
@@ -109,7 +116,7 @@ func _elo_delta(rating: int, opponent_rating: int, outcome: String, rated_matche
 	var k := 32 if rated_matches < 10 else 24
 	return roundi(float(k) * (_actual_result(outcome) - expected))
 
-func record_result(game_id: String, outcome: String, opponent_kind: String, difficulty: int, game_ids: Array, opponent_rating: int = -1, opponent_global_rating: int = -1) -> Dictionary:
+func record_result(game_id: String, outcome: String, opponent_kind: String, difficulty: int, game_ids: Array, opponent_rating: int = -1, opponent_global_rating: int = -1, duration_seconds: float = 0.0) -> Dictionary:
 	if game_id.is_empty():
 		return {"recorded": false, "delta": 0, "reason": "empty_game"}
 	if opponent_kind == "local_friendly":
@@ -137,7 +144,13 @@ func record_result(game_id: String, outcome: String, opponent_kind: String, diff
 	if ranked_human and opponent_rating > 0:
 		var before_rating := int(stats.get("rating", INITIAL_RATING))
 		opponent_strength_multiplier = clampf(1.0 + float(opponent_rating - before_rating) / 1200.0, 0.75, 1.25)
-	var raw_delta := roundi(float(_result_base(outcome)) * mode_multiplier * game_weight * opponent_strength_multiplier)
+	var duration_factor: float = _duration_multiplier(duration_seconds)
+	var raw_delta: int
+	if outcome == "loss":
+		# Avoid making a long, competitive loss disproportionately punitive.
+		raw_delta = roundi(float(_result_base(outcome)) * mode_multiplier * game_weight * opponent_strength_multiplier)
+	else:
+		raw_delta = roundi(float(_result_base(outcome)) * mode_multiplier * game_weight * opponent_strength_multiplier * duration_factor)
 	# Every completed draw is a small positive league result, including easier CPU levels.
 	if outcome == "draw":
 		raw_delta = maxi(1, raw_delta)
@@ -179,6 +192,7 @@ func record_result(game_id: String, outcome: String, opponent_kind: String, diff
 		"win": outcome == "win", "draw": outcome == "draw", "delta": delta,
 		"vs": opponent_kind, "difficulty": clampi(difficulty, 1, 6),
 		"game_weight": game_weight, "season": current_season_id,
+		"duration_seconds": maxf(0.0, duration_seconds), "duration_multiplier": duration_factor,
 		"game_rating_delta": game_rating_delta, "global_rating_delta": global_rating_delta
 	})
 	if history.size() > 400:
@@ -191,7 +205,8 @@ func record_result(game_id: String, outcome: String, opponent_kind: String, diff
 		"rating_delta": global_rating_delta, "game_rating": int(stats["rating"]),
 		"game_rating_delta": game_rating_delta, "season_points": global_season_points,
 		"game_season_points": int(stats["season_points"]), "season": current_season_id,
-		"game_id": game_id, "outcome": outcome, "mode": opponent_kind
+		"game_id": game_id, "outcome": outcome, "mode": opponent_kind,
+		"duration_seconds": maxf(0.0, duration_seconds), "duration_multiplier": duration_factor
 	}
 
 # Compatibility wrapper for older callers. New ranked callers should use record_result().

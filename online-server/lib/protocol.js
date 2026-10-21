@@ -2,7 +2,7 @@
 
 const ALLOWED_GAMES = new Set([
   'othello', 'othello12', 'pentago', 'chess', 'domino', 'pasoor',
-  'quoridor', 'hokm', 'backgammon', 'gobblet', 'mastermind', 'abalone', 'blockace', 'quarto'
+  'quoridor', 'hokm', 'backgammon', 'gobblet', 'mastermind', 'abalone', 'blockace', 'quarto', 'uno'
 ]);
 
 const ALLOWED_ACTIONS = new Set([
@@ -10,7 +10,8 @@ const ALLOWED_ACTIONS = new Set([
   '_rpc_dom_play', '_rpc_dom_draw', '_rpc_dom_pass', '_rpc_chess_move',
   '_rpc_quo_action', '_rpc_pas_play', '_rpc_gob_place', '_rpc_gob_move',
   '_rpc_aba_move', '_rpc_blk_place', '_rpc_quarto_choose_piece', '_rpc_quarto_place', '_rpc_bg_step', '_rpc_bg_move', '_rpc_bg_end_turn', '_rpc_hokm_play',
-  '_rpc_resign'
+  '_rpc_resign', '_rpc_uno_play', '_rpc_uno_draw', '_rpc_uno_pass',
+  '_rpc_uno_catch', '_rpc_uno_challenge', '_rpc_uno_next_round'
 ]);
 
 const ALLOWED_EMOJIS = new Set(['👍', '😂', '❤️', '🔥', '👏', '😮', '😢', '🤔']);
@@ -34,11 +35,12 @@ function clampLevel(value) {
 
 function playerCapacityForGame(game) {
   if (game === 'mastermind' || game === 'quoridor') return 4;
+  if (game === 'uno') return 10;
   return 2;
 }
 
-// Called after the queue grace period: Mastermind may start with 2-4 players,
-// while standard Quoridor supports exactly 2 or 4 (never an invalid 3-player room).
+// After the queue grace period, Mastermind and UNO can start with a partial room;
+// standard Quoridor supports exactly 2 or 4 (never an invalid 3-player room).
 function fallbackRoomSizeForQueue(game, waitingCount) {
   if (!Number.isInteger(waitingCount) || waitingCount < 2) return 0;
   const size = Math.min(waitingCount, playerCapacityForGame(game));
@@ -78,6 +80,16 @@ function isActionFromSeat(action, args, seat, playerCount = 2) {
       return playerCount === 2 && args.length >= 3 && Number(args[0]) === seat && Number.isInteger(Number(args[1])) && Number(args[1]) >= 0 && Number(args[1]) < 4 && Number.isInteger(Number(args[2])) && Number(args[2]) >= 0 && Number(args[2]) < 4;
     case '_rpc_quo_action':
       return playerCount >= 2 && playerCount <= 4 && args.length >= 5 && Number(args[4]) === seat;
+    case '_rpc_uno_play':
+      return args.length === 4 && Number(args[0]) === seat && Number.isInteger(Number(args[1])) && Number(args[1]) >= 0 && Number(args[1]) < 112 && Number.isInteger(Number(args[2])) && Number(args[2]) >= -1 && Number(args[2]) <= 3 && typeof args[3] === 'boolean';
+    case '_rpc_uno_draw':
+    case '_rpc_uno_pass':
+    case '_rpc_uno_catch':
+      return args.length === 1 && Number(args[0]) === seat;
+    case '_rpc_uno_challenge':
+      return args.length === 2 && Number(args[0]) === seat && typeof args[1] === 'boolean';
+    case '_rpc_uno_next_round':
+      return args.length === 2 && seat === 0 && Number(args[0]) === 0 && Number.isInteger(Number(args[1])) && Number(args[1]) > 0 && Number(args[1]) < 2_147_483_647;
     case '_rpc_resign':
       return args.length > 0 && Number(args[0]) === seat;
     default:

@@ -23,6 +23,7 @@ const GAME_MODULE_SCRIPTS := {
 	"abalone": preload("res://games/abalone/rules.gd"),
 	"blockace": preload("res://games/blockace/rules.gd"),
 	"quarto": preload("res://games/quarto/rules.gd"),
+	"uno": preload("res://games/uno/rules.gd"),
 }
 var scoring_service = ScoringServiceScript.new()
 var _game_modules: Dictionary = {}
@@ -69,6 +70,7 @@ var ws_socket: WebSocketPeer
 var ws_match_active: bool = false
 var online_player_roster: Array = []
 var _result_popup_open: bool = false
+var _game_started_msec: int = 0
 var ws_state: String = "idle"
 var ws_queue_join_sent: bool = false
 var ws_emoji_picker_open: bool = false
@@ -803,11 +805,15 @@ func _current_game_difficulty() -> int:
 		"abalone": return int(_game_modules["abalone"].aba_difficulty)
 		"blockace": return int(_game_modules["blockace"].blk_difficulty)
 		"quarto": return int(_game_modules["quarto"].qto_difficulty)
+		"uno": return int(_game_modules["uno"].uno_difficulty)
 	return 3
 
 func _record_match_result(outcome: String, opponent_rating: int = -1, opponent_global_rating: int = -1) -> Dictionary:
 	var opponent_kind := "cpu" if vs_cpu else ("human_online" if _net_on() else "local_friendly")
-	return scoring_service.record_result(selected_game, outcome, opponent_kind, _current_game_difficulty(), _game_ids(), opponent_rating, opponent_global_rating)
+	var duration_seconds: float = float(Time.get_ticks_msec() - _game_started_msec) / 1000.0
+	if selected_game == "uno" and _game_modules.has("uno"):
+		duration_seconds = float(_game_modules["uno"].uno_round_duration_seconds)
+	return scoring_service.record_result(selected_game, outcome, opponent_kind, _current_game_difficulty(), _game_ids(), opponent_rating, opponent_global_rating, duration_seconds)
 
 func _points_in_period(game_id: String, days: int) -> int:
 	return scoring_service.points_in_period(game_id, days)
@@ -847,6 +853,8 @@ func _handle_tap(p: Vector2) -> void:
 			_aba_tap(p)
 		elif selected_game == "blockace":
 			_blk_tap(p)
+		elif selected_game == "uno":
+			_game_modules["uno"]._uno_board_tap(p)
 
 # ==================== BUTTON HELPERS ====================
 
@@ -868,6 +876,9 @@ func _start_vs_cpu() -> void:
 	if selected_game == "quoridor":
 		_game_modules["quoridor"].quo_player_count = 2
 		_game_modules["quoridor"].quo_local_multiplayer = false
+	if selected_game == "uno":
+		_game_modules["uno"].uno_player_count = clampi(_game_modules["uno"].uno_player_count, 2, 10)
+		connected_players = _game_modules["uno"].uno_player_count
 	_start_game()
 
 func _start_mastermind_vs_three_cpu() -> void:
@@ -919,10 +930,12 @@ func _start_host() -> void:
 	vs_cpu = false
 	is_host = true
 	_cleanup_network()
-	# The catalogue defines network capacity. Quoridor supports 2 or 4 players.
+	# The catalogue defines network capacity; UNO uses the selected room size.
 	max_players_for_game = int(_game_info(selected_game).get("max_p", 2))
+	if selected_game == "uno" and _game_modules.has("uno"):
+		max_players_for_game = clampi(int(_game_modules["uno"].uno_player_count), 2, 10)
 	peer = ENetMultiplayerPeer.new()
-	var err := peer.create_server(PORT, max_players_for_game)
+	var err := peer.create_server(PORT, maxi(1, max_players_for_game - 1))
 	if err != OK:
 		_show_toast("خطا در ایجاد سرور (پورت اشغال؟)")
 		return
@@ -1009,7 +1022,7 @@ func _on_peer_connected(id: int) -> void:
 		return
 	peer_to_seat[id] = seat
 	peer_to_username[id] = "بازیکن %d" % (seat + 1)
-	connected_players = peer_to_seat.size()
+	connected_players = peer_to_seat.size() + 1
 	rpc_id(id, "_rpc_assign_seat", seat, selected_game)
 	rpc("_rpc_lobby_sync", connected_players, max_players_for_game)
 	rpc("_rpc_lan_roster_sync", _build_lan_roster())
@@ -1021,7 +1034,7 @@ func _on_peer_disconnected(id: int) -> void:
 	if peer_to_seat.has(id):
 		peer_to_seat.erase(id)
 	peer_to_username.erase(id)
-	connected_players = peer_to_seat.size() if is_host else maxi(1, connected_players - 1)
+	connected_players = peer_to_seat.size() + 1 if is_host else maxi(1, connected_players - 1)
 	_show_toast("بازیکن قطع شد")
 	if is_host and selected_game == "mastermind" and state == State.PLAYING and _game_modules["mastermind"].mm_lan_race and disconnected_seat >= 0 and mm_lan_race_stats.has(disconnected_seat):
 		var disconnected_stat: Dictionary = mm_lan_race_stats[disconnected_seat]
@@ -1040,8 +1053,8 @@ func _on_peer_disconnected(id: int) -> void:
 
 @rpc("authority", "call_local", "reliable")
 func _rpc_lobby_sync(count: int, capacity: int) -> void:
-	connected_players = clampi(count, 1, 4)
-	max_players_for_game = clampi(capacity, 2, 4)
+	connected_players = clampi(count, 1, 10)
+	max_players_for_game = clampi(capacity, 2, 10)
 	if state == State.LOBBY:
 		_build_lobby_buttons()
 
@@ -1124,6 +1137,9 @@ func _rpc_start_game(game_id: String, rng_seed: int = 0, mastermind_level: int =
 		connected_players = 4 if player_count >= 4 else 2
 	elif game_id == "mastermind" and _net_on():
 		connected_players = clampi(player_count, 2, 4)
+	elif game_id == "uno":
+		connected_players = clampi(player_count, 2, 10)
+		_game_modules["uno"].uno_player_count = connected_players
 	if rng_seed != 0:
 		seed(rng_seed)  # یکسان‌سازی تصادفی برای پخش کارت/مهره
 	_start_game()
@@ -1165,6 +1181,8 @@ func _is_my_turn() -> bool:
 			return hokm_turn == local_seat
 		"backgammon":
 			return bg_turn == local_seat
+		"uno":
+			return int(_game_modules["uno"].uno_turn) == local_seat
 	return false
 
 func _reset_othello() -> void:
@@ -1500,6 +1518,15 @@ const RULES := {
 		"تماس قطعات شما با ضلع یا گوشه‌ی قطعات حریف مجاز است. قطعه را انتخاب کنید و در صورت نیاز بچرخانید یا وارونه کنید.",
 		"وقتی هیچ بازیکنی حرکت قانونی ندارد، امتیاز نهایی از خانه‌های استفاده‌نشده کم می‌شود؛ استفاده از تمام قطعات و گذاشتن تک‌خانه‌ای در آخر پاداش دارد.",
 		"در حالت تک‌نفره سطح CPU را پیش از شروع انتخاب کنید. بازی شبکه‌ای نوبتی است و هر حرکت باید قانون اتصال گوشه‌ای را رعایت کند.",
+	],
+	"uno": [
+		"هدف: کارت‌های دست خود را زودتر تمام کنید. در مسابقه‌ی کامل، برنده‌ی هر دست امتیاز کارت‌های باقی‌مانده‌ی دیگران را می‌گیرد؛ اولین بازیکن با ۵۰۰ امتیاز برنده‌ی مسابقه است.",
+		"بازی استاندارد برای ۲ تا ۱۰ نفر است و هر بازیکن با ۷ کارت شروع می‌کند. کارت بالای دورریز را با رنگ، عدد یا نماد کارت دست خود جور کنید؛ اگر ندارید، یک کارت بکشید.",
+		"کارت +۲ بازیکن بعدی را مجبور می‌کند دو کارت بکشد و نوبتش رد می‌شود. کارت رد نوبت نوبت نفر بعدی را می‌پراند؛ معکوس، جهت را تغییر می‌دهد.",
+		"وایلد رنگ فعال را عوض می‌کند. وایلد +۴ فقط وقتی قانونی است که کارت هم‌رنگ با رنگ فعلی در دست نداشته باشید؛ بازیکن بعدی می‌تواند آن را به چالش بکشد.",
+		"هنگام بازی‌کردن کارت دوم از آخر، «اعلام UNO» را بزنید. اگر اعلام نکنید و حریف پیش از شروع نوبت بعدی شما را بگیرد، دو کارت جریمه می‌گیرید.",
+		"امتیاز کارت‌های عددی برابر عدد آن‌هاست؛ +۲، معکوس و رد نوبت ۲۰ امتیاز؛ وایلد و +۴ هر کدام ۵۰ امتیاز دارند. قانون جمع‌کردن چند +۲ یا +۴ در این نسخه غیرفعال است.",
+		"در صفحه‌ی حالت بازی تعداد بازیکنان و درجه‌ی سختی CPU را انتخاب کنید. سطح‌های بالاتر در انتخاب رنگ، کارت‌های جریمه و تشخیص موقعیت حریف بهتر تصمیم می‌گیرند.",
 	],
 }
 
@@ -2472,6 +2499,7 @@ func _result_is_draw() -> bool:
 		"quarto": return qto_winner == 0
 		"quoridor": return quo_winner < 0
 		"backgammon": return false
+		"uno": return false
 		"mastermind":
 			if _is_mastermind_race():
 				return str(_game_modules["mastermind"].mm_race_status) == "مساوی"
@@ -2499,6 +2527,7 @@ func _player_won_current() -> bool:
 		"abalone": return aba_winner == seat + 1
 		"blockace": return blk_winner == seat
 		"quarto": return qto_winner == seat + 1
+		"uno": return int(_game_modules["uno"].uno_winner) == seat
 	return false
 
 # ---------- resign ----------
@@ -2564,6 +2593,7 @@ func _apply_resign(seat: int) -> void:
 
 # ---------- game start / restart ----------
 func _start_game() -> void:
+	_game_started_msec = Time.get_ticks_msec()
 	_result_popup_open = false
 	_result_logged = false
 	_game_epoch += 1
@@ -2609,6 +2639,9 @@ func _start_game() -> void:
 			_reset_blockace()
 		"quarto":
 			_reset_quarto()
+		"uno":
+			_game_modules["uno"].uno_player_count = clampi(_game_modules["uno"].uno_player_count, 2, 10)
+			_game_modules["uno"]._uno_reset_match()
 		_:
 			_show_toast("این بازی هنوز کامل نشده")
 			state = State.MODE
@@ -2622,6 +2655,9 @@ func _start_game() -> void:
 	_rebuild_buttons()
 
 func _restart_current() -> void:
+	if selected_game == "uno" and bool(_game_modules["uno"].uno_round_over) and not bool(_game_modules["uno"].uno_game_over):
+		_game_modules["uno"]._uno_next_round_request()
+		return
 	if ws_match_active:
 		if is_host:
 			var ws_seed: int = randi()
@@ -2693,6 +2729,10 @@ func _cpu_tick() -> void:
 		"quarto":
 			if not qto_game_over and qto_turn == 2:
 				_schedule_cpu(0.35, _quarto_cpu_step)
+		"uno":
+			var uno_mod = _game_modules["uno"]
+			if not uno_mod.uno_game_over and not uno_mod.uno_round_over and int(uno_mod.uno_turn) != 0:
+				_schedule_cpu(0.55, uno_mod._uno_cpu_turn)
 
 func _ui_sig() -> String:
 	var s: String = "%d|%d|%d|%s|%s|%d|%d|%d|%s|%s|%d|%s|%s|%d|%d|%s" % [state, int(pause_open), int(rules_open), str(dialog.get("title", "")), menu_filter, dash_tab, connected_players, int(online_searching), online_game, join_ip, int(is_host), ws_state, online_username, int(ws_match_active), int(ws_emoji_picker_open), online_status]
@@ -2708,6 +2748,7 @@ func _ui_sig() -> String:
 			"backgammon": s += "|%d|%d" % [bg_turn, bg_moves_left.size()]
 			"blockace": s += "|%d|%d|%d|%d|%d|%d|%d|%d" % [blk_sel, blk_rot, int(blk_flip), blk_turn, blk_prev.x, blk_prev.y, _game_modules["blockace"]._blk_used_count(0), _game_modules["blockace"]._blk_used_count(1)]
 			"quarto": s += "|%d|%d|%d|%d|%d" % [qto_turn, qto_phase, qto_piece_to_place, qto_remaining.size(), qto_game_over]
+			"uno": s += "|%d|%d|%d|%d|%d|%d|%d|%d" % [_game_modules["uno"].uno_turn, _game_modules["uno"].uno_hands.size(), _game_modules["uno"].uno_draw_pile.size(), _game_modules["uno"].uno_discard_pile.size(), _game_modules["uno"].uno_selected_card, _game_modules["uno"].uno_round_number, _game_modules["uno"].uno_challenge_available, _game_modules["uno"].uno_round_over]
 			"hokm": s += "|%d|%d" % [hokm_turn, hokm_hands[0].size()]
 			"abalone": s += "|%d|%d|%d|%d" % [aba_turn, _game_modules["abalone"].aba_selection.size(), aba_out[0], aba_out[1]]
 			"chess": s += "|%d" % chess_turn
@@ -2739,7 +2780,7 @@ func _cell_t(key: String, idx: int, dur: float = 0.4) -> Array:
 # ======================================================================
 #  SCREENS — buttons builder + drawing for every non-game screen
 # ======================================================================
-const NET_GAMES := ["othello", "othello12", "pentago", "chess", "domino", "pasoor", "quoridor", "hokm", "backgammon", "gobblet", "mastermind", "abalone", "blockace", "quarto"]
+const NET_GAMES := ["othello", "othello12", "pentago", "chess", "domino", "pasoor", "quoridor", "hokm", "backgammon", "gobblet", "mastermind", "abalone", "blockace", "quarto", "uno"]
 const TILE_W := 248.0
 const TILE_H := 176.0
 const TILE_GAP := 12.0
@@ -2999,6 +3040,14 @@ func _draw_game_art(id: String, rect: Rect2, col: Color) -> void:
 			for i in pts.size():
 				_draw_disc(pts[i], 13, i % 2 == 0)
 			_art_end()
+		"uno":
+			var uno_cols: Array[Color] = [Color("#e9434f"), Color("#2289e8"), Color("#32a765"), Color("#f3c735")]
+			for i in 4:
+				_art_xf(c, Vector2((-1.5 + i) * 31.0, 5 - absf(1.5 - i) * 3.0), s, (i - 1.5) * 0.09)
+				_panel(Rect2(-23, -37, 46, 74), uno_cols[i], 9, Color.WHITE, 1.4)
+				_panel(Rect2(-17, -30, 34, 60), Color(0.06, 0.07, 0.12), 18, Color(1,1,1,0.65), 0.8)
+				_txt_c(["1", "+۲", "↻", "۷"][i], Rect2(-17, -22, 34, 45), 18, uno_cols[i], true)
+			_art_end()
 		"quarto":
 			_art_xf(c, Vector2.ZERO, s)
 			for yy in range(4):
@@ -3162,6 +3211,27 @@ func _btns_mode() -> void:
 			var color: Color = GREEN if active else ACCENT
 			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_quarto_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "quarto_difficulty_%d" % (i + 1))
 		option_y = 398.0
+	elif selected_game == "uno":
+		var um = _game_modules["uno"]
+		for i in range(6):
+			var active: bool = int(um.uno_difficulty) == i + 1
+			var color: Color = GREEN if active else ACCENT
+			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_uno_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "uno_difficulty_%d" % (i + 1))
+		for i in range(5):
+			var count1: int = i + 2
+			var active1: bool = um.uno_player_count == count1
+			_add_btn(Rect2(16 + i * 103, 394, 96, 32), "%s نفر" % _fa(count1), _set_uno_player_count.bind(count1), true, GREEN if active1 else ACCENT, "seg_on" if active1 else "ghost", "", "uno_players_%d" % count1)
+		for i in range(4):
+			var count2: int = i + 7
+			var active2: bool = um.uno_player_count == count2
+			_add_btn(Rect2(68 + i * 103, 431, 96, 32), "%s نفر" % _fa(count2), _set_uno_player_count.bind(count2), true, GREEN if active2 else ACCENT, "seg_on" if active2 else "ghost", "", "uno_players_%d" % count2)
+		option_y = 470.0
+	if selected_game == "uno":
+		_add_btn(Rect2(24, option_y, 492, 54), "مسابقه با CPU · %s نفر" % _fa(_game_modules["uno"].uno_player_count), _start_vs_cpu, true, GREEN, "option", "cpu", "m_cpu", "یک بازیکن و حریف‌های CPU تا ۱۰ نفر")
+		_add_btn(Rect2(24, option_y + 58, 492, 54), "میزبانی روی وای‌فای", _start_host, net, BLUE, "option", "wifi", "m_host", "میزبانی UNO برای ۲ تا ۱۰ بازیکن")
+		_add_btn(Rect2(24, option_y + 116, 492, 54), "اتصال با IP", _go_ip_entry, net, ACCENT, "option", "keypad", "m_join", "به لابی UNO بپیوندید")
+		_add_btn(Rect2(24, option_y + 174, 492, 54), "بازی آنلاین · صف انتظار", _open_online_for_game, online_net, PINK, "option", "globe", "m_online", "جفت‌شدن با بازیکنان آنلاین UNO")
+		return
 	if selected_game == "quoridor":
 		_add_btn(Rect2(24, option_y, 492, 62), "بازی با CPU · دو نفره", _start_vs_cpu, true, GREEN, "option", "cpu", "m_cpu", "شما در برابر یک CPU")
 		_add_btn(Rect2(24, option_y + 66, 492, 62), "چهارنفره · شما در برابر ۳ CPU", _start_quoridor_vs_three_cpu, true, Color(0.35, 0.78, 0.62), "option", "users", "m_cpu3", "چهار مسیر، سه حریف کامپیوتری")
@@ -3250,6 +3320,14 @@ func _set_quarto_difficulty(level: int) -> void:
 	qto_difficulty = clampi(level, 1, 6)
 	_rebuild_buttons()
 
+func _set_uno_difficulty(level: int) -> void:
+	_game_modules["uno"].uno_difficulty = clampi(level, 1, 6)
+	_rebuild_buttons()
+
+func _set_uno_player_count(count: int) -> void:
+	_game_modules["uno"].uno_player_count = clampi(count, 2, 10)
+	_rebuild_buttons()
+
 func _set_mastermind_difficulty(level: int) -> void:
 	mm_difficulty = clampi(level, 1, 6)
 	mm_code_len = 3 + mm_difficulty
@@ -3291,10 +3369,10 @@ func _draw_mode() -> void:
 	if selected_game == "quoridor":
 		_txt_r("سطح هوش کامپیوتر را انتخاب کنید", VIEW_W - 28, 333, 13, TEXT_DIM, true, 310)
 		_txt_r("روش بازی", VIEW_W - 28, 389, 13, TEXT_DIM, true, 180)
-	elif selected_game in ["othello", "othello12", "pentago", "domino", "gobblet", "abalone", "mastermind", "blockace", "quarto", "backgammon"]:
+	elif selected_game in ["othello", "othello12", "pentago", "domino", "gobblet", "abalone", "mastermind", "blockace", "quarto", "backgammon", "uno"]:
 		var difficulty_prompt: String = "درجه سختی، طول کد و تعداد رنگ‌ها" if selected_game == "mastermind" else "سطح هوش کامپیوتر را انتخاب کنید"
 		_txt_r(difficulty_prompt, VIEW_W - 28, 333, 13, TEXT_DIM, true, 310)
-		var mode_prompt: String = "کد: %s خانه · %s رنگ" % [_fa(3 + mm_difficulty), _fa(3 + mm_difficulty)] if selected_game == "mastermind" else "روش بازی"
+		var mode_prompt: String = "کد: %s خانه · %s رنگ" % [_fa(3 + mm_difficulty), _fa(3 + mm_difficulty)] if selected_game == "mastermind" else ("بازیکنان: %s · هدف: ۵۰۰ امتیاز" % _fa(_game_modules["uno"].uno_player_count) if selected_game == "uno" else "روش بازی")
 		_txt_r(mode_prompt, VIEW_W - 28, 389, 13, TEXT_DIM, true, 180)
 	else:
 		_txt_r("روش بازی را انتخاب کنید", VIEW_W - 28, 336, 15, TEXT_DIM, true, 300)
@@ -3534,7 +3612,23 @@ func _draw_lobby() -> void:
 	_draw_topbar("لابی بازی", str(info.get("name", "")))
 	var seat0_present: bool = true
 	var seat1_present: bool = connected_players >= 2 if is_host else _client_connected
-	if max_players_for_game >= 4:
+	if selected_game == "uno":
+		# UNO supports up to ten seats. Two columns keep the complete lobby visible.
+		for seat in range(mini(max_players_for_game, 10)):
+			var col_idx: int = seat % 2
+			var row_idx: int = int(seat / 2)
+			var seat_rect := Rect2(16.0 + float(col_idx) * 254.0, 92.0 + float(row_idx) * 58.0, 246.0, 54.0)
+			var present: bool = false
+			if is_host:
+				present = seat == 0 or seat in peer_to_seat.values()
+			else:
+				present = seat == local_seat
+			for roster_entry in online_player_roster:
+				if int(roster_entry.get("seat", -1)) == seat:
+					present = bool(roster_entry.get("connected", present))
+					break
+			_draw_lobby_slot(seat_rect, seat, present, seat == local_seat)
+	elif max_players_for_game >= 4:
 		for seat in range(4):
 			var col_idx: int = seat % 2
 			var row_idx: int = int(seat / 2)
@@ -3554,7 +3648,7 @@ func _draw_lobby() -> void:
 		_draw_seat(Rect2(16, 100, 238, 124), 1, seat1_present, local_seat == 1, ACCENT)
 	if is_host:
 		var ips: Array = host_ips
-		var card_y: float = 316.0 if max_players_for_game >= 4 else 250.0
+		var card_y: float = (390.0 if selected_game == "uno" else (316.0 if max_players_for_game >= 4 else 250.0))
 		var card := Rect2(16, card_y, VIEW_W - 32, 112 + maxi(ips.size(), 1) * 42)
 		_panel(card, CARD, 20, LINE_STRONG, 1.0, 12, 5)
 		_txt_r("آدرس شما برای دوست", card.end.x - 18, card.position.y + 34, 15, TEXT_DIM, true, 300)
@@ -3668,6 +3762,7 @@ func _btns_game() -> void:
 		"backgammon": _btns_backgammon()
 		"blockace": _btns_blockace()
 		"quarto": _btns_quarto()
+		"uno": _game_modules["uno"]._btns_uno()
 
 func _seat_me(seat: int) -> bool:
 	if vs_cpu:
@@ -3755,6 +3850,7 @@ func _draw_playing() -> void:
 		"abalone": _draw_abalone()
 		"blockace": _draw_blockace()
 		"quarto": _draw_quarto()
+		"uno": _game_modules["uno"]._draw_uno()
 		_:
 			_draw_topbar("به زودی", "این بازی در نسخه‌های بعدی اضافه می‌شود")
 
@@ -3851,12 +3947,23 @@ func _result_info() -> Dictionary:
 			else:
 				sub = "صفحه پر شد و ردیف برنده‌ای ساخته نشد."
 			rows.append(["مهره‌های روی صفحه", _fa(_game_modules["quarto"]._qto_count_placed()) + " از ۱۶"])
+		"uno":
+			var um = _game_modules["uno"]
+			var me_seat: int = _my_seat()
+			title = ("مسابقه UNO را بردید!" if won else "مسابقه UNO را باختید") if bool(um.uno_game_over) else ("این دست را بردید" if won else "این دست را باختید")
+			sub = "دست %s · امتیاز این دست: %s · زمان: %s ثانیه" % [_fa(int(um.uno_round_number)), _fa(int(um.uno_last_round_points)), _fa(snappedf(float(um.uno_round_duration_seconds), 0.1))]
+			for seat in range(um.uno_player_count):
+				rows.append([_game_modules["uno"]._uno_player_name(seat), _fa(int(um.uno_scores[seat])) + " امتیاز"])
+			if not um.uno_game_over:
+				sub += " · برای دست بعدی از دکمه‌ی ادامه استفاده کنید."
 	return {"title": title, "sub": sub, "rows": rows}
 
 func _btns_result() -> void:
 	var can_restart: bool = vs_cpu or is_host
 	var label: String = "بازی دوباره"
 	if selected_game == "pasoor" and not _pas_match_over():
+		label = "دست بعدی"
+	if selected_game == "uno" and bool(_game_modules["uno"].uno_round_over) and not bool(_game_modules["uno"].uno_game_over):
 		label = "دست بعدی"
 	_add_btn(Rect2(40, 668, VIEW_W - 80, 62), label if can_restart else "منتظر میزبان…", _restart_current, can_restart, GREEN, "solid", "restart", "again")
 	_last_btn().hint = "فقط میزبان می‌تواند بازی جدید را شروع کند."
@@ -4771,6 +4878,71 @@ func _rpc_hokm_play(p: int, idx: int) -> void:
 	if selected_game == "hokm" and state == State.PLAYING:
 		_game_modules["hokm"]._hokm_play(p, idx)
 
+func _uno_rpc_authorized(seat: int) -> bool:
+	if selected_game != "uno" or seat < 0 or seat >= int(_game_modules["uno"].uno_player_count):
+		return false
+	if multiplayer.multiplayer_peer == null:
+		return true
+	var sender_id: int = multiplayer.get_remote_sender_id()
+	if sender_id == 0:
+		return true
+	if is_host:
+		return peer_to_seat.has(sender_id) and int(peer_to_seat[sender_id]) == seat
+	# In ENet games the host relays the authoritative action to clients.
+	return sender_id == 1
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_uno_play(seat: int, card_index: int, chosen_color: int, declared_uno: bool) -> void:
+	if state != State.PLAYING or not _uno_rpc_authorized(seat):
+		return
+	if card_index < 0 or card_index >= 112 or chosen_color < -1 or chosen_color > 3:
+		return
+	_game_modules["uno"]._uno_apply_play(seat, card_index, chosen_color, declared_uno)
+	_rebuild_buttons()
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_uno_draw(seat: int) -> void:
+	if state != State.PLAYING or not _uno_rpc_authorized(seat):
+		return
+	_game_modules["uno"]._uno_apply_draw(seat)
+	_rebuild_buttons()
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_uno_pass(seat: int) -> void:
+	if state != State.PLAYING or not _uno_rpc_authorized(seat):
+		return
+	_game_modules["uno"]._uno_apply_pass(seat)
+	_rebuild_buttons()
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_uno_catch(seat: int) -> void:
+	if state != State.PLAYING or not _uno_rpc_authorized(seat):
+		return
+	_game_modules["uno"]._uno_apply_catch(seat)
+	_rebuild_buttons()
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_uno_challenge(seat: int, challenge: bool) -> void:
+	if state != State.PLAYING or not _uno_rpc_authorized(seat):
+		return
+	_game_modules["uno"]._uno_apply_challenge(seat, challenge)
+	_rebuild_buttons()
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_uno_next_round(seat: int, rng_seed: int) -> void:
+	if selected_game != "uno" or state != State.PLAYING or not _result_popup_open or seat != 0:
+		return
+	var sender_id: int = multiplayer.get_remote_sender_id()
+	if multiplayer.multiplayer_peer != null and sender_id != 0:
+		# Only the host may trigger a new hand for LAN clients.
+		if is_host or sender_id != 1:
+			return
+	var uno_mod = _game_modules["uno"]
+	if not bool(uno_mod.uno_round_over) or bool(uno_mod.uno_game_over):
+		return
+	uno_mod._uno_begin_next_round(rng_seed)
+	_rebuild_buttons()
+
 @rpc("any_peer", "reliable")
 func _rpc_mm_submit(g: Array, _player: int) -> void:
 	# Host is authoritative: only the connected guesser may submit; secret never leaves host.
@@ -5506,11 +5678,11 @@ func _ws_begin_match(message: Dictionary) -> void:
 	_set_game(game_id)
 	online_game = game_id
 	_origin_online = true
-	local_seat = clampi(int(message.get("seat", 0)), 0, 3)
+	local_seat = clampi(int(message.get("seat", 0)), 0, 9 if game_id == "uno" else 3)
 	is_host = local_seat == 0
 	local_player_id = local_seat + 1
 	peer_to_seat.clear()
-	connected_players = clampi(int(message.get("player_count", 2)), 2, 4)
+	connected_players = clampi(int(message.get("player_count", 2)), 2, 10 if game_id == "uno" else 4)
 	online_player_roster = message.get("players", []).duplicate(true)
 	vs_cpu = false
 	my_name = online_username
@@ -5552,14 +5724,28 @@ func _ws_game_turn_seat() -> int:
 		"quarto": return qto_turn - 1
 		"hokm": return hokm_turn
 		"backgammon": return bg_turn
+		"uno": return int(_game_modules["uno"].uno_turn)
 	return -1
 
 func _ws_remote_action_allowed(action: String, args: Array, sender_seat: int) -> bool:
-	if state != State.PLAYING or sender_seat < 0 or sender_seat >= connected_players or sender_seat == local_seat:
+	if sender_seat < 0 or sender_seat >= connected_players or sender_seat == local_seat:
+		return false
+	if action == "_rpc_uno_next_round":
+		return selected_game == "uno" and state == State.PLAYING and _result_popup_open and args.size() >= 2 and sender_seat == 0 and int(args[0]) == 0 and bool(_game_modules["uno"].uno_round_over) and not bool(_game_modules["uno"].uno_game_over)
+	if state != State.PLAYING:
 		return false
 	# Resigning is allowed at any point, even when it is not the resigning player's turn.
 	if action == "_rpc_resign":
 		return not args.is_empty() and int(args[0]) == sender_seat
+	if selected_game == "uno":
+		if _ws_game_turn_seat() != sender_seat or args.is_empty() or int(args[0]) != sender_seat:
+			return false
+		match action:
+			"_rpc_uno_play":
+				return args.size() >= 4 and int(args[1]) >= 0 and int(args[1]) < 112 and int(args[2]) >= -1 and int(args[2]) <= 3 and typeof(args[3]) == TYPE_BOOL
+			"_rpc_uno_draw", "_rpc_uno_pass", "_rpc_uno_catch": return args.size() == 1
+			"_rpc_uno_challenge": return args.size() == 2 and typeof(args[1]) == TYPE_BOOL
+			_: return false
 	if selected_game == "mastermind" or _ws_game_turn_seat() != sender_seat:
 		return false
 	match action:
@@ -5618,6 +5804,12 @@ func _ws_execute_game_action(action: String, args: Array) -> void:
 		"_rpc_bg_move": _rpc_bg_move(int(args[0]), int(args[1]), int(args[2]), int(args[3]))
 		"_rpc_bg_end_turn": _rpc_bg_end_turn(int(args[0]), int(args[1]), int(args[2]))
 		"_rpc_hokm_play": _rpc_hokm_play(int(args[0]), int(args[1]))
+		"_rpc_uno_play": _rpc_uno_play(int(args[0]), int(args[1]), int(args[2]), bool(args[3]))
+		"_rpc_uno_draw": _rpc_uno_draw(int(args[0]))
+		"_rpc_uno_pass": _rpc_uno_pass(int(args[0]))
+		"_rpc_uno_catch": _rpc_uno_catch(int(args[0]))
+		"_rpc_uno_challenge": _rpc_uno_challenge(int(args[0]), bool(args[1]))
+		"_rpc_uno_next_round": _rpc_uno_next_round(int(args[0]), int(args[1]))
 		"_rpc_resign": _rpc_resign(int(args[0]))
 
 func _receive_ws_game_action(message: Dictionary) -> void:

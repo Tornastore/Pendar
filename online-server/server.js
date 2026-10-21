@@ -216,7 +216,7 @@ function tryFormRooms(key, force = false) {
   if (!firstClient) return;
   const game = firstClient.game;
   const capacity = playerCapacityForGame(game);
-  if (game !== 'mastermind' && game !== 'quoridor') {
+  if (game !== 'mastermind' && game !== 'quoridor' && game !== 'uno') {
     while (queue.length >= 2) {
       const sockets = queue.splice(0, 2);
       if (!createRoom(sockets, game)) {
@@ -253,7 +253,7 @@ function tryFormRooms(key, force = false) {
   }
   if (queue.length === 0) {
     cancelQueueTimer(key);
-  } else if (queue.length >= 1 && (game === 'mastermind' || game === 'quoridor')) {
+  } else if (queue.length >= 1 && (game === 'mastermind' || game === 'quoridor' || game === 'uno')) {
     scheduleQueueFlush(key);
   }
   queue.forEach((socket, index) => send(socket, { type: 'queued', game, position: index + 1, players_needed: Math.max(0, capacity - queue.length) }));
@@ -292,7 +292,7 @@ function joinQueue(socket, payload) {
   const queue = queueFor(key);
   if (!queue.includes(socket)) queue.push(socket);
   tryFormRooms(key, false);
-  if (game === 'mastermind' || game === 'quoridor') scheduleQueueFlush(key);
+  if (game === 'mastermind' || game === 'quoridor' || game === 'uno') scheduleQueueFlush(key);
 }
 
 function sendActionToRoom(socket, payload) {

@@ -48,7 +48,7 @@ class MultiplayerCapacityAndResultsTests(unittest.TestCase):
 
 
     def test_ip_lobby_preserves_four_player_seats_and_updates_roster_on_disconnect(self):
-        self.assertIn('peer.create_server(PORT, max_players_for_game)', MAIN)
+        self.assertIn('peer.create_server(PORT, maxi(1, max_players_for_game - 1))', MAIN)
         self.assertIn('for seat in range(maxi(2, max_players_for_game))', MAIN)
         self.assertIn('"connected": connected', MAIN)
         self.assertIn('for seat in range(4):', MAIN[MAIN.index('func _draw_lobby()'):MAIN.index('# ---------------- IP ENTRY')])

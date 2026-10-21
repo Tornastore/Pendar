@@ -1,0 +1,14 @@
+{
+  "id": "uno",
+  "name": "اونو (UNO)",
+  "category": "cards",
+  "variant": "Classic UNO",
+  "players": { "min": 2, "max": 10 },
+  "deck_cards": 112,
+  "cards_per_player": 7,
+  "target_score": 500,
+  "difficulty_levels": 6,
+  "network": "LAN IP / ENet on native exports; WebSocket matchmaking on Web",
+  "beta": false,
+  "notes": "Classic rules; four blank Wild cards default to regular Wild behavior."
+}

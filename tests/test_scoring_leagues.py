@@ -38,3 +38,16 @@ def test_scoring_design_documents_honest_online_leaderboard_limitations():
     assert "امتیاز لیگ" in doc
     assert "جهانی و مشترک میان تمام کاربران نیست" in doc
     assert "ضدتقلب" in doc
+
+
+def test_match_duration_increases_positive_league_rewards_and_is_capped():
+    root = Path(__file__).resolve().parents[1]
+    scoring = (root / "services" / "scoring_service.gd").read_text(encoding="utf-8")
+    assert '"uno": 1.20' in scoring
+    assert 'func _duration_multiplier(duration_seconds: float) -> float:' in scoring
+    assert 'clampf(duration_seconds, 0.0, 1800.0)' in scoring
+    assert 'duration_factor' in scoring
+    assert 'duration_seconds: float = 0.0' in scoring
+    # Elo/MMR is computed separately; elapsed time only modifies season point awards.
+    assert 'if outcome == "loss":' in scoring
+    assert 'game_rating_delta := 0' in scoring
