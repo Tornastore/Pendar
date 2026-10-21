@@ -1,0 +1,13 @@
+{
+  "id": "quarto",
+  "name": "کوارتو (Quarto)",
+  "category": "strategy",
+  "variant": "Standard Quarto",
+  "players": 2,
+  "board_size": 4,
+  "piece_count": 16,
+  "piece_attributes": ["height", "shape", "color", "fill"],
+  "network": "LAN IP / ENet on native exports; WebSocket matchmaking on Web",
+  "difficulty_levels": 6,
+  "beta": false
+}

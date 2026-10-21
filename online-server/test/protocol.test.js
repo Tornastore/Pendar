@@ -8,7 +8,7 @@ const {
 } = require('../lib/protocol');
 
 test('supports every game listed in the Godot online chooser', () => {
-  for (const game of ['othello', 'othello12', 'pentago', 'chess', 'domino', 'pasoor', 'quoridor', 'hokm', 'backgammon', 'gobblet', 'mastermind', 'abalone', 'blockace']) {
+  for (const game of ['othello', 'othello12', 'pentago', 'chess', 'domino', 'pasoor', 'quoridor', 'hokm', 'backgammon', 'gobblet', 'mastermind', 'abalone', 'blockace', 'quarto']) {
     assert.ok(ALLOWED_GAMES.has(game), `missing ${game}`);
   }
 });
@@ -75,4 +75,15 @@ test('Mastermind progress ranking changes live and solved players sort by solve 
   ]);
   assert.deepEqual(ranked.map(p => p.seat), [3, 2, 1, 0]);
   assert.deepEqual(ranked.map(p => p.rank), [1, 2, 3, 4]);
+});
+
+
+test('Quarto online actions validate seat, piece IDs and board coordinates', () => {
+  assert.equal(isActionFromSeat('_rpc_quarto_choose_piece', [0, 15], 0), true);
+  assert.equal(isActionFromSeat('_rpc_quarto_choose_piece', [0, 16], 0), false);
+  assert.equal(isActionFromSeat('_rpc_quarto_choose_piece', [1, 2], 0), false);
+  assert.equal(isActionFromSeat('_rpc_quarto_place', [1, 3, 3], 1), true);
+  assert.equal(isActionFromSeat('_rpc_quarto_place', [1, 4, 3], 1), false);
+  assert.equal(isActionFromSeat('_rpc_quarto_place', [1, 0, 0], 0), false);
+  assert.equal(playerCapacityForGame('quarto'), 2);
 });

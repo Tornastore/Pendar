@@ -86,10 +86,10 @@ for script_path in sorted((ROOT / "games").rglob("rules.gd")):
                 f"{script_path.relative_to(ROOT)}:{index}: CanvasItem draw command must be called through app."
             )
 
-# The shipped app currently has 12 independent rule modules; Othello 8x8 and 12x12 share one engine.
+# The shipped app currently has 13 independent rule modules; Othello 8x8 and 12x12 share one engine.
 expected_modules = {
     "othello", "pentago", "quoridor", "domino", "chess", "pasoor",
-    "mastermind", "gobblet", "hokm", "backgammon", "abalone", "blockace",
+    "mastermind", "gobblet", "hokm", "backgammon", "abalone", "blockace", "quarto",
 }
 module_paths = re.findall(r'"([a-z]+)": preload\("res://games/([a-z]+)/rules\.gd"\)', main)
 preloaded = {key for key, folder in module_paths if key == folder}
@@ -160,8 +160,8 @@ if not re.search(r"static func all_games\(\) -> Array", catalog):
     errors.append("GameCatalog does not expose all_games()")
 
 catalog_ids = re.findall(r'\{"id":\s*"([a-z0-9]+)"', catalog)
-if len(catalog_ids) != 13 or len(set(catalog_ids)) != 13:
-    errors.append(f"catalog should define 13 unique game IDs, got {len(catalog_ids)} entries")
+if len(catalog_ids) != 14 or len(set(catalog_ids)) != 14:
+    errors.append(f"catalog should define 14 unique game IDs, got {len(catalog_ids)} entries")
 if "scoring_service.record_result" not in main or "RankingServiceScript.build_game_rows" not in main:
     errors.append("main.gd is not delegating result recording and ranking to separate services")
 if "GAMES = GameCatalogScript.all_games()" not in main:

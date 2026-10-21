@@ -14,7 +14,7 @@ class TypographyAndGuideTests(unittest.TestCase):
     def test_every_catalog_game_has_a_guide(self):
         game_ids = [
             "othello", "othello12", "pentago", "quoridor", "chess", "domino",
-            "pasoor", "hokm", "backgammon", "gobblet", "mastermind", "abalone", "blockace",
+            "pasoor", "hokm", "backgammon", "gobblet", "mastermind", "abalone", "blockace", "quarto",
         ]
         for game_id in game_ids:
             with self.subTest(game_id=game_id):

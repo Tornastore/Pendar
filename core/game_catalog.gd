@@ -15,4 +15,5 @@ static func all_games() -> Array:
 		{"id": "mastermind", "name": "فکر بکر", "desc": "حدس کد رنگی مخفی و رقابت سرعتی", "short": "کد را بشکن", "players": "۲ تا ۴ نفر", "max_p": 4, "icon_col": Color(0.45, 0.7, 0.95), "cat": "classic", "net": true, "beta": false},
 		{"id": "abalone", "name": "ابلون", "desc": "قواعد استاندارد هل‌دادن مهره‌ها", "short": "هل بده بیرون", "players": "2 نفر", "max_p": 2, "icon_col": Color(0.55, 0.5, 0.95), "cat": "strategy", "net": true, "beta": false},
 		{"id": "blockace", "name": "بلاک‌آس", "desc": "Blokus Duo · صفحه ۱۴×۱۴ و ۲۱ قطعه‌ی استاندارد", "short": "گسترش از گوشه‌ها", "players": "2 نفر", "max_p": 2, "icon_col": Color(0.3, 0.78, 0.72), "cat": "strategy", "net": true, "beta": false},
+		{"id": "quarto", "name": "کوارتو (Quarto)", "desc": "مهره‌ای به حریف بده؛ ردیف ویژگی مشترک را بساز", "short": "انتخاب کن و چهار ردیف بساز", "players": "2 نفر", "max_p": 2, "icon_col": Color(0.75, 0.62, 0.92), "cat": "strategy", "net": true, "beta": false},
 	]

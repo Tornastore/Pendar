@@ -22,6 +22,7 @@ const GAME_MODULE_SCRIPTS := {
 	"backgammon": preload("res://games/backgammon/rules.gd"),
 	"abalone": preload("res://games/abalone/rules.gd"),
 	"blockace": preload("res://games/blockace/rules.gd"),
+	"quarto": preload("res://games/quarto/rules.gd"),
 }
 var scoring_service = ScoringServiceScript.new()
 var _game_modules: Dictionary = {}
@@ -349,6 +350,51 @@ var blk_winner: int:
 		return _game_modules["blockace"].blk_winner
 	set(value):
 		_game_modules["blockace"].blk_winner = value
+var qto_board: Array:
+	get:
+		return _game_modules["quarto"].qto_board
+	set(value):
+		_game_modules["quarto"].qto_board = value
+var qto_remaining: Array[int]:
+	get:
+		return _game_modules["quarto"].qto_remaining
+	set(value):
+		_game_modules["quarto"].qto_remaining = value
+var qto_turn: int:
+	get:
+		return _game_modules["quarto"].qto_turn
+	set(value):
+		_game_modules["quarto"].qto_turn = value
+var qto_phase: int:
+	get:
+		return _game_modules["quarto"].qto_phase
+	set(value):
+		_game_modules["quarto"].qto_phase = value
+var qto_piece_to_place: int:
+	get:
+		return _game_modules["quarto"].qto_piece_to_place
+	set(value):
+		_game_modules["quarto"].qto_piece_to_place = value
+var qto_last_cell: Vector2i:
+	get:
+		return _game_modules["quarto"].qto_last_cell
+	set(value):
+		_game_modules["quarto"].qto_last_cell = value
+var qto_game_over: bool:
+	get:
+		return _game_modules["quarto"].qto_game_over
+	set(value):
+		_game_modules["quarto"].qto_game_over = value
+var qto_winner: int:
+	get:
+		return _game_modules["quarto"].qto_winner
+	set(value):
+		_game_modules["quarto"].qto_winner = value
+var qto_difficulty: int:
+	get:
+		return _game_modules["quarto"].qto_difficulty
+	set(value):
+		_game_modules["quarto"].qto_difficulty = value
 var hokm_hands: Array:
 	get:
 		return _game_modules["hokm"].hokm_hands
@@ -756,6 +802,7 @@ func _current_game_difficulty() -> int:
 		"mastermind": return int(_game_modules["mastermind"].mm_difficulty)
 		"abalone": return int(_game_modules["abalone"].aba_difficulty)
 		"blockace": return int(_game_modules["blockace"].blk_difficulty)
+		"quarto": return int(_game_modules["quarto"].qto_difficulty)
 	return 3
 
 func _record_match_result(outcome: String, opponent_rating: int = -1, opponent_global_rating: int = -1) -> Dictionary:
@@ -1091,6 +1138,8 @@ func _is_my_turn() -> bool:
 			return aba_turn == local_seat + 1
 		"blockace":
 			return blk_turn == local_seat
+		"quarto":
+			return qto_turn == local_seat + 1
 		"hokm":
 			return hokm_turn == local_seat
 		"backgammon":
@@ -1415,6 +1464,14 @@ const RULES := {
 		"هل‌دادن فقط در امتداد خط و با برتری عددی ممکن است: دو مهره در برابر یک، سه در برابر یک یا سه در برابر دو.",
 		"گروه‌های پهلو به پهلو نمی‌توانند مهره‌ی حریف را هل دهند؛ برای هل‌دادن، پشت مهره‌ی حریف باید فضای آزاد یا لبه‌ی صفحه باشد.",
 		"برای انتخاب گروه، مهره‌ها را به ترتیب انتخاب کنید و سپس یکی از خانه‌های علامت‌خورده را لمس کنید.",
+	],
+	"quarto": [
+		"هدف: ردیفی از چهار مهره بسازید که همگی دست‌کم یک ویژگی مشترک داشته باشند؛ بلند/کوتاه، گرد/مربع، روشن/تیره یا توپر/توخالی.",
+		"۱۶ مهره‌ی یکتا وجود دارد و هر مهره دقیقاً چهار ویژگی دودویی دارد. در هر نوبت یک بازیکن مهره‌ای را انتخاب می‌کند که حریف باید آن را روی صفحه بگذارد.",
+		"پس از گذاشتن مهره، اگر ردیف چهارتایی با ویژگی مشترک ساخته نشد، همان بازیکنی که مهره را گذاشته، مهره‌ی بعدی را برای حریف انتخاب می‌کند.",
+		"برنده کسی است که با جای‌گذاری مهره، ردیف چهارتاییِ دارای ویژگی مشترک را کامل کند؛ مهره‌های آن ردیف می‌توانند انتخاب‌شده توسط هر دو بازیکن باشند.",
+		"مهره‌های استفاده‌شده دوباره قابل انتخاب نیستند. اگر تمام خانه‌ها پر شود و کسی ردیف برنده نسازد، بازی مساوی است.",
+		"برای انتخاب مهره روی یکی از ۱۶ گزینه پایین صفحه بزنید؛ برای قرار دادن، خانه‌ی خالی صفحه را لمس کنید. سطح هوش CPU را پیش از شروع انتخاب کنید.",
 	],
 	"blockace": [
 		"هدف: با گذاشتن قطعه‌های بیشتری از حریف امتیاز بگیرید. صفحه ۱۴×۱۴ و هر بازیکن ۲۱ قطعه دارد.",
@@ -2195,6 +2252,7 @@ func _board_tap(p: Vector2) -> void:
 		"backgammon": _bg_tap(p)
 		"abalone": _aba_tap(p)
 		"blockace": _blk_tap(p)
+		"quarto": _quarto_tap(p)
 
 # ---------- central back / navigation ----------
 func _ov_active() -> bool:
@@ -2390,6 +2448,7 @@ func _result_is_draw() -> bool:
 		"domino": return dom_winner < 0
 		"pasoor": return pas_winner < 0
 		"blockace": return blk_winner < 0
+		"quarto": return qto_winner == 0
 		"quoridor": return quo_winner < 0
 		"mastermind":
 			if _is_mastermind_race():
@@ -2417,6 +2476,7 @@ func _player_won_current() -> bool:
 		"backgammon": return bg_winner == seat
 		"abalone": return aba_winner == seat + 1
 		"blockace": return blk_winner == seat
+		"quarto": return qto_winner == seat + 1
 	return false
 
 # ---------- resign ----------
@@ -2475,6 +2535,9 @@ func _apply_resign(seat: int) -> void:
 		"blockace":
 			blk_game_over = true
 			blk_winner = 1 - seat
+		"quarto":
+			qto_game_over = true
+			qto_winner = 2 - seat
 	_go_result(false)
 
 # ---------- game start / restart ----------
@@ -2522,6 +2585,8 @@ func _start_game() -> void:
 			_reset_abalone()
 		"blockace":
 			_reset_blockace()
+		"quarto":
+			_reset_quarto()
 		_:
 			_show_toast("این بازی هنوز کامل نشده")
 			state = State.MODE
@@ -2597,6 +2662,9 @@ func _cpu_tick() -> void:
 		"blockace":
 			if not blk_game_over and blk_turn == 1:
 				_schedule_cpu(0.6, _blk_cpu)
+		"quarto":
+			if not qto_game_over and qto_turn == 2:
+				_schedule_cpu(0.35, _quarto_cpu_step)
 
 func _ui_sig() -> String:
 	var s: String = "%d|%d|%d|%s|%s|%d|%d|%d|%s|%s|%d|%s|%s|%d|%d|%s" % [state, int(pause_open), int(rules_open), str(dialog.get("title", "")), menu_filter, dash_tab, connected_players, int(online_searching), online_game, join_ip, int(is_host), ws_state, online_username, int(ws_match_active), int(ws_emoji_picker_open), online_status]
@@ -2611,6 +2679,7 @@ func _ui_sig() -> String:
 			"gobblet": s += "|%d|%d|%d|%d" % [gob_sel_size, gob_turn, _game_modules["gobblet"].gob_sel_from.x, _game_modules["gobblet"].gob_sel_from.y]
 			"backgammon": s += "|%d|%d" % [bg_turn, bg_moves_left.size()]
 			"blockace": s += "|%d|%d|%d|%d|%d|%d|%d|%d" % [blk_sel, blk_rot, int(blk_flip), blk_turn, blk_prev.x, blk_prev.y, _game_modules["blockace"]._blk_used_count(0), _game_modules["blockace"]._blk_used_count(1)]
+			"quarto": s += "|%d|%d|%d|%d|%d" % [qto_turn, qto_phase, qto_piece_to_place, qto_remaining.size(), qto_game_over]
 			"hokm": s += "|%d|%d" % [hokm_turn, hokm_hands[0].size()]
 			"abalone": s += "|%d|%d|%d|%d" % [aba_turn, _game_modules["abalone"].aba_selection.size(), aba_out[0], aba_out[1]]
 			"chess": s += "|%d" % chess_turn
@@ -2642,7 +2711,7 @@ func _cell_t(key: String, idx: int, dur: float = 0.4) -> Array:
 # ======================================================================
 #  SCREENS — buttons builder + drawing for every non-game screen
 # ======================================================================
-const NET_GAMES := ["othello", "othello12", "pentago", "chess", "domino", "pasoor", "quoridor", "hokm", "backgammon", "gobblet", "mastermind", "abalone", "blockace"]
+const NET_GAMES := ["othello", "othello12", "pentago", "chess", "domino", "pasoor", "quoridor", "hokm", "backgammon", "gobblet", "mastermind", "abalone", "blockace", "quarto"]
 const TILE_W := 248.0
 const TILE_H := 176.0
 const TILE_GAP := 12.0
@@ -2902,6 +2971,17 @@ func _draw_game_art(id: String, rect: Rect2, col: Color) -> void:
 			for i in pts.size():
 				_draw_disc(pts[i], 13, i % 2 == 0)
 			_art_end()
+		"quarto":
+			_art_xf(c, Vector2.ZERO, s)
+			for yy in range(4):
+				for xx in range(4):
+					var qr := Rect2(-42 + xx * 22, -42 + yy * 22, 19, 19)
+					_panel(qr, Color(0.20, 0.22, 0.36), 4, Color(0.75, 0.62, 0.92, 0.45), 0.7)
+					if (xx + yy) % 3 == 0:
+						draw_circle(qr.get_center(), 5.0 if (xx + yy) % 2 == 0 else 4.0, col.lightened(0.12))
+						if (xx + yy) % 2 == 1:
+							draw_circle(qr.get_center(), 2.2, Color(0.10, 0.11, 0.18))
+			_art_end()
 		"blockace":
 			_art_xf(c, Vector2.ZERO, s)
 			var shapes: Array = [
@@ -3047,6 +3127,13 @@ func _btns_mode() -> void:
 			var color: Color = GREEN if active else ACCENT
 			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_blockace_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "blockace_difficulty_%d" % (i + 1))
 		option_y = 398.0
+	elif selected_game == "quarto":
+		var qtomod = _game_modules["quarto"]
+		for i in range(6):
+			var active: bool = int(qtomod.qto_difficulty) == i + 1
+			var color: Color = GREEN if active else ACCENT
+			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_quarto_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "quarto_difficulty_%d" % (i + 1))
+		option_y = 398.0
 	_add_btn(Rect2(24, option_y, 492, 84), "بازی با کامپیوتر", _start_vs_cpu, true, GREEN, "option", "cpu", "m_cpu", "تک‌نفره · بدون نیاز به اینترنت")
 	var network_y: float = option_y + 98.0
 	_add_btn(Rect2(24, network_y, 492, 84), "میزبانی روی وای‌فای", _start_host, net, BLUE, "option", "wifi", "m_host", "شما میزبان باشید، دوستتان با IP وصل می‌شود")
@@ -3110,6 +3197,10 @@ func _set_blockace_difficulty(level: int) -> void:
 	blk_difficulty = clampi(level, 1, 6)
 	_rebuild_buttons()
 
+func _set_quarto_difficulty(level: int) -> void:
+	qto_difficulty = clampi(level, 1, 6)
+	_rebuild_buttons()
+
 func _set_mastermind_difficulty(level: int) -> void:
 	mm_difficulty = clampi(level, 1, 6)
 	mm_code_len = 3 + mm_difficulty
@@ -3151,7 +3242,7 @@ func _draw_mode() -> void:
 	if selected_game == "quoridor":
 		_txt_r("سطح هوش کامپیوتر را انتخاب کنید", VIEW_W - 28, 333, 13, TEXT_DIM, true, 310)
 		_txt_r("روش بازی", VIEW_W - 28, 389, 13, TEXT_DIM, true, 180)
-	elif selected_game in ["othello", "othello12", "pentago", "domino", "gobblet", "abalone", "mastermind", "blockace"]:
+	elif selected_game in ["othello", "othello12", "pentago", "domino", "gobblet", "abalone", "mastermind", "blockace", "quarto"]:
 		var difficulty_prompt: String = "درجه سختی، طول کد و تعداد رنگ‌ها" if selected_game == "mastermind" else "سطح هوش کامپیوتر را انتخاب کنید"
 		_txt_r(difficulty_prompt, VIEW_W - 28, 333, 13, TEXT_DIM, true, 310)
 		var mode_prompt: String = "کد: %s خانه · %s رنگ" % [_fa(3 + mm_difficulty), _fa(3 + mm_difficulty)] if selected_game == "mastermind" else "روش بازی"
@@ -3527,6 +3618,7 @@ func _btns_game() -> void:
 		"gobblet": _btns_gobblet()
 		"backgammon": _btns_backgammon()
 		"blockace": _btns_blockace()
+		"quarto": _btns_quarto()
 
 func _seat_me(seat: int) -> bool:
 	if vs_cpu:
@@ -3613,6 +3705,7 @@ func _draw_playing() -> void:
 		"backgammon": _draw_backgammon()
 		"abalone": _draw_abalone()
 		"blockace": _draw_blockace()
+		"quarto": _draw_quarto()
 		_:
 			_draw_topbar("به زودی", "این بازی در نسخه‌های بعدی اضافه می‌شود")
 
@@ -3703,6 +3796,12 @@ func _result_info() -> Dictionary:
 			rows.append(["امتیاز حریف", _fa(int(blk_scores[1 - seat]))])
 			rows.append(["خانه‌های باقیمانده شما", _fa(_game_modules["blockace"]._blk_remaining_points(seat))])
 			rows.append(["خانه‌های باقیمانده حریف", _fa(_game_modules["blockace"]._blk_remaining_points(1 - seat))])
+		"quarto":
+			if qto_winner > 0:
+				sub = "چهار مهره‌ی این ردیف حداقل یک ویژگی مشترک دارند."
+			else:
+				sub = "صفحه پر شد و ردیف برنده‌ای ساخته نشد."
+			rows.append(["مهره‌های روی صفحه", _fa(_game_modules["quarto"]._qto_count_placed()) + " از ۱۶"])
 	return {"title": title, "sub": sub, "rows": rows}
 
 func _btns_result() -> void:
@@ -4553,6 +4652,33 @@ func _rpc_blk_place(px: int, py: int, sel: int, rot: int, flipped: bool, player:
 			return
 	_game_modules["blockace"]._blk_apply_net(px, py, sel, rot, flipped, player)
 
+func _quarto_rpc_seat_allowed(seat: int) -> bool:
+	if seat < 0 or seat > 1 or selected_game != "quarto" or state != State.PLAYING or not _net_on():
+		return false
+	if int(_game_modules["quarto"].qto_turn) != seat + 1:
+		return false
+	if multiplayer.multiplayer_peer != null:
+		var sender_id: int = multiplayer.get_remote_sender_id()
+		if sender_id != 0:
+			if is_host:
+				if not peer_to_seat.has(sender_id) or int(peer_to_seat[sender_id]) != seat:
+					return false
+			elif sender_id != 1 or seat != 0:
+				return false
+	return true
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_quarto_choose_piece(seat: int, piece: int) -> void:
+	if not _quarto_rpc_seat_allowed(seat) or qto_phase != 0 or piece < 0 or piece > 15 or piece not in qto_remaining:
+		return
+	_game_modules["quarto"]._qto_choose_piece(piece, seat + 1)
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_quarto_place(seat: int, x: int, y: int) -> void:
+	if not _quarto_rpc_seat_allowed(seat) or qto_phase != 1 or x < 0 or x > 3 or y < 0 or y > 3:
+		return
+	_game_modules["quarto"]._qto_place(x, y, seat + 1)
+
 @rpc("any_peer", "call_local", "reliable")
 func _rpc_bg_step(d1: int, d2: int) -> void:
 	if selected_game == "backgammon" and state == State.PLAYING:
@@ -4977,6 +5103,109 @@ func _draw_blk_cell(r: Rect2, col: Color) -> void:
 func _draw_blockace() -> void:
 	_game_modules["blockace"]._draw_blockace()
 
+
+# ======================================================================
+#  QUARTO — 4x4 board, sixteen attribute pieces
+# ======================================================================
+const QUARTO_CELL := 76.0
+const QUARTO_GAP := 6.0
+const QUARTO_ORIGIN_Y := 194.0
+
+func _reset_quarto() -> void:
+	_game_modules["quarto"]._qto_reset()
+
+func _quarto_tap(p: Vector2) -> void:
+	_game_modules["quarto"]._qto_tap(p)
+
+func _quarto_cpu_step() -> void:
+	_game_modules["quarto"]._qto_cpu_step()
+
+func _btns_quarto() -> void:
+	_game_modules["quarto"]._btns_quarto()
+
+func _quarto_piece_rect(piece: int) -> Rect2:
+	var col: int = piece % 4
+	var row: int = int(piece / 4)
+	return Rect2(24.0 + col * 124.0, 584.0 + row * 46.0, 116.0, 40.0)
+
+func _draw_quarto_piece(center: Vector2, piece: int, scale: float = 1.0, opacity: float = 1.0) -> void:
+	if piece < 0 or piece > 15:
+		return
+	var tall: bool = (piece & 1) != 0
+	var round_piece: bool = (piece & 2) != 0
+	var dark: bool = (piece & 4) != 0
+	var hollow: bool = (piece & 8) != 0
+	var h: float = (27.0 if tall else 19.0) * scale
+	var w: float = (27.0 if round_piece else 29.0) * scale
+	var fill: Color = Color(0.25, 0.34, 0.55, opacity) if dark else Color(0.98, 0.78, 0.36, opacity)
+	var edge: Color = Color(0.64, 0.78, 1.0, opacity) if dark else Color(1.0, 0.91, 0.62, opacity)
+	var r := Rect2(center.x - w * 0.5, center.y - h * 0.5, w, h)
+	if round_piece:
+		if hollow:
+			draw_arc(center, maxf(w, h) * 0.44, 0.0, TAU, 28, edge, 2.2 * scale, true)
+			draw_circle(center, maxf(w, h) * 0.22, Color(fill.r, fill.g, fill.b, 0.18 * opacity))
+		else:
+			draw_circle(center + Vector2(0, 1.5 * scale), maxf(w, h) * 0.46, Color(0, 0, 0, 0.20 * opacity))
+			draw_circle(center, maxf(w, h) * 0.43, fill.darkened(0.18))
+			draw_circle(center + Vector2(0, -1.0 * scale), maxf(w, h) * 0.36, fill)
+	else:
+		if hollow:
+			draw_rect(r, edge, false, 2.2 * scale, true)
+			draw_rect(r.grow(-5.0 * scale), Color(fill.r, fill.g, fill.b, 0.16 * opacity), true)
+		else:
+			_panel(r, fill, 4.0 * scale, edge.darkened(0.25), 1.0 * scale, 2.0 * scale, 1.0 * scale)
+	if tall:
+		_panel(Rect2(center.x - 3.0 * scale, center.y - h * 0.5 - 4.0 * scale, 6.0 * scale, 4.5 * scale), edge, 2.0 * scale)
+
+func _draw_quarto() -> void:
+	var mod = _game_modules["quarto"]
+	var c1: Color = Color(0.39, 0.67, 1.0)
+	var c2: Color = Color(1.0, 0.49, 0.48)
+	var pa: Dictionary = _pl("بازیکن ۱", c1, "", qto_turn == 1 and not qto_game_over, _seat_me(0), "انتخاب / جای‌گذاری")
+	var pb: Dictionary = _pl("بازیکن ۲", c2, "", qto_turn == 2 and not qto_game_over, _seat_me(1), "انتخاب / جای‌گذاری")
+	_draw_hud("کوارتو · Quarto", pa, pb)
+	var mine_turn: bool = mod._qto_is_local_actor()
+	var instruction: String = "یک مهره برای حریف انتخاب کنید" if qto_phase == 0 else "مهره‌ی انتخاب‌شده را روی صفحه بگذارید"
+	var status := Rect2(22, 151, VIEW_W - 44, 28)
+	_panel(status, CARD, 14, Color(0.75, 0.62, 0.92, 0.42), 1.0)
+	_txt_c(instruction if mine_turn else "حریف در حال تصمیم‌گیری…", status, 13, TEXT if mine_turn else TEXT_DIM, true)
+	if qto_phase == 1 and qto_piece_to_place >= 0:
+		_draw_quarto_piece(Vector2(VIEW_W - 48, 165), qto_piece_to_place, 0.65, 1.0)
+	var origin: Vector2 = mod._qto_board_origin()
+	var cell: float = QUARTO_CELL
+	var gap: float = QUARTO_GAP
+	var board_size := Vector2(cell * 4.0 + gap * 3.0, cell * 4.0 + gap * 3.0)
+	var board_rect := Rect2(origin - Vector2(10, 10), board_size + Vector2(20, 20))
+	_panel(board_rect, Color(0.12, 0.12, 0.23), 18, Color(0.75, 0.62, 0.92, 0.58), 1.3, 14, 6)
+	for y in range(4):
+		for x in range(4):
+			var r := Rect2(origin.x + x * (cell + gap), origin.y + y * (cell + gap), cell, cell)
+			var col: Color = Color(0.18, 0.20, 0.34) if (x + y) % 2 == 0 else Color(0.14, 0.16, 0.28)
+			_panel(r, col, 9, LINE, 0.8)
+			if Vector2i(x, y) == qto_last_cell:
+				_panel(r.grow(-2), Color(0.24, 0.62, 0.45, 0.14), 8, Color(0.30, 0.92, 0.65, 0.8), 1.8)
+			var piece: int = int(qto_board[y][x])
+			if piece >= 0:
+				_draw_quarto_piece(r.get_center(), piece, 1.0, 1.0)
+			else:
+				_txt_c(_fa(y * 4 + x + 1), r, 11, TEXT_FAINT, false)
+	_hint("بلند/کوتاه · گرد/مربع · تیره/روشن · توپر/توخالی", 531, TEXT_DIM)
+	_txt_r("مهره‌های قابل انتخاب", VIEW_W - 24, 559, 13, TEXT_DIM, true, 220)
+	for piece in range(16):
+		var pr: Rect2 = _quarto_piece_rect(piece)
+		var available: bool = piece in qto_remaining
+		var can_pick: bool = available and qto_phase == 0 and mine_turn
+		_panel(pr, CARD_H if can_pick else (CARD if available else Color(0.08, 0.09, 0.15, 0.78)), 9, ACCENT if can_pick else LINE, 1.1 if can_pick else 0.7)
+		_draw_quarto_piece(Vector2(pr.position.x + 26, pr.get_center().y), piece, 0.54, 1.0 if available else 0.20)
+		_txt_c(_fa(piece + 1), Rect2(pr.position.x + 48, pr.position.y, pr.size.x - 50, pr.size.y), 12, TEXT if available else TEXT_FAINT, true)
+	if qto_game_over:
+		_hint("بازی تمام شد · وضعیت نهایی حفظ شده است", 780, TEXT_DIM)
+	elif qto_phase == 0:
+		_hint("مهره‌ی انتخابی به حریف داده می‌شود؛ ویژگی‌ها را بررسی کنید", 780, ACCENT if mine_turn else TEXT_DIM)
+	else:
+		_hint("یک خانه‌ی خالی انتخاب کنید؛ چهار ویژگی مشترک یعنی برد", 780, ACCENT if mine_turn else TEXT_DIM)
+	_draw_ai_difficulty_chip_at(qto_difficulty, 820.0)
+
 # ======================================================================
 #  LOGIC REPLACEMENTS
 # ======================================================================
@@ -5203,6 +5432,7 @@ func _ws_game_turn_seat() -> int:
 		"gobblet": return gob_turn - 1
 		"abalone": return aba_turn - 1
 		"blockace": return blk_turn
+		"quarto": return qto_turn - 1
 		"hokm": return hokm_turn
 		"backgammon": return bg_turn
 	return -1
@@ -5221,6 +5451,12 @@ func _ws_remote_action_allowed(action: String, args: Array, sender_seat: int) ->
 				return false
 		"_rpc_blk_place":
 			if args.size() < 6 or int(args[5]) != sender_seat:
+				return false
+		"_rpc_quarto_choose_piece":
+			if args.size() < 2 or int(args[0]) != sender_seat or qto_phase != 0 or int(args[1]) not in qto_remaining:
+				return false
+		"_rpc_quarto_place":
+			if args.size() < 3 or int(args[0]) != sender_seat or qto_phase != 1 or int(args[1]) < 0 or int(args[1]) > 3 or int(args[2]) < 0 or int(args[2]) > 3 or int(qto_board[int(args[2])][int(args[1])]) >= 0:
 				return false
 		"_rpc_gob_place":
 			if args.size() < 4 or int(args[3]) != sender_seat + 1:
@@ -5256,6 +5492,8 @@ func _ws_execute_game_action(action: String, args: Array) -> void:
 				encoded.append(int(item))
 			_rpc_aba_move(encoded, int(args[1]), int(args[2]), int(args[3]))
 		"_rpc_blk_place": _rpc_blk_place(int(args[0]), int(args[1]), int(args[2]), int(args[3]), bool(args[4]), int(args[5]))
+		"_rpc_quarto_choose_piece": _rpc_quarto_choose_piece(int(args[0]), int(args[1]))
+		"_rpc_quarto_place": _rpc_quarto_place(int(args[0]), int(args[1]), int(args[2]))
 		"_rpc_bg_step": _rpc_bg_step(int(args[0]), int(args[1]))
 		"_rpc_hokm_play": _rpc_hokm_play(int(args[0]), int(args[1]))
 		"_rpc_resign": _rpc_resign(int(args[0]))
@@ -5305,6 +5543,7 @@ func _ready() -> void:
 	_reset_domino()
 	_reset_chess()
 	_reset_pasoor()
+	_reset_quarto()
 	_rebuild_buttons()
 
 func _process(delta: float) -> void:

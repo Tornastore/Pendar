@@ -2,14 +2,14 @@
 
 const ALLOWED_GAMES = new Set([
   'othello', 'othello12', 'pentago', 'chess', 'domino', 'pasoor',
-  'quoridor', 'hokm', 'backgammon', 'gobblet', 'mastermind', 'abalone', 'blockace'
+  'quoridor', 'hokm', 'backgammon', 'gobblet', 'mastermind', 'abalone', 'blockace', 'quarto'
 ]);
 
 const ALLOWED_ACTIONS = new Set([
   '_rpc_othello_place', '_rpc_pent_place', '_rpc_pent_rotate',
   '_rpc_dom_play', '_rpc_dom_draw', '_rpc_dom_pass', '_rpc_chess_move',
   '_rpc_quo_action', '_rpc_pas_play', '_rpc_gob_place', '_rpc_gob_move',
-  '_rpc_aba_move', '_rpc_blk_place', '_rpc_bg_step', '_rpc_hokm_play',
+  '_rpc_aba_move', '_rpc_blk_place', '_rpc_quarto_choose_piece', '_rpc_quarto_place', '_rpc_bg_step', '_rpc_hokm_play',
   '_rpc_resign'
 ]);
 
@@ -72,6 +72,10 @@ function isActionFromSeat(action, args, seat, playerCount = 2) {
       return playerCount === 2 && args.length >= 5 && Number(args[4]) === seat + 1;
     case '_rpc_aba_move':
       return playerCount === 2 && args.length >= 4 && Number(args[3]) === seat + 1;
+    case '_rpc_quarto_choose_piece':
+      return playerCount === 2 && args.length >= 2 && Number(args[0]) === seat && Number.isInteger(Number(args[1])) && Number(args[1]) >= 0 && Number(args[1]) < 16;
+    case '_rpc_quarto_place':
+      return playerCount === 2 && args.length >= 3 && Number(args[0]) === seat && Number.isInteger(Number(args[1])) && Number(args[1]) >= 0 && Number(args[1]) < 4 && Number.isInteger(Number(args[2])) && Number(args[2]) >= 0 && Number(args[2]) < 4;
     case '_rpc_quo_action':
       return playerCount >= 2 && playerCount <= 4 && args.length >= 5 && Number(args[4]) === seat;
     case '_rpc_resign':

@@ -15,6 +15,7 @@ const GAME_WEIGHTS := {
 	"quoridor": 1.20,
 	"abalone": 1.20,
 	"blockace": 1.15,
+	"quarto": 1.05,
 	"backgammon": 1.10,
 	"othello12": 1.10,
 	"pentago": 1.05,
