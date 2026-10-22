@@ -212,6 +212,29 @@ for screen_path, preload_line, entry_point in (
     if entry_point not in main:
         errors.append(f"main.gd does not delegate rendering to {screen_path}")
 
+# Result screen presentation is delegated, but result calculations and persistence stay in main.gd.
+result_screen_path = ROOT / "ui" / "screens" / "result_screen.gd"
+if not result_screen_path.is_file():
+    errors.append("missing result screen module: ui/screens/result_screen.gd")
+else:
+    result_screen = result_screen_path.read_text(encoding="utf-8")
+    if 'preload("res://ui/screens/result_screen.gd")' not in main or "var _result_screen = ResultScreenScript.new()" not in main:
+        errors.append("main.gd does not load/instantiate ResultScreen")
+    for method in ("build_buttons", "render", "render_popup"):
+        if not re.search(rf"^func\s+{method}\(", result_screen, re.M):
+            errors.append(f"ResultScreen is missing {method}()")
+    for entry_point in (
+        "_result_screen.build_buttons(self, _ui_screen_theme)",
+        "_result_screen.render(self, _ui_screen_theme)",
+        "_result_screen.render_popup(self, _ui_screen_theme)",
+    ):
+        if entry_point not in main:
+            errors.append(f"main.gd missing result screen delegation: {entry_point}")
+    if "host.scoring_service.record_result" in result_screen or "host.state =" in result_screen:
+        errors.append("ResultScreen must not own scoring persistence or application state transitions")
+if "func _result_info() -> Dictionary:" not in main or "scoring_service.record_result" not in main:
+    errors.append("result calculation and persistence must remain in main.gd/ScoringService")
+
 # Pause, rules/help and generic confirmation dialogs are presentation modules.
 overlay_modules = (
     ("ui/screens/pause_screen.gd", 'preload("res://ui/screens/pause_screen.gd")', "_pause_screen", ("layout", "build_buttons", "render")),
@@ -268,5 +291,5 @@ print(f"- {len(expected_modules)} independent game rule modules")
 print(f"- {module_method_count} app-facing module calls checked for compatibility")
 print(f"- {state_count} module-owned state fields checked")
 print("- scoring, ranking, and game catalog services found")
-print("- dashboard, rankings, pause, rules and dialogs delegated to UI modules")
+print("- dashboard, rankings, pause, rules, dialogs and result presentation delegated to UI modules")
 print("NOTE: this is a static structural check, not a Godot runtime test.")

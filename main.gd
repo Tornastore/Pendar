@@ -18,6 +18,7 @@ const RankingsScreenScript = preload("res://ui/screens/rankings_screen.gd")
 const RulesScreenScript = preload("res://ui/screens/rules_screen.gd")
 const PauseScreenScript = preload("res://ui/screens/pause_screen.gd")
 const DialogComponentScript = preload("res://ui/components/dialog_component.gd")
+const ResultScreenScript = preload("res://ui/screens/result_screen.gd")
 const GAME_MODULE_SCRIPTS := {
 	"othello": preload("res://games/othello/rules.gd"),
 	"pentago": preload("res://games/pentago/rules.gd"),
@@ -43,6 +44,7 @@ var _rankings_screen = RankingsScreenScript.new()
 var _rules_screen = RulesScreenScript.new()
 var _pause_screen = PauseScreenScript.new()
 var _dialog_component = DialogComponentScript.new()
+var _result_screen = ResultScreenScript.new()
 var _game_modules: Dictionary = {}
 
 
@@ -814,6 +816,8 @@ var _ui_screen_theme: Dictionary = {
 	"ACCENT": ACCENT,
 	"TEXT": TEXT,
 	"TEXT_DIM": TEXT_DIM,
+	"TEXT_FAINT": TEXT_FAINT,
+	"MM_COLORS": UIContentScript.MM_COLORS,
 	"GREEN": GREEN,
 	"RED": RED,
 	"BLUE": BLUE,
@@ -3557,17 +3561,7 @@ func _result_info() -> Dictionary:
 	return {"title": title, "sub": sub, "rows": rows}
 
 func _btns_result() -> void:
-	var can_restart: bool = vs_cpu or is_host
-	var label: String = "بازی دوباره"
-	if selected_game == "pasoor" and not _pas_match_over():
-		label = "دست بعدی"
-	if selected_game == "uno" and bool(_game_modules["uno"].uno_round_over) and not bool(_game_modules["uno"].uno_game_over):
-		label = "دست بعدی"
-	_add_btn(Rect2(40, 668, VIEW_W - 80, 62), label if can_restart else "منتظر میزبان…", _restart_current, can_restart, GREEN, "solid", "restart", "again")
-	_last_btn().hint = "فقط میزبان می‌تواند بازی جدید را شروع کند."
-	_add_btn(Rect2(VIEW_W - 40 - 242, 746, 242, 54), "تغییر حالت", _change_mode, true, BLUE, "soft", "swap", "mode")
-	_add_btn(Rect2(40, 746, 242, 54), "منوی اصلی", _back_to_menu, true, ACCENT, "soft", "home", "home")
-	_add_btn(Rect2(40, 816, VIEW_W - 80, 48), "مشاهده آمار", _open_dashboard, true, TEXT_DIM, "ghost", "chart", "stats")
+	_result_screen.build_buttons(self, _ui_screen_theme)
 
 func _change_mode() -> void:
 	_cleanup_network()
@@ -3575,118 +3569,10 @@ func _change_mode() -> void:
 	_rebuild_buttons()
 
 func _draw_result() -> void:
-	var info: Dictionary = _result_info()
-	var won: bool = _player_won_current()
-	var tcol: Color = TEXT_DIM if _result_draw else (GREEN if won else RED)
-	var t: float = _time - _result_t0
-	# glow behind emblem
-	_glow(Vector2(VIEW_W * 0.5, 190), 230, Color(tcol.r, tcol.g, tcol.b, 0.30))
-	var pop: float = _ease_back(t / 0.5)
-	var c := Vector2(VIEW_W * 0.5, 190)
-	draw_circle(c, 78 * pop, Color(tcol.r * 0.28, tcol.g * 0.28, tcol.b * 0.28, 1.0))
-	_ring(c, 78 * pop, tcol, 3.0)
-	_ring(c, 92 * pop + 3.0 * sin(t * 3.0), Color(tcol.r, tcol.g, tcol.b, 0.30), 2.0)
-	var icon: String = "swap" if _result_draw else ("trophy" if won else "flag")
-	_draw_icon(icon, c, 76 * pop, tcol.lightened(0.2), 4.0)
-	if won and not _result_draw:
-		for i in 28:
-			var seed_v: float = float(i) * 12.9898
-			var px: float = fposmod(sin(seed_v) * 43758.5453, 1.0)
-			var spd: float = 70.0 + fposmod(sin(seed_v * 1.7) * 9231.13, 1.0) * 110.0
-			var py: float = fposmod(-40.0 + t * spd + fposmod(sin(seed_v * 2.3) * 1111.1, 1.0) * 300.0, 560.0) + 40.0
-			if t * spd > 600.0:
-				py = 2000.0
-			var cc: Color = UIContentScript.MM_COLORS[i % 6]
-			var rot: float = t * (2.0 + px * 3.0) + i
-			var cp := Vector2(24.0 + px * (VIEW_W - 48.0), py)
-			draw_set_transform(cp, rot, Vector2.ONE)
-			draw_rect(Rect2(-4, -2.5, 8, 5), Color(cc.r, cc.g, cc.b, clampf(1.0 - t / 4.0, 0.0, 1.0)))
-			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	_txt_c(str(info.title), Rect2(0, 296, VIEW_W, 52), 34, tcol.lightened(0.15), true)
-	if str(info.sub) != "":
-		_txt_c(str(info.sub), Rect2(24, 346, VIEW_W - 48, 30), 16, TEXT_DIM)
-	var rows: Array = info.rows
-	var y: float = 392.0
-	if rows.size() > 0:
-		var card := Rect2(40, y, VIEW_W - 80, 20 + rows.size() * 40)
-		_panel(card, CARD, 20, LINE_STRONG, 1.0, 10, 4)
-		for i in rows.size():
-			var ry: float = card.position.y + 10 + i * 40
-			_txt_r(str(rows[i][0]), card.end.x - 18, ry + 27, 16, TEXT_DIM, false, 260)
-			_txt_c(str(rows[i][1]), Rect2(card.position.x + 12, ry, 180, 40), 20, TEXT, true)
-			if i < rows.size() - 1:
-				draw_rect(Rect2(card.position.x + 16, ry + 40, card.size.x - 32, 1), LINE)
-		y = card.end.y + 14.0
-	if selected_game == "mastermind":
-		var sy: float = maxf(y, 440.0)
-		_txt_c("کد مخفی", Rect2(0, sy, VIEW_W, 24), 14, TEXT_DIM)
-		var result_gap: float = minf(56.0, float(VIEW_W - 56) / float(maxi(1, mm_code_len)))
-		if mm_secret.size() == mm_code_len:
-			for i in range(mm_code_len):
-				var mc: Color = UIContentScript.MM_COLORS[mm_secret[i]]
-				var sc := Vector2(VIEW_W * 0.5 + (float(i) - float(mm_code_len - 1) * 0.5) * result_gap, sy + 54)
-				draw_circle(sc, 22 if mm_code_len <= 7 else 17, mc.darkened(0.3))
-				draw_circle(sc + Vector2(0, -1), 19 if mm_code_len <= 7 else 14, mc)
-				draw_circle(sc + Vector2(-6, -8), 5 if mm_code_len <= 7 else 4, Color(1, 1, 1, 0.35))
-		else:
-			_txt_c("کد مخفی روی دستگاه میزبان نگهداری شد", Rect2(20, sy + 30, VIEW_W - 40, 40), 15, TEXT_DIM, true)
-		y = sy + 96.0
-	# delta chip
-	var dtxt: String
-	var dcol: Color
-	if _result_delta == 0:
-		dtxt = "امتیاز رتبه‌ای ثبت نشد"
-		dcol = TEXT_DIM
-	elif _result_draw and _result_delta > 0:
-		dtxt = "مساوی · +%s امتیاز لیگ" % _fa(_result_delta)
-		dcol = GREEN
-	else:
-		dtxt = ("+%s امتیاز لیگ" % _fa(_result_delta)) if _result_delta > 0 else ("−%s امتیاز لیگ" % _fa(absi(_result_delta)))
-		dcol = GREEN if _result_delta > 0 else RED
-	var cw: float = _txt_w(dtxt, 17, true) + 44.0
-	var dy: float = minf(y + 6.0, 604.0)
-	var cr := Rect2((VIEW_W - cw) * 0.5, dy, cw, 40)
-	var dp: float = _ease_back((t - 0.4) / 0.4)
-	if dp > 0.0:
-		_panel(cr.grow_individual(-(1.0 - dp) * cw * 0.25, 0, -(1.0 - dp) * cw * 0.25, 0), Color(dcol.r, dcol.g, dcol.b, 0.16), 20, dcol, 1.5)
-		_txt_c(dtxt, cr, 17, dcol, true)
-		if _result_delta != 0:
-			_txt_c("رتبه: " + _fa(scoring_service.global_rating), Rect2(0, cr.end.y + 4, VIEW_W, 22), 12, TEXT_DIM)
+	_result_screen.render(self, _ui_screen_theme)
 
 func _draw_result_popup() -> void:
-	_scrim(0.58)
-	var info: Dictionary = _result_info()
-	var won: bool = _player_won_current()
-	var col: Color = TEXT_DIM if _result_draw else (GREEN if won else RED)
-	var panel := Rect2(28, 218, VIEW_W - 56, 508)
-	_panel(panel, Color(0.10, 0.13, 0.27), 26, Color(col.r, col.g, col.b, 0.58), 1.5, 22, 8)
-	_gloss(panel, 26, 0.04)
-	var ic := Vector2(VIEW_W * 0.5, panel.position.y + 56)
-	draw_circle(ic, 30, Color(col.r, col.g, col.b, 0.16))
-	_ring(ic, 30, Color(col.r, col.g, col.b, 0.64), 1.5)
-	_draw_icon("swap" if _result_draw else ("trophy" if won else "flag"), ic, 27, col, 2.4)
-	_txt_c(str(info.get("title", "پایان بازی")), Rect2(panel.position.x + 14, panel.position.y + 96, panel.size.x - 28, 40), 26, col.lightened(0.12), true)
-	var sub: String = str(info.get("sub", ""))
-	if sub.is_empty():
-		sub = "صفحه‌ی نهایی بازی پشت این پنجره حفظ شده است."
-	_wrap(sub, panel.position.x + 28, panel.position.y + 143, panel.size.x - 56, 14, TEXT_DIM, HORIZONTAL_ALIGNMENT_CENTER)
-	var rows: Array = info.get("rows", [])
-	var row_y: float = panel.position.y + 198
-	for i in range(mini(rows.size(), 3)):
-		var r := Rect2(panel.position.x + 24, row_y + i * 40, panel.size.x - 48, 34)
-		_panel(r, Color(1, 1, 1, 0.045), 10)
-		_txt_r(str(rows[i][0]), r.end.x - 10, r.position.y + 22, 12, TEXT_DIM, false, r.size.x * 0.62)
-		_txt_c(str(rows[i][1]), Rect2(r.position.x + 8, r.position.y, r.size.x * 0.36, r.size.y), 14, TEXT, true)
-	var rating_note := ""
-	if _result_rating_delta != 0 or _result_game_rating_delta != 0:
-		rating_note = " · مهارت کلی %s%s / این بازی %s%s" % ["+" if _result_rating_delta > 0 else ("−" if _result_rating_delta < 0 else ""), _fa(absi(_result_rating_delta)), "+" if _result_game_rating_delta > 0 else ("−" if _result_game_rating_delta < 0 else ""), _fa(absi(_result_game_rating_delta))]
-	var league_note := ""
-	if _result_delta == 0 and rating_note.is_empty():
-		league_note = "مسابقه‌ی دوستانه · امتیاز رتبه‌ای ثبت نشد"
-	else:
-		league_note = "لیگ ماهانه %s%s%s" % ["+" if _result_delta > 0 else ("−" if _result_delta < 0 else ""), _fa(absi(_result_delta)), rating_note]
-	_txt_c(league_note, Rect2(panel.position.x + 12, panel.end.y - 76, panel.size.x - 24, 20), 10 if rating_note.length() > 20 else 12, GREEN if _result_delta > 0 else (RED if _result_delta < 0 else TEXT_DIM), true)
-	_txt_c("صفحه‌ی نهایی پشت این پنجره حفظ شده است", Rect2(panel.position.x + 12, panel.end.y - 34, panel.size.x - 24, 20), 11, TEXT_FAINT, false)
+	_result_screen.render_popup(self, _ui_screen_theme)
 
 # ---------------- DASHBOARD ----------------
 func _set_tab(i: int) -> void:

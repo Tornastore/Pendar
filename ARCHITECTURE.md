@@ -52,6 +52,7 @@ Pendar/
 - **رندر مشترک:** `ui/illustration_renderer.gd` و `ui/tabletop_art_renderer.gd` از همان CanvasItem اصلی برای ترسیم استفاده می‌کنند؛ بنابراین ترتیب لایه‌ها و مختصات فعلی حفظ می‌شود. `main.gd` فقط wrapperهای سازگاری را نگه می‌دارد.
 - **صفحه‌های رابط کاربری:** `ui/screens/dashboard_screen.gd` و `ui/screens/rankings_screen.gd` ساخت دکمه‌ها و ترسیم صفحه‌های آمار و رتبه‌بندی را در اختیار دارند. `ui/screens/pause_screen.gd` چیدمان، دکمه‌ها و ترسیم توقف بازی را انجام می‌دهد و `ui/screens/rules_screen.gd` محتوای راهنما، صفحه‌بندی، چیدمان و ترسیم را مدیریت می‌کند. رنگ‌ها و ابعاد پایه از طریق `_ui_screen_theme` صریح تزریق می‌شوند.
 - **دیالوگ عمومی:** `ui/components/dialog_component.gd` فقط چیدمان، ساخت دکمه‌ها و ترسیم دیالوگ‌های تأیید را انجام می‌دهد. اجرای callback، بستن پنجره و تغییر `dialog`/`pause_open`/`rules_open` در `main.gd` باقی می‌ماند؛ presenterها state مسابقه یا باز/بسته بودن overlay را مالک نمی‌شوند.
+- **نتیجه مسابقه:** `ui/screens/result_screen.gd` ساخت دکمه‌ها، ترسیم صفحه نهایی و پنجره خلاصه نتیجه را ارائه می‌کند. جمع‌بندی داده‌های نتیجه، ثبت امتیاز، تغییر وضعیت مسابقه و callbackهای دکمه‌ها همچنان در `main.gd` و `ScoringService` باقی می‌مانند.
 
 ## سازگاری ذخیره‌سازی
 
@@ -105,3 +106,9 @@ python tools/verify_structure.py
 - `ui/components/dialog_component.gd` رندر عمومی دیالوگ را انجام می‌دهد؛ اجرای عملیات تأیید، callback و cleanup state در `main.gd` باقی مانده است.
 - wrapperهای قدیمی برای دیالوگ، مکث و راهنما حفظ شده‌اند تا dispatcher فعلی و callbackهای دکمه‌ها نیاز به تغییر نداشته باشند.
 - `tests/test_ui_overlays.py` و `tools/verify_structure.py` جداسازی presentation و حفظ مرز state را به‌صورت ایستا کنترل می‌کنند. برای تأیید کامل، اجرای پروژه در Godot و بازکردن عملی هر overlay همچنان لازم است.
+
+## جداسازی صفحه نتیجه (مرحله چهارم بازآرایی)
+
+- `ui/screens/result_screen.gd` ترسیم صفحه نهایی بازی، پنجره خلاصه نتیجه و چیدمان دکمه‌های پایان مسابقه را بر عهده دارد. ورودی‌های نتیجه را از `_result_info()` می‌خواند.
+- محاسبه عنوان/ردیف‌های نتیجه، تشخیص برنده، ثبت نتیجه و تغییر وضعیت مسابقه عمداً در `main.gd` باقی مانده‌اند؛ presenter فقط داده را می‌خواند و فرمان دکمه‌ها را به کنترلر بازمی‌گرداند.
+- `_btns_result`, `_draw_result` و `_draw_result_popup` به عنوان wrapper حفظ شده‌اند تا dispatch اصلی و مسیر پنجره نتیجه تغییر نکند.

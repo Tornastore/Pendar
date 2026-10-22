@@ -68,7 +68,9 @@ class MultiplayerCapacityAndResultsTests(unittest.TestCase):
     def test_every_game_uses_result_overlay_and_final_board_remains_visible(self):
         self.assertIn('func _go_result(_won: bool = false) -> void:', MAIN)
         self.assertIn('_result_popup_open = true', MAIN)
-        self.assertIn('var panel := Rect2(28, 218, VIEW_W - 56, 508)', MAIN)
+        result_screen = (ROOT / 'ui' / 'screens' / 'result_screen.gd').read_text(encoding='utf-8')
+        self.assertIn('var panel := Rect2(28, 218, float(theme["VIEW_W"]) - 56, 508)', result_screen)
+        self.assertIn('_result_screen.render_popup(self, _ui_screen_theme)', MAIN)
         for module in (ROOT / 'games').glob('*/rules.gd'):
             text = module.read_text(encoding='utf-8')
             self.assertIn('_go_result(', text, f'{module}: missing in-HUD result popup trigger')
