@@ -19,6 +19,9 @@ const RulesScreenScript = preload("res://ui/screens/rules_screen.gd")
 const PauseScreenScript = preload("res://ui/screens/pause_screen.gd")
 const DialogComponentScript = preload("res://ui/components/dialog_component.gd")
 const ResultScreenScript = preload("res://ui/screens/result_screen.gd")
+const ModeScreenScript = preload("res://ui/screens/mode_screen.gd")
+const OnlineScreenScript = preload("res://ui/screens/online_screen.gd")
+const MenuScreenScript = preload("res://ui/screens/menu_screen.gd")
 const GAME_MODULE_SCRIPTS := {
 	"othello": preload("res://games/othello/rules.gd"),
 	"pentago": preload("res://games/pentago/rules.gd"),
@@ -45,6 +48,9 @@ var _rules_screen = RulesScreenScript.new()
 var _pause_screen = PauseScreenScript.new()
 var _dialog_component = DialogComponentScript.new()
 var _result_screen = ResultScreenScript.new()
+var _mode_screen = ModeScreenScript.new()
+var _online_screen = OnlineScreenScript.new()
+var _menu_screen = MenuScreenScript.new()
 var _game_modules: Dictionary = {}
 
 
@@ -810,6 +816,7 @@ var _ui_screen_theme: Dictionary = {
 	"VIEW_W": VIEW_W,
 	"VIEW_H": VIEW_H,
 	"CARD": CARD,
+	"CARD_H": CARD_H,
 	"LINE": LINE,
 	"LINE_STRONG": LINE_STRONG,
 	"BAR": BAR,
@@ -818,9 +825,11 @@ var _ui_screen_theme: Dictionary = {
 	"TEXT_DIM": TEXT_DIM,
 	"TEXT_FAINT": TEXT_FAINT,
 	"MM_COLORS": UIContentScript.MM_COLORS,
+	"CATEGORY_LABELS": UIContentScript.CAT_LABELS,
 	"GREEN": GREEN,
 	"RED": RED,
 	"BLUE": BLUE,
+	"PINK": PINK,
 }
 
 func _ensure_game_stats() -> void:
@@ -2576,18 +2585,10 @@ func _btns_nav() -> void:
 
 # ---------------- MENU ----------------
 func _menu_games() -> Array:
-	var res: Array = []
-	for g in GAMES:
-		if menu_filter == "all" or g.cat == menu_filter:
-			res.append(g)
-	return res
+	return _menu_screen.filtered_games(self)
 
 func _tile_rect(i: int) -> Rect2:
-	var col: int = i % 2
-	var row: int = int(i / 2)
-	var x: float = VIEW_W - 16.0 - TILE_W - col * (TILE_W + TILE_GAP)
-	var y: float = _scroll_top + 14.0 + row * (TILE_H + TILE_GAP)
-	return Rect2(x, y, TILE_W, TILE_H)
+	return _menu_screen.tile_rect(self, i)
 
 func _set_filter(key: String) -> void:
 	menu_filter = key
@@ -2595,25 +2596,7 @@ func _set_filter(key: String) -> void:
 	_rebuild_buttons()
 
 func _btns_menu() -> void:
-	_scroll_top = 176.0
-	_scroll_bottom = 868.0
-	var games: Array = _menu_games()
-	var rows: int = int((games.size() + 1) / 2)
-	_content_h = 14.0 + rows * (TILE_H + TILE_GAP) + 16.0
-	for i in games.size():
-		var id: String = games[i].id
-		_add_hit(_tile_rect(i), _select_game.bind(id), "game_" + id, true)
-	_add_btn(Rect2(16, 22, 44, 44), "", _confirm_exit_app, true, TEXT_DIM, "icon", "power", "exit")
-	_add_btn(Rect2(214, 22, 44, 44), "", _toggle_music, true, ACCENT if scoring_service.music_on else TEXT_DIM, "icon", _music_icon(), "music")
-	_add_btn(Rect2(16, 72, 104, 34), "راهنما", _open_general_help, true, BLUE, "soft", "help", "menu_help")
-	var x: float = VIEW_W - 16.0
-	for key in ["all", "strategy", "cards", "classic"]:
-		var label: String = UIContentScript.CAT_LABELS[key]
-		var w: float = _txt_w(label, 16, true) + 32.0
-		x -= w
-		_add_btn(Rect2(x, 124, w, 38), label, _set_filter.bind(key), true, ACCENT, "seg_on" if key == menu_filter else "ghost", "", "chip_" + key)
-		x -= 8.0
-	_btns_nav()
+	_menu_screen.build_buttons(self, _ui_screen_theme)
 
 func _tier_info() -> Array:
 	return RankingServiceScript.tier_info(scoring_service.global_rating)
@@ -2631,56 +2614,11 @@ func _draw_emblem(c: Vector2, s: float) -> void:
 	draw_rect(Rect2(c + Vector2(-6, 14) * u, Vector2(12, 8) * u), ACCENT)
 
 func _draw_menu() -> void:
-	var games: Array = _menu_games()
-	for i in games.size():
-		var r: Rect2 = _tile_rect(i)
-		r.position.y -= scroll_y
-		if r.end.y < _scroll_top - 10 or r.position.y > _scroll_bottom + 10:
-			continue
-		_draw_game_tile(games[i], r, _press_active and _press_id == "game_" + str(games[i].id))
-	_draw_bar_top(170.0)
-	# Official PENDAR logo lockup (same artwork as app icon and browser favicon).
-	if _brand_logo != null:
-		draw_texture_rect(_brand_logo, Rect2(VIEW_W - 184.0, 2.0, 166.0, 166.0), false)
-	var tier: Array = _tier_info()
-	var tc: Color = tier[1]
-	var pill := Rect2(68, 26, 138, 36)
-	_panel(pill, Color(1, 1, 1, 0.06), 18, Color(tc.r, tc.g, tc.b, 0.5), 1.0)
-	draw_circle(Vector2(pill.end.x - 18, pill.get_center().y), 7, tc)
-	_txt_c("%s · %s" % [tier[0], _fa(scoring_service.global_rating)], Rect2(pill.position.x + 4, pill.position.y, pill.size.x - 36, pill.size.y), 14, TEXT, true)
-	if games.size() == 0:
-		_txt_c("بازی‌ای پیدا نشد", Rect2(0, 400, VIEW_W, 40), 18, TEXT_DIM)
-	if _scroll_max() > 4.0 and scroll_y < _scroll_max() - 4.0:
-		var a: float = 0.55 + 0.25 * sin(_time * 3.0)
-		_draw_icon("back", Vector2(VIEW_W * 0.5, 858), 14, Color(1, 1, 1, a * 0.7), 2.0)
-	_draw_bottom_nav()
+	_menu_screen.render(self, _ui_screen_theme)
 
 func _draw_game_tile(g: Dictionary, r: Rect2, pressed: bool) -> void:
-	var col: Color = g.icon_col
-	if pressed:
-		r = r.grow(-3)
-	_panel(r, CARD_H if pressed else CARD, 20, Color(col.r, col.g, col.b, 0.38), 1.5, 14, 6)
-	var art := Rect2(r.position + Vector2(10, 10), Vector2(r.size.x - 20, 98))
-	_panel(art, Color(col.r * 0.30 + 0.035, col.g * 0.30 + 0.045, col.b * 0.30 + 0.09, 1.0), 14)
-	_draw_game_art(str(g.id), art, col)
-	_gloss(art, 14, 0.05)
-	var player_label: String = str(g.get("players", "۲ نفر"))
-	var chip_w: float = clampf(_txt_w(player_label, 12, true) + 18.0, 58.0, 108.0)
-	var chip := Rect2(art.position + Vector2(8, 8), Vector2(chip_w, 22))
-	_panel(chip, Color(0, 0, 0, 0.38), 11)
-	_txt_c(player_label, chip, _fit_size(player_label, chip.size.x - 8.0, 12, true), TEXT, true)
-	if g.net:
-		_draw_icon("wifi", chip.position + Vector2(chip.size.x + 14.0, 11), 14, Color(1, 1, 1, 0.75), 1.6)
-	if g.beta:
-		var bc := Rect2(art.end.x - 70, art.position.y + 8, 62, 22)
-		_panel(bc, Color(1.0, 0.72, 0.25, 0.22), 11, Color(1.0, 0.72, 0.25, 0.7), 1.0)
-		_txt_c("آزمایشی", bc, 12, Color(1.0, 0.82, 0.45), true)
-	var w: float = r.size.x - 28.0
-	var nm: String = g.name
-	_txt_r(nm, r.end.x - 14, art.end.y + 30, _fit_size(nm, w, 19, true), TEXT, true, w)
-	_txt_r(str(g.short), r.end.x - 14, art.end.y + 52, 13, TEXT_DIM, false, w)
+	_menu_screen.render_game_tile(self, g, r, pressed, _ui_screen_theme)
 
-# ---------------- GAME ART (mini illustrations) ----------------
 func _draw_game_art(id: String, rect: Rect2, col: Color) -> void:
 	_illustration_renderer.draw_game_art(self, id, rect, col, BG_TOP, UIContentScript.MM_COLORS)
 
@@ -2721,159 +2659,7 @@ func _rules_next_page() -> void:
 	_rebuild_buttons()
 
 func _btns_mode() -> void:
-	var info: Dictionary = _game_info(selected_game)
-	var web_build: bool = OS.has_feature("web")
-	# Godot Web does not support low-level ENet/UDP networking in browsers.
-	var net: bool = info.get("net", false) and not web_build
-	var online_net: bool = bool(info.get("net", false))
-	var option_y: float = 346.0
-	var difficulty_labels: Array[String] = ["خیلی آسان", "آسان", "متوسط", "سخت", "استاد", "استادتمام"]
-	_back_btn()
-	_add_btn(Rect2(16, 16, 44, 44), "", _open_rules, true, TEXT, "icon", "help", "help")
-	if selected_game == "mastermind":
-		for i in range(6):
-			var active: bool = mm_difficulty == i + 1
-			var color: Color = GREEN if active else ACCENT
-			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_mastermind_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "mastermind_difficulty_%d" % (i + 1))
-		option_y = 398.0
-	elif selected_game == "quoridor":
-		var qmod = _game_modules["quoridor"]
-		for i in range(6):
-			var active: bool = int(qmod.quo_difficulty) == i + 1
-			var color: Color = GREEN if active else ACCENT
-			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_quoridor_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "quo_difficulty_%d" % (i + 1))
-		option_y = 398.0
-	elif selected_game in ["othello", "othello12"]:
-		for i in range(6):
-			var active: bool = oth_difficulty == i + 1
-			var color: Color = GREEN if active else ACCENT
-			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_othello_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "oth_difficulty_%d" % (i + 1))
-		option_y = 398.0
-	elif selected_game == "chess":
-		for i in range(6):
-			var active: bool = chess_difficulty == i + 1
-			var color: Color = GREEN if active else ACCENT
-			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_chess_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "chess_difficulty_%d" % (i + 1))
-		option_y = 398.0
-	elif selected_game == "backgammon":
-		for i in range(6):
-			var active: bool = bg_difficulty == i + 1
-			var color: Color = GREEN if active else ACCENT
-			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_backgammon_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "backgammon_difficulty_%d" % (i + 1))
-		option_y = 398.0
-	elif selected_game == "pentago":
-		var pmod = _game_modules["pentago"]
-		for i in range(6):
-			var active: bool = int(pmod.pent_difficulty) == i + 1
-			var color: Color = GREEN if active else ACCENT
-			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_pentago_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "pentago_difficulty_%d" % (i + 1))
-		option_y = 398.0
-	elif selected_game == "domino":
-		var dmod = _game_modules["domino"]
-		for i in range(6):
-			var active: bool = int(dmod.dom_difficulty) == i + 1
-			var color: Color = GREEN if active else ACCENT
-			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_domino_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "domino_difficulty_%d" % (i + 1))
-		option_y = 398.0
-	elif selected_game == "pasoor":
-		var pasmod = _game_modules["pasoor"]
-		for i in range(6):
-			var active: bool = int(pasmod.pas_difficulty) == i + 1
-			var color: Color = GREEN if active else ACCENT
-			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_pasoor_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "pasoor_difficulty_%d" % (i + 1))
-		option_y = 398.0
-	elif selected_game == "hokm":
-		var hmod = _game_modules["hokm"]
-		for i in range(6):
-			var active: bool = int(hmod.hokm_difficulty) == i + 1
-			var color: Color = GREEN if active else ACCENT
-			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_hokm_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "hokm_difficulty_%d" % (i + 1))
-		option_y = 398.0
-	elif selected_game == "gobblet":
-		var gobmod = _game_modules["gobblet"]
-		for i in range(6):
-			var active: bool = int(gobmod.gob_difficulty) == i + 1
-			var color: Color = GREEN if active else ACCENT
-			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_gobblet_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "gobblet_difficulty_%d" % (i + 1))
-		option_y = 398.0
-	elif selected_game == "abalone":
-		var abamod = _game_modules["abalone"]
-		for i in range(6):
-			var active: bool = int(abamod.aba_difficulty) == i + 1
-			var color: Color = GREEN if active else ACCENT
-			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_abalone_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "abalone_difficulty_%d" % (i + 1))
-		option_y = 398.0
-	elif selected_game == "blockace":
-		var blkmod = _game_modules["blockace"]
-		for i in range(6):
-			var active: bool = int(blkmod.blk_difficulty) == i + 1
-			var color: Color = GREEN if active else ACCENT
-			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_blockace_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "blockace_difficulty_%d" % (i + 1))
-		option_y = 398.0
-	elif selected_game == "quarto":
-		var qtomod = _game_modules["quarto"]
-		for i in range(6):
-			var active: bool = int(qtomod.qto_difficulty) == i + 1
-			var color: Color = GREEN if active else ACCENT
-			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_quarto_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "quarto_difficulty_%d" % (i + 1))
-		option_y = 398.0
-	elif selected_game == "uno":
-		var um = _game_modules["uno"]
-		for i in range(6):
-			var active: bool = int(um.uno_difficulty) == i + 1
-			var color: Color = GREEN if active else ACCENT
-			_add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], _set_uno_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "uno_difficulty_%d" % (i + 1))
-		for i in range(5):
-			var count1: int = i + 2
-			var active1: bool = um.uno_player_count == count1
-			_add_btn(Rect2(16 + i * 103, 394, 96, 32), "%s نفر" % _fa(count1), _set_uno_player_count.bind(count1), true, GREEN if active1 else ACCENT, "seg_on" if active1 else "ghost", "", "uno_players_%d" % count1)
-		for i in range(4):
-			var count2: int = i + 7
-			var active2: bool = um.uno_player_count == count2
-			_add_btn(Rect2(68 + i * 103, 431, 96, 32), "%s نفر" % _fa(count2), _set_uno_player_count.bind(count2), true, GREEN if active2 else ACCENT, "seg_on" if active2 else "ghost", "", "uno_players_%d" % count2)
-		option_y = 470.0
-	if selected_game == "uno":
-		_add_btn(Rect2(24, option_y, 492, 54), "مسابقه با CPU · %s نفر" % _fa(_game_modules["uno"].uno_player_count), _start_vs_cpu, true, GREEN, "option", "cpu", "m_cpu", "یک بازیکن و حریف‌های CPU تا ۱۰ نفر")
-		_add_btn(Rect2(24, option_y + 58, 492, 54), "میزبانی روی وای‌فای", _start_host, net, BLUE, "option", "wifi", "m_host", "میزبانی UNO برای ۲ تا ۱۰ بازیکن")
-		_add_btn(Rect2(24, option_y + 116, 492, 54), "اتصال با IP", _go_ip_entry, net, ACCENT, "option", "keypad", "m_join", "به لابی UNO بپیوندید")
-		_add_btn(Rect2(24, option_y + 174, 492, 54), "بازی آنلاین · صف انتظار", _open_online_for_game, online_net, PINK, "option", "globe", "m_online", "جفت‌شدن با بازیکنان آنلاین UNO")
-		return
-	if selected_game == "quoridor":
-		_add_btn(Rect2(24, option_y, 492, 62), "بازی با CPU · دو نفره", _start_vs_cpu, true, GREEN, "option", "cpu", "m_cpu", "شما در برابر یک CPU")
-		_add_btn(Rect2(24, option_y + 66, 492, 62), "چهارنفره · شما در برابر ۳ CPU", _start_quoridor_vs_three_cpu, true, Color(0.35, 0.78, 0.62), "option", "users", "m_cpu3", "چهار مسیر، سه حریف کامپیوتری")
-		_add_btn(Rect2(24, option_y + 132, 492, 62), "میزبانی روی وای‌فای", _start_host, net, BLUE, "option", "wifi", "m_host", "میزبان بازی دونفره یا چهارنفره")
-		_add_btn(Rect2(24, option_y + 198, 492, 62), "اتصال با IP", _go_ip_entry, net, ACCENT, "option", "keypad", "m_join", "به بازی میزبان بپیوندید")
-		_add_btn(Rect2(24, option_y + 264, 492, 62), "بازی آنلاین", _open_online_for_game, online_net, PINK, "option", "globe", "m_online", "صف انتظار آنلاین")
-		_add_btn(Rect2(24, option_y + 330, 492, 62), "چهارنفره روی یک دستگاه", _start_quoridor_local_four_player, true, ACCENT, "option", "users", "m_local4", "چهار نفر، نوبتی روی یک صفحه")
-		if web_build:
-			buttons[buttons.size() - 3].hint = "نسخه وب برای اتصال مستقیم IP به WebSocket نیاز دارد."
-			buttons[buttons.size() - 2].hint = "اتصال مستقیم IP در APK/Desktop فعال است."
-			buttons[buttons.size() - 1].hint = "برای نسخه وب از صف انتظار و WebSocket استفاده کنید."
-		return
-	if selected_game == "mastermind":
-		_add_btn(Rect2(24, option_y, 492, 62), "بازی با CPU · حل یک کد", _start_vs_cpu, true, GREEN, "option", "cpu", "m_cpu", "یک کد را حدس بزنید")
-		_add_btn(Rect2(24, option_y + 66, 492, 62), "مسابقه با ۳ CPU · چهار نفره", _start_mastermind_vs_three_cpu, true, Color(0.35, 0.78, 0.62), "option", "users", "m_cpu3", "هر نفر مستقل حدس می‌زند؛ رتبه‌بندی زنده")
-		_add_btn(Rect2(24, option_y + 132, 492, 62), "میزبانی روی وای‌فای", _start_host, net, BLUE, "option", "wifi", "m_host", "میزبان کد را نگه می‌دارد")
-		_add_btn(Rect2(24, option_y + 198, 492, 62), "اتصال با IP", _go_ip_entry, net, ACCENT, "option", "keypad", "m_join", "به مسابقه LAN بپیوندید")
-		_add_btn(Rect2(24, option_y + 264, 492, 62), "بازی آنلاین", _open_online_for_game, online_net, PINK, "option", "globe", "m_online", "صف انتظار آنلاین")
-		if web_build:
-			buttons[buttons.size() - 3].hint = "نسخه وب برای LAN مستقیم از WebSocket استفاده می‌کند."
-			buttons[buttons.size() - 2].hint = "اتصال IP فقط در APK/Desktop فعال است."
-			buttons[buttons.size() - 1].hint = "با صف انتظار آنلاین، خودکار حریف پیدا می‌کنید."
-		return
-	_add_btn(Rect2(24, option_y, 492, 84), "بازی با کامپیوتر", _start_vs_cpu, true, GREEN, "option", "cpu", "m_cpu", "تک‌نفره · بدون نیاز به اینترنت")
-	var network_y: float = option_y + 98.0
-	_add_btn(Rect2(24, network_y, 492, 84), "میزبانی روی وای‌فای", _start_host, net, BLUE, "option", "wifi", "m_host", "شما میزبان باشید، دوستتان با IP وصل می‌شود")
-	_add_btn(Rect2(24, network_y + 98, 492, 84), "اتصال با IP", _go_ip_entry, net, ACCENT, "option", "keypad", "m_join", "به بازی میزبانِ دیگر بپیوندید")
-	_add_btn(Rect2(24, network_y + 196, 492, 84), "بازی آنلاین", _open_online_for_game, online_net, PINK, "option", "globe", "m_online", "جستجوی حریف از طریق سرور آنلاین")
-	if web_build:
-		buttons[buttons.size() - 3].hint = "میزبانی مستقیم ENet/UDP در مرورگر ممکن نیست."
-		buttons[buttons.size() - 2].hint = "اتصال مستقیم IP فقط در APK/Desktop فعال است."
-		buttons[buttons.size() - 1].hint = "برای نسخه وب از صف انتظار و WebSocket امن استفاده کنید."
-	elif not net:
-		buttons[buttons.size() - 3].hint = "این بازی فعلاً فقط با کامپیوتر قابل بازی است."
-		buttons[buttons.size() - 2].hint = "این بازی فعلاً فقط با کامپیوتر قابل بازی است."
-		buttons[buttons.size() - 1].hint = "این بازی فعلاً فقط با کامپیوتر قابل بازی است."
+	_mode_screen.build_buttons(self, _ui_screen_theme)
 
 func _set_quoridor_difficulty(level: int) -> void:
 	_game_modules["quoridor"].quo_difficulty = clampi(level, 1, 6)
@@ -2941,51 +2727,8 @@ func _set_mastermind_difficulty(level: int) -> void:
 	_rebuild_buttons()
 
 func _draw_mode() -> void:
-	var info: Dictionary = _game_info(selected_game)
-	var col: Color = info.get("icon_col", ACCENT)
-	_draw_bar_top(76.0)
-	var hero := Rect2(24, 92, 492, 226)
-	_panel(hero, CARD, 24, Color(col.r, col.g, col.b, 0.4), 1.5, 16, 6)
-	var art := Rect2(hero.position + Vector2(14, 14), Vector2(200, 198))
-	_panel(art, Color(col.r * 0.30 + 0.035, col.g * 0.30 + 0.045, col.b * 0.30 + 0.09, 1.0), 18)
-	_draw_game_art(selected_game, Rect2(art.position + Vector2(0, 40), Vector2(art.size.x, 118)), col)
-	_gloss(art, 18, 0.05)
-	var rx: float = hero.end.x - 20
-	var nm: String = str(info.get("name", ""))
-	_txt_r(nm, rx, hero.position.y + 56, _fit_size(nm, 250, 30, true), TEXT, true, 260)
-	_wrap(str(info.get("desc", "")), hero.position.x + 230, hero.position.y + 88, 240, 15, TEXT_DIM, HORIZONTAL_ALIGNMENT_RIGHT)
-	var chip_y: float = hero.position.y + 150
-	var cx: float = rx
-	var chips: Array = [str(info.get("players", "2 نفره"))]
-	if OS.has_feature("web"):
-		chips.append("نسخه وب · بازی محلی")
-	elif info.get("net", false):
-		chips.append("چندنفره شبکه‌ای")
-	else:
-		chips.append("فقط آفلاین")
-	if info.get("beta", false):
-		chips.append("آزمایشی")
-	for t in chips:
-		var w: float = _txt_w(t, 13, true) + 26.0
-		cx -= w
-		var cc: Color = Color(1.0, 0.72, 0.25) if t == "آزمایشی" else col
-		_panel(Rect2(cx, chip_y, w, 28), Color(cc.r, cc.g, cc.b, 0.16), 14, Color(cc.r, cc.g, cc.b, 0.6), 1.0)
-		_txt_c(t, Rect2(cx, chip_y, w, 28), 13, cc.lightened(0.3), true)
-		cx -= 8.0
-	if selected_game == "quoridor":
-		_txt_r("سطح هوش کامپیوتر را انتخاب کنید", VIEW_W - 28, 333, 13, TEXT_DIM, true, 310)
-		_txt_r("روش بازی", VIEW_W - 28, 389, 13, TEXT_DIM, true, 180)
-	elif selected_game in ["othello", "othello12", "pentago", "domino", "gobblet", "abalone", "mastermind", "blockace", "quarto", "backgammon", "uno"]:
-		var difficulty_prompt: String = "درجه سختی، طول کد و تعداد رنگ‌ها" if selected_game == "mastermind" else "سطح هوش کامپیوتر را انتخاب کنید"
-		_txt_r(difficulty_prompt, VIEW_W - 28, 333, 13, TEXT_DIM, true, 310)
-		var mode_prompt: String = "کد: %s خانه · %s رنگ" % [_fa(3 + mm_difficulty), _fa(3 + mm_difficulty)] if selected_game == "mastermind" else ("بازیکنان: %s · هدف: ۵۰۰ امتیاز" % _fa(_game_modules["uno"].uno_player_count) if selected_game == "uno" else "روش بازی")
-		_txt_r(mode_prompt, VIEW_W - 28, 389, 13, TEXT_DIM, true, 180)
-	else:
-		_txt_r("روش بازی را انتخاب کنید", VIEW_W - 28, 336, 15, TEXT_DIM, true, 300)
-	_txt_c(nm, Rect2(70, 10, VIEW_W - 140, 40), 22, TEXT, true)
-	_txt_c("حالت بازی را انتخاب کنید", Rect2(40, 46, VIEW_W - 80, 24), 13, TEXT_DIM)
+	_mode_screen.render(self, _ui_screen_theme)
 
-# ---------------- ONLINE ----------------
 func _open_online_for_game() -> void:
 	if NET_GAMES.has(selected_game):
 		online_game = selected_game
@@ -3088,203 +2831,24 @@ func _pick_online_game(id: String) -> void:
 	_rebuild_buttons()
 
 func _online_extra() -> float:
-	var rows: int = int(ceil(float(NET_GAMES.size()) / 3.0))
-	var end_y: float = 156.0 + (rows - 1) * 44.0 + 38.0
-	return maxf(0.0, end_y - 254.0)
+	return _online_screen.online_extra(self)
 
 func _btns_online() -> void:
-	var web_build: bool = OS.has_feature("web")
-	_add_btn(Rect2(16, 16, 44, 44), "", _open_online_help, true, TEXT, "icon", "help", "online_help")
-	_scroll_top = 76.0
-	_scroll_bottom = 868.0
-	_content_h = 0.0
-	var i: int = 0
-	for id in NET_GAMES:
-		var col: int = i % 3
-		var row: int = int(i / 3)
-		var w: float = 156.0
-		var x: float = VIEW_W - 16.0 - w - col * (w + 10.0)
-		var y: float = 156.0 + row * 44.0
-		var nm: String = str(_game_info(id).name)
-		_add_btn(Rect2(x, y, w, 38), nm, _pick_online_game.bind(id), true, _game_info(id).icon_col, "seg_on" if id == online_game else "ghost", "", "og_" + id)
-		i += 1
-	var ex: float = _online_extra()
-	if online_searching:
-		_add_btn(Rect2(24, 292 + ex, 492, 84), "لغو انتظار برای حریف", _cancel_online_search, true, RED, "option", "close", "o_cancel_queue", "در صورت لغو، از صف بازی خارج می‌شوید")
-	else:
-		_add_btn(Rect2(24, 292 + ex, 492, 84), "جستجوی هم‌بازی آنلاین", _quick_match_search, not _online_server_url().is_empty(), PINK, "option", "globe", "به صف بازی انتخاب‌شده می‌پیوندید و با اولین بازیکن همان بازی جفت می‌شوید")
-		if _online_server_url().is_empty():
-			_last_btn().hint = "پس از میزبانی سرور آنلاین، نشانی WSS را در project.godot تنظیم کنید."
-	if username_editing:
-		_add_btn(Rect2(374, 91, 140, 40), "ثبت نام", _save_online_username, true, GREEN, "solid", "check", "o_username_save")
-	else:
-		_add_btn(Rect2(24, 91, 118, 40), "ویرایش نام", _edit_online_username, true, BLUE, "soft", "user", "o_username")
-	_add_btn(Rect2(24, 488 + ex, 492, 84), "اتصال مستقیم با IP (فقط APK/Desktop)", _go_ip_entry, not web_build, ACCENT, "option", "keypad", "o_lan", "اتصال مستقیم روی شبکه محلی")
-	if web_build:
-		_last_btn().hint = "در مرورگر از جستجوی هم‌بازی با WebSocket استفاده کنید. اتصال ENet/IP فقط در نسخه نصب‌شدنی است."
-	_btns_nav()
+	_online_screen.build_online_buttons(self, _ui_screen_theme)
 
 func _draw_online() -> void:
-	_draw_topbar("بازی آنلاین", "انتخاب بازی و جفت‌سازی خودکار با بازیکن منتظر")
-	var profile := Rect2(16, 82, VIEW_W - 32, 56)
-	_panel(profile, CARD, 16, LINE_STRONG, 1.0)
-	if username_editing:
-		_txt_r("نام کاربری", VIEW_W - 22, 113, 12, TEXT_DIM, true, 100)
-	else:
-		_txt_r("نام کاربری", VIEW_W - 22, 113, 12, TEXT_DIM, true, 100)
-		_txt_r(online_username, VIEW_W - 138, 113, 15, TEXT, true, 190)
-	_txt_r("۱. بازی را انتخاب کنید", VIEW_W - 24, 138, 15, TEXT_DIM, true, 300)
-	var ex: float = _online_extra()
-	_txt_r("۲. جستجوی حریف", VIEW_W - 24, 280 + ex, 15, TEXT_DIM, true, 300)
-	var note := Rect2(24, 592 + ex, 492, 134)
-	_panel(note, Color(0.38, 0.62, 1.0, 0.10), 18, Color(0.38, 0.62, 1.0, 0.35), 1.0)
-	_draw_icon("info", Vector2(note.end.x - 28, note.position.y + 30), 22, BLUE, 2.0)
-	var status_text: String = online_status
-	if online_searching:
-		status_text = "در صف انتظار برای «%s» هستید؛ با ورود نفر بعدی بازی شروع می‌شود." % str(_game_info(online_game).get("name", online_game))
-	elif ws_match_active:
-		status_text = "متصل به %s در بازی %s" % [opponent_name, str(_game_info(selected_game).get("name", selected_game))]
-	elif _online_server_url().is_empty():
-		status_text = "برای فعال‌شدن صف آنلاین، سرور WebSocket را میزبانی و network/matchmaking_url را تنظیم کنید."
-	elif status_text.is_empty():
-		status_text = "بازیکنان بر اساس بازی انتخاب‌شده جفت می‌شوند؛ نام کاربری و ایموجی‌ها به حریف نمایش داده می‌شود."
-	_wrap(status_text, note.position.x + 18, note.position.y + 32, note.size.x - 36, 14, TEXT, HORIZONTAL_ALIGNMENT_RIGHT)
-	_wrap("اتصال مستقیم IP در APK حفظ شده است؛ نسخه‌ی وب برای بازی آنلاین از WSS استفاده می‌کند.", note.position.x + 18, note.position.y + 86, note.size.x - 36, 13, TEXT_DIM, HORIZONTAL_ALIGNMENT_RIGHT)
-	_draw_bottom_nav()
+	_online_screen.render_online(self, _ui_screen_theme)
 
-# ---------------- LOBBY ----------------
 func _btns_lobby() -> void:
-	_back_btn()
-	_add_btn(Rect2(16, 16, 44, 44), "", _open_rules, true, TEXT, "icon", "help", "help")
-	if is_host:
-		var can_start: bool = connected_players >= 2 and not (selected_game == "quoridor" and connected_players == 3)
-		_add_btn(Rect2(40, 706, VIEW_W - 80, 62), "شروع بازی", _start_network_game, can_start, GREEN, "solid", "play", "start")
-		_last_btn().hint = "کوریدور با ۲ یا ۴ بازیکن شروع می‌شود؛ سایر بازی‌ها طبق ظرفیت خود شروع می‌شوند."
-		var ips: Array = host_ips
-		for j in ips.size():
-			var y: float = 250.0 + 82.0 + j * 42.0
-			_add_btn(Rect2(30, y - 2, 40, 36), "", _copy_ip.bind(str(ips[j])), true, ACCENT, "icon", "copy", "copy_%d" % j)
-	_add_btn(Rect2(40, 782, VIEW_W - 80, 54), "ترک لابی", _request_leave_lobby, true, RED, "soft", "door", "leave")
+	_online_screen.build_lobby_buttons(self, _ui_screen_theme)
 
 func _copy_ip(ip: String) -> void:
 	DisplayServer.clipboard_set(ip)
 	_show_toast("IP کپی شد: " + ip)
 
-func _draw_seat(r: Rect2, seat: int, present: bool, me: bool, col: Color) -> void:
-	var live: bool = present
-	_panel(r, CARD, 20, Color(col.r, col.g, col.b, 0.7 if live else 0.2), 1.5 if live else 1.0, 12, 5)
-	var ac := Vector2(r.end.x - 42, r.position.y + 46)
-	if live:
-		draw_circle(ac, 28, Color(col.r, col.g, col.b, 0.25))
-		draw_circle(ac, 22, col)
-		_draw_icon("user", ac, 22, _lum_text(col), 2.0)
-	else:
-		draw_circle(ac, 26, Color(1, 1, 1, 0.05))
-		for k in 3:
-			var ph: float = fmod(_time * 1.6 + k * 0.33, 1.0)
-			draw_circle(ac + Vector2((k - 1) * 12, 0), 3.0 + 2.0 * sin(ph * PI), Color(1, 1, 1, 0.25 + 0.35 * sin(ph * PI)))
-	var title: String = "بازیکن " + _fa(seat + 1)
-	_txt_r(title, r.end.x - 82, r.position.y + 40, 17, TEXT if live else TEXT_DIM, true, 140)
-	var sub: String = "متصل" if live else "در انتظار…"
-	_txt_r(sub, r.end.x - 82, r.position.y + 64, 13, GREEN if live else TEXT_FAINT, false, 140)
-	if me:
-		var tag := Rect2(r.position.x + 12, r.position.y + 12, 46, 22)
-		_panel(tag, Color(ACCENT.r, ACCENT.g, ACCENT.b, 0.2), 11, ACCENT, 1.0)
-		_txt_c("شما", tag, 12, ACCENT, true)
-	var role: String = "میزبان" if seat == 0 else "مهمان"
-	_txt_c(role, Rect2(r.position.x, r.end.y - 30, r.size.x, 24), 12, TEXT_DIM)
-
-func _draw_lobby_slot(r: Rect2, seat: int, present: bool, me: bool) -> void:
-	var colors: Array[Color] = [BLUE, ACCENT, GREEN, Color(1.0, 0.78, 0.30)]
-	var col: Color = colors[seat % colors.size()]
-	_panel(r, CARD if present else Color(0.10, 0.12, 0.23), 14, Color(col.r, col.g, col.b, 0.72 if present else 0.22), 1.2)
-	draw_circle(Vector2(r.position.x + 24, r.get_center().y), 12, col if present else Color(1, 1, 1, 0.08))
-	_draw_icon("user" if present else "clock", Vector2(r.position.x + 24, r.get_center().y), 13, TEXT if present else TEXT_FAINT, 1.7)
-	var shown_name: String = "بازیکن %s" % _fa(seat + 1)
-	for roster_entry in online_player_roster:
-		if int(roster_entry.get("seat", -1)) == seat:
-			shown_name = str(roster_entry.get("username", shown_name))
-			break
-	_txt_r(shown_name, r.end.x - 12, r.position.y + 30, 14, TEXT if present else TEXT_DIM, true, r.size.x - 56)
-	_txt_r(("شما · متصل" if me else "متصل") if present else "در انتظار…", r.end.x - 12, r.position.y + 52, 11, GREEN if present else TEXT_FAINT, false, r.size.x - 56)
-
 func _draw_lobby() -> void:
-	var info: Dictionary = _game_info(selected_game)
-	var col: Color = info.get("icon_col", ACCENT)
-	_draw_topbar("لابی بازی", str(info.get("name", "")))
-	var seat0_present: bool = true
-	var seat1_present: bool = connected_players >= 2 if is_host else _client_connected
-	if selected_game == "uno":
-		# UNO supports up to ten seats. Two columns keep the complete lobby visible.
-		for seat in range(mini(max_players_for_game, 10)):
-			var col_idx: int = seat % 2
-			var row_idx: int = int(seat / 2)
-			var seat_rect := Rect2(16.0 + float(col_idx) * 254.0, 92.0 + float(row_idx) * 58.0, 246.0, 54.0)
-			var present: bool = false
-			if is_host:
-				present = seat == 0 or seat in peer_to_seat.values()
-			else:
-				present = seat == local_seat
-			for roster_entry in online_player_roster:
-				if int(roster_entry.get("seat", -1)) == seat:
-					present = bool(roster_entry.get("connected", present))
-					break
-			_draw_lobby_slot(seat_rect, seat, present, seat == local_seat)
-	elif max_players_for_game >= 4:
-		for seat in range(4):
-			var col_idx: int = seat % 2
-			var row_idx: int = int(seat / 2)
-			var seat_rect := Rect2(16.0 + float(col_idx) * 254.0, 96.0 + float(row_idx) * 94.0, 246.0, 84.0)
-			var present: bool = false
-			if is_host:
-				present = seat in peer_to_seat.values()
-			else:
-				present = seat == local_seat
-				for roster_entry in online_player_roster:
-					if int(roster_entry.get("seat", -1)) == seat:
-						present = bool(roster_entry.get("connected", present))
-						break
-			_draw_lobby_slot(seat_rect, seat, present, seat == local_seat)
-	else:
-		_draw_seat(Rect2(VIEW_W - 16 - 238, 100, 238, 124), 0, seat0_present if is_host else _client_connected, local_seat == 0, BLUE)
-		_draw_seat(Rect2(16, 100, 238, 124), 1, seat1_present, local_seat == 1, ACCENT)
-	if is_host:
-		var ips: Array = host_ips
-		var card_y: float = (390.0 if selected_game == "uno" else (316.0 if max_players_for_game >= 4 else 250.0))
-		var card := Rect2(16, card_y, VIEW_W - 32, 112 + maxi(ips.size(), 1) * 42)
-		_panel(card, CARD, 20, LINE_STRONG, 1.0, 12, 5)
-		_txt_r("آدرس شما برای دوست", card.end.x - 18, card.position.y + 34, 15, TEXT_DIM, true, 300)
-		if online_room_code != "":
-			var cr := Rect2(card.position.x + 16, card.position.y + 14, 130, 32)
-			_panel(cr, Color(ACCENT.r, ACCENT.g, ACCENT.b, 0.14), 16, ACCENT, 1.0)
-			_txt_c("کد " + _fa(online_room_code), cr, 14, ACCENT, true)
-		if ips.size() > 0:
-			for j in ips.size():
-				var y: float = card.position.y + 82.0 + j * 42.0
-				_txt_r(str(ips[j]), card.end.x - 18, y + 24, 26, ACCENT, true, 300)
-		else:
-			_txt_r("IP پیدا نشد — از تنظیمات وای‌فای ببینید", card.end.x - 18, card.position.y + 92, 14, TEXT_DIM, false, 400)
-		_txt_r("پورت: " + _fa(PORT), card.end.x - 18, card.end.y - 16, 13, TEXT_DIM, false, 200)
-		if max_players_for_game >= 4:
-			_txt_r("هر بازیکن IP بالا را وارد کند · ظرفیت %s نفر" % _fa(max_players_for_game), card.end.x - 18, card.position.y + 58, 12, TEXT_DIM, false, 420)
-		var need: int = max_players_for_game - connected_players
-		var msg: String = ("منتظر %s بازیکن دیگر…" % _fa(need)) if need > 0 else "همه آماده‌اند — بازی را شروع کنید"
-		_txt_c(msg, Rect2(0, 650, VIEW_W, 36), 17, TEXT_DIM if need > 0 else GREEN, true)
-	else:
-		var card2 := Rect2(16, 250, VIEW_W - 32, 190)
-		_panel(card2, CARD, 20, LINE_STRONG, 1.0, 12, 5)
-		var cc := Vector2(VIEW_W * 0.5, card2.position.y + 66)
-		if not _client_connected:
-			draw_arc(cc, 26, _time * 4.0, _time * 4.0 + PI * 1.4, 24, ACCENT, 4.0, true)
-			_txt_c("در حال اتصال به " + join_ip + " …", Rect2(card2.position.x, card2.position.y + 108, card2.size.x, 28), 17, TEXT, true)
-			_txt_c("هر دو گوشی باید روی یک وای‌فای باشند", Rect2(card2.position.x, card2.position.y + 140, card2.size.x, 24), 13, TEXT_DIM)
-		else:
-			draw_circle(cc, 28, Color(GREEN.r, GREEN.g, GREEN.b, 0.2))
-			_draw_icon("check", cc, 30, GREEN, 3.4)
-			_txt_c("متصل شدید", Rect2(card2.position.x, card2.position.y + 108, card2.size.x, 28), 18, GREEN, true)
-			_txt_c("منتظر شروع بازی توسط میزبان" + ".".repeat(1 + int(_time * 2.0) % 3), Rect2(card2.position.x, card2.position.y + 140, card2.size.x, 24), 14, TEXT_DIM)
+	_online_screen.render_lobby(self, _ui_screen_theme)
 
-# ---------------- IP ENTRY ----------------
 func _valid_ip(s: String) -> bool:
 	var parts: PackedStringArray = s.strip_edges().split(".")
 	if parts.size() != 4:

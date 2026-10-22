@@ -212,6 +212,27 @@ for screen_path, preload_line, entry_point in (
     if entry_point not in main:
         errors.append(f"main.gd does not delegate rendering to {screen_path}")
 
+# Mode setup is a presentation module. It creates controls and renders descriptions,
+# but all actual difficulty changes and game-start actions stay as callbacks in main.gd.
+mode_screen_path = ROOT / "ui" / "screens" / "mode_screen.gd"
+if not mode_screen_path.is_file():
+    errors.append("missing screen module: ui/screens/mode_screen.gd")
+else:
+    mode_screen = mode_screen_path.read_text(encoding="utf-8")
+    if 'preload("res://ui/screens/mode_screen.gd")' not in main or "var _mode_screen = ModeScreenScript.new()" not in main:
+        errors.append("main.gd does not load/instantiate ModeScreen")
+    for method in ("build_buttons", "render"):
+        if not re.search(rf"^func\s+{method}\(", mode_screen, re.M):
+            errors.append(f"ModeScreen is missing {method}()")
+    if "_mode_screen.build_buttons(self, _ui_screen_theme)" not in main:
+        errors.append("main.gd does not delegate mode buttons to ModeScreen")
+    if "_mode_screen.render(self, _ui_screen_theme)" not in main:
+        errors.append("main.gd does not delegate mode rendering to ModeScreen")
+    if (re.search(r"host\.selected_game\s*=(?!=)", mode_screen)
+            or re.search(r"host\.state\s*=(?!=)", mode_screen)
+            or re.search(r"host\.vs_cpu\s*=(?!=)", mode_screen)):
+        errors.append("ModeScreen must not own application or game-selection state")
+
 # Result screen presentation is delegated, but result calculations and persistence stay in main.gd.
 result_screen_path = ROOT / "ui" / "screens" / "result_screen.gd"
 if not result_screen_path.is_file():
@@ -280,6 +301,91 @@ for entry_point in (
     if entry_point not in main:
         errors.append(f"main.gd missing overlay state/action entry point: {entry_point}")
 
+
+# Online and LAN lobby are presentation modules. Transport, matchmaking and state changes stay in main.gd.
+online_screen_path = ROOT / "ui" / "screens" / "online_screen.gd"
+if not online_screen_path.is_file():
+    errors.append("missing screen module: ui/screens/online_screen.gd")
+else:
+    online_screen = online_screen_path.read_text(encoding="utf-8")
+    if 'preload("res://ui/screens/online_screen.gd")' not in main or "var _online_screen = OnlineScreenScript.new()" not in main:
+        errors.append("main.gd does not load/instantiate OnlineScreen")
+    for method in ("online_extra", "build_online_buttons", "render_online", "build_lobby_buttons", "render_lobby"):
+        if not re.search(rf"^func\s+{method}\(", online_screen, re.M):
+            errors.append(f"OnlineScreen is missing {method}()")
+    for entry_point in (
+        "return _online_screen.online_extra(self)",
+        "_online_screen.build_online_buttons(self, _ui_screen_theme)",
+        "_online_screen.render_online(self, _ui_screen_theme)",
+        "_online_screen.build_lobby_buttons(self, _ui_screen_theme)",
+        "_online_screen.render_lobby(self, _ui_screen_theme)",
+    ):
+        if entry_point not in main:
+            errors.append(f"main.gd missing online screen delegation: {entry_point}")
+    if "host.state =" in online_screen or "host.online_searching =" in online_screen or "host.ws_match_active =" in online_screen:
+        errors.append("OnlineScreen must not own matchmaking or application state transitions")
+    if "WebSocketPeer.new()" in online_screen or "host._ws_send_json(" in online_screen or "host._quick_match_search()" in online_screen:
+        # Buttons may expose existing callbacks; they must not perform transport directly.
+        if "WebSocketPeer.new()" in online_screen or "host._ws_send_json(" in online_screen:
+            errors.append("OnlineScreen must not own or manipulate the WebSocket transport")
+
+
+# Main game catalog/menu is a presentation module; filter and selection state remain in main.gd.
+menu_screen_path = ROOT / "ui" / "screens" / "menu_screen.gd"
+if not menu_screen_path.is_file():
+    errors.append("missing screen module: ui/screens/menu_screen.gd")
+else:
+    menu_screen = menu_screen_path.read_text(encoding="utf-8")
+    if 'preload("res://ui/screens/menu_screen.gd")' not in main or "var _menu_screen = MenuScreenScript.new()" not in main:
+        errors.append("main.gd does not load/instantiate MenuScreen")
+    for method in ("filtered_games", "tile_rect", "build_buttons", "render", "render_game_tile"):
+        if not re.search(rf"^func\s+{method}\(", menu_screen, re.M):
+            errors.append(f"MenuScreen is missing {method}()")
+    for entry_point in (
+        "return _menu_screen.filtered_games(self)",
+        "return _menu_screen.tile_rect(self, i)",
+        "_menu_screen.build_buttons(self, _ui_screen_theme)",
+        "_menu_screen.render(self, _ui_screen_theme)",
+        "_menu_screen.render_game_tile(self, g, r, pressed, _ui_screen_theme)",
+    ):
+        if entry_point not in main:
+            errors.append(f"main.gd missing menu screen delegation: {entry_point}")
+    if (re.search(r"host\.menu_filter\s*=(?!=)", menu_screen)
+            or re.search(r"host\.selected_game\s*=(?!=)", menu_screen)
+            or re.search(r"host\.state\s*=(?!=)", menu_screen)):
+        errors.append("MenuScreen must not own filter, game-selection or application state")
+
+# Othello is the first pilot for separating game presentation/input from authoritative rules.
+othello_rules_path = ROOT / "games" / "othello" / "rules.gd"
+othello_presentation_path = ROOT / "games" / "othello" / "presentation.gd"
+if not othello_presentation_path.is_file():
+    errors.append("missing Othello presentation module: games/othello/presentation.gd")
+else:
+    othello_rules = othello_rules_path.read_text(encoding="utf-8")
+    othello_presentation = othello_presentation_path.read_text(encoding="utf-8")
+    if 'preload("res://games/othello/presentation.gd")' not in othello_rules:
+        errors.append("Othello rules module does not preload its presentation module")
+    if "var _presentation = OthelloPresentationScript.new()" not in othello_rules:
+        errors.append("Othello rules module does not instantiate OthelloPresentation")
+    for method in ("cell_size", "board_origin", "is_my_turn", "handle_tap", "render"):
+        if not re.search(rf"^func\s+{method}\(", othello_presentation, re.M):
+            errors.append(f"OthelloPresentation is missing {method}()")
+    for wrapper in (
+        "return _presentation.cell_size(self)",
+        "return _presentation.board_origin(app, self)",
+        "return _presentation.is_my_turn(app, self)",
+        "_presentation.handle_tap(app, self, p)",
+        "_presentation.render(app, self)",
+    ):
+        if wrapper not in othello_rules:
+            errors.append(f"Othello compatibility wrapper missing: {wrapper}")
+    if "game._othello_place(Vector2i(gx, gy))" not in othello_presentation:
+        errors.append("Othello presentation input is not delegated to authoritative rules")
+    if re.search(r"^\s*game\.(?:oth_size|othello_board|othello_turn|othello_scores|othello_valid|othello_game_over|othello_last_move)\s*=", othello_presentation, re.M):
+        errors.append("Othello presentation must not mutate authoritative game state")
+    if "app._panel(" not in othello_presentation or "app._draw_hud(" not in othello_presentation:
+        errors.append("Othello presentation is missing expected drawing delegation")
+
 if errors:
     print("STRUCTURE CHECK FAILED")
     for error in errors:
@@ -291,5 +397,6 @@ print(f"- {len(expected_modules)} independent game rule modules")
 print(f"- {module_method_count} app-facing module calls checked for compatibility")
 print(f"- {state_count} module-owned state fields checked")
 print("- scoring, ranking, and game catalog services found")
-print("- dashboard, rankings, pause, rules, dialogs and result presentation delegated to UI modules")
+print("- menu, dashboard, rankings, mode, online/lobby, pause, rules, dialogs and result presentation delegated to UI modules")
+print("- Othello board rendering and screen-coordinate hit-testing delegated to its presentation module")
 print("NOTE: this is a static structural check, not a Godot runtime test.")

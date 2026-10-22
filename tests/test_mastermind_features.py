@@ -15,7 +15,8 @@ class MastermindFeatureTests(unittest.TestCase):
         self.assertIn("mm_color_count = clampi(3 + mm_difficulty, 4, 9)", RULES)
         self.assertIn("mm_code_len = 3 + mm_difficulty", MAIN)
         self.assertIn("mm_color_count = 3 + mm_difficulty", MAIN)
-        self.assertIn("_set_mastermind_difficulty.bind(i + 1)", MAIN)
+        mode_screen = (ROOT / "ui/screens/mode_screen.gd").read_text(encoding="utf-8")
+        self.assertIn("host._set_mastermind_difficulty.bind(i + 1)", mode_screen)
 
     def test_multiplayer_uses_host_secret_and_ip_networking(self):
         self.assertIn('"mastermind"', MAIN[MAIN.index("const NET_GAMES"):MAIN.index("const NET_GAMES") + 300])

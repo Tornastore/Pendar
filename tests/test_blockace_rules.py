@@ -7,6 +7,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 RULES = (ROOT / "games/blockace/rules.gd").read_text(encoding="utf-8")
 MAIN = (ROOT / "main.gd").read_text(encoding="utf-8")
+MODE_SCREEN = (ROOT / "ui/screens/mode_screen.gd").read_text(encoding="utf-8")
 CATALOG = (ROOT / "core/game_catalog.gd").read_text(encoding="utf-8")
 GAME_JSON = (ROOT / "games/blockace/game.json").read_text(encoding="utf-8")
 
@@ -80,7 +81,7 @@ class BlockaceRulesTests(unittest.TestCase):
         self.assertIn('"blockace":', MAIN[MAIN.index("func _cpu_tick") : MAIN.index("func _ui_sig")])
         self.assertIn('"blockace"', CATALOG)
         self.assertIn('"beta": false', GAME_JSON)
-        self.assertIn('_set_blockace_difficulty.bind(i + 1)', MAIN)
+        self.assertIn('host._set_blockace_difficulty.bind(i + 1)', MODE_SCREEN)
         self.assertIn('func _rpc_blk_place(px: int, py: int, sel: int, rot: int, flipped: bool, player: int)', MAIN)
         self.assertIn('multiplayer.get_remote_sender_id()', MAIN)
         self.assertIn('int(peer_to_seat[sender_id]) != player', MAIN)

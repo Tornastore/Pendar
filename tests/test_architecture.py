@@ -4,6 +4,9 @@ import sys
 from pathlib import Path
 
 
+MODE_SCREEN_PATH = Path(__file__).resolve().parents[1] / "ui" / "screens" / "mode_screen.gd"
+
+
 def test_modular_structure_check_passes() -> None:
     project_root = Path(__file__).resolve().parents[1]
     result = subprocess.run(
@@ -33,9 +36,9 @@ def test_quoridor_ai_has_six_difficulty_profiles_and_master_search() -> None:
     for level in ("\t\t3:", "\t\t4:", "\t\t5:"):
         assert level in ai
     assert "QuoridorAIScript = preload(\"res://games/quoridor/ai.gd\")" in rules
-    assert "_set_quoridor_difficulty.bind(i + 1)" in main
-    assert '"quo_difficulty_%d"' in main
-    assert '"خیلی آسان", "آسان", "متوسط", "سخت", "استاد", "استادتمام"' in main
+    assert "host._set_quoridor_difficulty.bind(i + 1)" in MODE_SCREEN_PATH.read_text(encoding="utf-8")
+    assert '"quo_difficulty_%d"' in MODE_SCREEN_PATH.read_text(encoding="utf-8")
+    assert '"خیلی آسان", "آسان", "متوسط", "سخت", "استاد", "استادتمام"' in MODE_SCREEN_PATH.read_text(encoding="utf-8")
     assert "clampi(level, 1, 6)" in main
 
 
@@ -57,8 +60,8 @@ def test_quoridor_uses_two_edge_walls_and_supports_four_player_hotseat() -> None
     assert "var can_wall: bool = int(quo_walls_left[candidate]) > 0" in rules
     assert "func _first_legal_wall(" in (project_root / "games" / "quoridor" / "ai.gd").read_text(encoding="utf-8")
     assert "_start_quoridor_local_four_player" in main
-    assert '"m_local4"' in main
-    assert '"چهارنفره · شما در برابر ۳ CPU"' in main
+    assert '"m_local4"' in MODE_SCREEN_PATH.read_text(encoding="utf-8")
+    assert '"چهارنفره · شما در برابر ۳ CPU"' in MODE_SCREEN_PATH.read_text(encoding="utf-8")
     assert '_start_quoridor_vs_three_cpu' in main
     assert '"players": "۲ یا ۴ نفر", "max_p": 4' in catalog
 
@@ -77,9 +80,9 @@ def test_othello_ai_has_six_levels_and_supports_twelve_by_twelve() -> None:
     assert "func _terminal_value(" in ai
     assert 'const OthelloAIScript = preload("res://games/othello/ai.gd")' in rules
     assert "ai.choose_move(othello_board, oth_size, othello_turn, oth_difficulty)" in rules
-    assert 'elif selected_game in ["othello", "othello12"]:' in main
-    assert "_set_othello_difficulty.bind(i + 1)" in main
-    assert '"oth_difficulty_%d"' in main
+    assert 'elif host.selected_game in ["othello", "othello12"]:' in MODE_SCREEN_PATH.read_text(encoding="utf-8")
+    assert "host._set_othello_difficulty.bind(i + 1)" in MODE_SCREEN_PATH.read_text(encoding="utf-8")
+    assert '"oth_difficulty_%d"' in MODE_SCREEN_PATH.read_text(encoding="utf-8")
     assert 'oth_size = 12' in main
 
 
@@ -99,8 +102,9 @@ def test_web_export_preset_and_github_workflows_are_present() -> None:
     assert 'actions/upload-artifact@v4' in build_workflow
     assert 'actions/deploy-pages@v4' in deploy_workflow
     assert 'OS.has_feature("web")' in main
-    assert 'info.get("net", false) and not web_build' in main
-    assert 'not web_build, ACCENT' in main
+    assert 'info.get("net", false) and not web_build' in MODE_SCREEN_PATH.read_text(encoding="utf-8")
+    online_screen = (project_root / 'ui' / 'screens' / 'online_screen.gd').read_text(encoding='utf-8')
+    assert 'not web_build, theme["ACCENT"]' in online_screen
     assert 'نسخه وب از اتصال شبکه‌ای ENet پشتیبانی نمی‌کند' in main
     assert 'ENet/UDP' in readme
 
@@ -116,9 +120,9 @@ def test_chess_ai_has_six_difficulty_levels_and_alpha_beta_search() -> None:
     assert "func _evaluate(" in ai
     assert "ChessAIScript = preload(\"res://games/chess/ai.gd\")" in rules
     assert "ai.choose_move(self, chess_difficulty)" in rules
-    assert 'elif selected_game == "chess":' in main
-    assert "_set_chess_difficulty.bind(i + 1)" in main
-    assert '"chess_difficulty_%d"' in main
+    assert 'elif host.selected_game == "chess":' in MODE_SCREEN_PATH.read_text(encoding="utf-8")
+    assert "host._set_chess_difficulty.bind(i + 1)" in MODE_SCREEN_PATH.read_text(encoding="utf-8")
+    assert '"chess_difficulty_%d"' in MODE_SCREEN_PATH.read_text(encoding="utf-8")
 
 
 def test_backgammon_ai_has_six_levels_and_turn_sequence_search() -> None:
@@ -132,9 +136,9 @@ def test_backgammon_ai_has_six_levels_and_turn_sequence_search() -> None:
     assert "func _cpu_can_hit(" in ai and "func _human_can_hit(" in ai
     assert "BackgammonAIScript = preload(\"res://games/backgammon/ai.gd\")" in rules
     assert "ai.choose_turn(self, bg_difficulty)" in rules
-    assert 'elif selected_game == "backgammon":' in main
-    assert "_set_backgammon_difficulty.bind(i + 1)" in main
-    assert '"backgammon_difficulty_%d"' in main
+    assert 'elif host.selected_game == "backgammon":' in MODE_SCREEN_PATH.read_text(encoding="utf-8")
+    assert "host._set_backgammon_difficulty.bind(i + 1)" in MODE_SCREEN_PATH.read_text(encoding="utf-8")
+    assert '"backgammon_difficulty_%d"' in MODE_SCREEN_PATH.read_text(encoding="utf-8")
 
 
 def test_pentago_and_domino_difficulty_selectors_reach_their_ai_and_hud() -> None:
@@ -144,13 +148,13 @@ def test_pentago_and_domino_difficulty_selectors_reach_their_ai_and_hud() -> Non
     domino = (project_root / "games" / "domino" / "rules.gd").read_text(encoding="utf-8")
 
     # Both games must expose all six choices and update the module-owned value.
-    assert '"pentago_difficulty_%d"' in main
-    assert '"domino_difficulty_%d"' in main
-    assert "_set_pentago_difficulty.bind(i + 1)" in main
-    assert "_set_domino_difficulty.bind(i + 1)" in main
+    assert '"pentago_difficulty_%d"' in MODE_SCREEN_PATH.read_text(encoding="utf-8")
+    assert '"domino_difficulty_%d"' in MODE_SCREEN_PATH.read_text(encoding="utf-8")
+    assert "host._set_pentago_difficulty.bind(i + 1)" in MODE_SCREEN_PATH.read_text(encoding="utf-8")
+    assert "host._set_domino_difficulty.bind(i + 1)" in MODE_SCREEN_PATH.read_text(encoding="utf-8")
     assert '_game_modules["pentago"].pent_difficulty = clampi(level, 1, 6)' in main
     assert '_game_modules["domino"].dom_difficulty = clampi(level, 1, 6)' in main
-    assert '"pentago", "domino"' in main and "سطح هوش کامپیوتر را انتخاب کنید" in main
+    assert '"pentago", "domino"' in MODE_SCREEN_PATH.read_text(encoding="utf-8") and "سطح هوش کامپیوتر را انتخاب کنید" in MODE_SCREEN_PATH.read_text(encoding="utf-8")
 
     # The selected level must influence decision-making, not just the menu.
     assert "if pent_difficulty >= 2" in pentago
@@ -175,9 +179,9 @@ def test_pasoor_and_hokm_difficulty_profiles_reach_ai_and_hud() -> None:
 
     for game_id, setter, profile_var in (("pasoor", "_set_pasoor_difficulty", "pas_difficulty"),
                                          ("hokm", "_set_hokm_difficulty", "hokm_difficulty")):
-        assert f'elif selected_game == "{game_id}":' in main
-        assert f'"{game_id}_difficulty_%d"' in main
-        assert f"{setter}.bind(i + 1)" in main
+        assert f'elif host.selected_game == "{game_id}":' in MODE_SCREEN_PATH.read_text(encoding="utf-8")
+        assert f'"{game_id}_difficulty_%d"' in MODE_SCREEN_PATH.read_text(encoding="utf-8")
+        assert f"host.{setter}.bind(i + 1)" in MODE_SCREEN_PATH.read_text(encoding="utf-8")
         assert f'_game_modules["{game_id}"].{profile_var} = clampi(level, 1, 6)' in main
         assert f"app._draw_ai_difficulty_chip({profile_var})" in (pasoor if game_id == "pasoor" else hokm)
 
@@ -263,9 +267,9 @@ def test_gobblet_and_abalone_have_six_ai_difficulty_levels():
         ("gobblet", "_set_gobblet_difficulty", "gob_difficulty", gobblet),
         ("abalone", "_set_abalone_difficulty", "aba_difficulty", abalone),
     ):
-        assert f'elif selected_game == "{game_id}":' in main
-        assert f'"{game_id}_difficulty_%d"' in main
-        assert f"{setter}.bind(i + 1)" in main
+        assert f'elif host.selected_game == "{game_id}":' in MODE_SCREEN_PATH.read_text(encoding="utf-8")
+        assert f'"{game_id}_difficulty_%d"' in MODE_SCREEN_PATH.read_text(encoding="utf-8")
+        assert f"host.{setter}.bind(i + 1)" in MODE_SCREEN_PATH.read_text(encoding="utf-8")
         assert f'_game_modules["{game_id}"].{field} = clampi(level, 1, 6)' in main
         assert f"var {field}: int = 3" in rules
         assert (f"app._draw_ai_difficulty_chip({field})" in rules) or (f"app._draw_ai_difficulty_chip_at({field}" in rules)
@@ -306,11 +310,11 @@ def test_multiplayer_games_offer_cpu_opponents_and_mastermind_cpu_race() -> None
     quo_ai = (project_root / "games" / "quoridor" / "ai.gd").read_text(encoding="utf-8")
     mm = (project_root / "games" / "mastermind" / "rules.gd").read_text(encoding="utf-8")
     assert "_start_quoridor_vs_three_cpu" in main
-    assert '"چهارنفره · شما در برابر ۳ CPU"' in main
+    assert '"چهارنفره · شما در برابر ۳ CPU"' in MODE_SCREEN_PATH.read_text(encoding="utf-8")
     assert "choose_action_for_player(self, quo_difficulty, player)" in quo
     assert "func choose_action_for_player(game, difficulty: int, player: int)" in quo_ai
     assert "_start_mastermind_vs_three_cpu" in main
-    assert "مسابقه با ۳ CPU · چهار نفره" in main
+    assert "مسابقه با ۳ CPU · چهار نفره" in MODE_SCREEN_PATH.read_text(encoding="utf-8")
     assert 'mm_cpu_racers.size() != 4' in mm
     assert "_mm_cpu_race_tick()" in main
 

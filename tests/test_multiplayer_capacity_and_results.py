@@ -51,7 +51,9 @@ class MultiplayerCapacityAndResultsTests(unittest.TestCase):
         self.assertIn('peer.create_server(PORT, maxi(1, max_players_for_game - 1))', MAIN)
         self.assertIn('for seat in range(maxi(2, max_players_for_game))', MAIN)
         self.assertIn('"connected": connected', MAIN)
-        self.assertIn('for seat in range(4):', MAIN[MAIN.index('func _draw_lobby()'):MAIN.index('# ---------------- IP ENTRY')])
+        online_screen = (ROOT / 'ui' / 'screens' / 'online_screen.gd').read_text(encoding='utf-8')
+        self.assertIn('for seat in range(4):', online_screen)
+        self.assertIn('func _draw_lobby() -> void:\n\t_online_screen.render_lobby(self, _ui_screen_theme)', MAIN)
         disconnect = MAIN[MAIN.index('func _on_peer_disconnected'):MAIN.index('@rpc("authority", "call_local", "reliable")\nfunc _rpc_lobby_sync')]
         self.assertIn('rpc("_rpc_lan_roster_sync", _build_lan_roster())', disconnect)
         self.assertIn('func _rpc_register_lan_username(username: String)', MAIN)

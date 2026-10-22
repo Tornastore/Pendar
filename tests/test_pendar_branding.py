@@ -13,7 +13,8 @@ def test_pendar_brand_is_consistent_in_project_and_exports():
     assert 'package/name="PENDAR"' in presets
     assert 'export_path="build/android/Pendar.apk"' in presets
     assert 'res://branding/pendar_logo.png' in main
-    assert 'draw_texture_rect(_brand_logo' in main
+    menu = (root / "ui" / "screens" / "menu_screen.gd").read_text(encoding="utf-8")
+    assert 'draw_texture_rect(host._brand_logo' in menu
     assert (root / "branding" / "pendar_logo.png").is_file()
     assert (root / "branding" / "pendar_emblem.png").is_file()
     assert (root / "favicon.png").is_file()

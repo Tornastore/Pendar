@@ -30,8 +30,9 @@ def test_quarto_standard_rules_cover_all_attributes_and_phases():
 
 def test_quarto_has_six_cpu_levels_and_prefers_winning_or_safe_moves():
     main = (ROOT / "main.gd").read_text(encoding="utf-8")
+    mode_screen = (ROOT / "ui/screens/mode_screen.gd").read_text(encoding="utf-8")
     ai = (ROOT / "games/quarto/ai.gd").read_text(encoding="utf-8")
-    assert "_set_quarto_difficulty.bind(i + 1)" in main
+    assert "host._set_quarto_difficulty.bind(i + 1)" in mode_screen
     assert "var budgets: Array[int] = [0, 450, 650, 950, 1500, 2300]" in ai
     assert "_winning_count(game, piece)" in ai
     assert "Never miss a direct win" in ai

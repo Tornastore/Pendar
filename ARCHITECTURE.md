@@ -18,10 +18,13 @@ Pendar/
 │   └── screens/
 │       ├── dashboard_screen.gd   # دکمه‌ها و ترسیم صفحه آمار
 │       ├── rankings_screen.gd    # دکمه‌ها و ترسیم صفحه رتبه‌بندی
-│       ├── pause_screen.gd      # ارائه رابط توقف بازی
-│       └── rules_screen.gd      # محتوای راهنما، صفحه‌بندی و ترسیم
+│       ├── mode_screen.gd        # انتخاب درجه سختی و روش بازی؛ بدون مالکیت state
+│       ├── result_screen.gd      # صفحه نهایی و خلاصه نتیجه مسابقه
+│       ├── pause_screen.gd       # ارائه رابط توقف بازی
+│       └── rules_screen.gd       # محتوای راهنما، صفحه‌بندی و ترسیم
 ├── games/
 │   ├── othello/rules.gd
+│   ├── othello/presentation.gd  # ترسیم اتلو و تبدیل مختصات لمس به خانه
 │   ├── pentago/rules.gd
 │   ├── quoridor/rules.gd
 │   ├── domino/rules.gd
@@ -50,7 +53,7 @@ Pendar/
 - **امتیازدهی:** `services/scoring_service.gd` مستقل از قوانین بازی است و نتیجه هر بازی را با شناسه خودش ثبت می‌کند. تاریخچه هر بازی جداست و امتیاز کلی بازیکن نیز جداگانه نگهداری می‌شود.
 - **رتبه‌بندی:** `services/ranking_service.gd` صرفاً ردیف‌های رتبه‌بندی بازی‌ها را مرتب می‌کند و منطق سطح رتبه کلی را تعیین می‌کند؛ ثبت امتیاز در این سرویس انجام نمی‌شود.
 - **رندر مشترک:** `ui/illustration_renderer.gd` و `ui/tabletop_art_renderer.gd` از همان CanvasItem اصلی برای ترسیم استفاده می‌کنند؛ بنابراین ترتیب لایه‌ها و مختصات فعلی حفظ می‌شود. `main.gd` فقط wrapperهای سازگاری را نگه می‌دارد.
-- **صفحه‌های رابط کاربری:** `ui/screens/dashboard_screen.gd` و `ui/screens/rankings_screen.gd` ساخت دکمه‌ها و ترسیم صفحه‌های آمار و رتبه‌بندی را در اختیار دارند. `ui/screens/pause_screen.gd` چیدمان، دکمه‌ها و ترسیم توقف بازی را انجام می‌دهد و `ui/screens/rules_screen.gd` محتوای راهنما، صفحه‌بندی، چیدمان و ترسیم را مدیریت می‌کند. رنگ‌ها و ابعاد پایه از طریق `_ui_screen_theme` صریح تزریق می‌شوند.
+- **صفحه‌های رابط کاربری:** `ui/screens/dashboard_screen.gd` و `ui/screens/rankings_screen.gd` ساخت دکمه‌ها و ترسیم صفحه‌های آمار و رتبه‌بندی را در اختیار دارند. `ui/screens/mode_screen.gd` کنترل‌ها و ترسیم انتخاب درجه سختی/روش بازی را فراهم می‌کند؛ تغییر سختی، شروع بازی و ناوبری همچنان callbackهای کنترلر اصلی‌اند. `ui/screens/result_screen.gd` صفحه نهایی و خلاصه نتیجه را رسم می‌کند. `ui/screens/pause_screen.gd` رابط مکث را ارائه می‌کند و `ui/screens/rules_screen.gd` محتوای راهنما، صفحه‌بندی، چیدمان و ترسیم را مدیریت می‌کند. رنگ‌ها و ابعاد پایه از طریق `_ui_screen_theme` صریح تزریق می‌شوند.
 - **دیالوگ عمومی:** `ui/components/dialog_component.gd` فقط چیدمان، ساخت دکمه‌ها و ترسیم دیالوگ‌های تأیید را انجام می‌دهد. اجرای callback، بستن پنجره و تغییر `dialog`/`pause_open`/`rules_open` در `main.gd` باقی می‌ماند؛ presenterها state مسابقه یا باز/بسته بودن overlay را مالک نمی‌شوند.
 - **نتیجه مسابقه:** `ui/screens/result_screen.gd` ساخت دکمه‌ها، ترسیم صفحه نهایی و پنجره خلاصه نتیجه را ارائه می‌کند. جمع‌بندی داده‌های نتیجه، ثبت امتیاز، تغییر وضعیت مسابقه و callbackهای دکمه‌ها همچنان در `main.gd` و `ScoringService` باقی می‌مانند.
 
@@ -112,3 +115,28 @@ python tools/verify_structure.py
 - `ui/screens/result_screen.gd` ترسیم صفحه نهایی بازی، پنجره خلاصه نتیجه و چیدمان دکمه‌های پایان مسابقه را بر عهده دارد. ورودی‌های نتیجه را از `_result_info()` می‌خواند.
 - محاسبه عنوان/ردیف‌های نتیجه، تشخیص برنده، ثبت نتیجه و تغییر وضعیت مسابقه عمداً در `main.gd` باقی مانده‌اند؛ presenter فقط داده را می‌خواند و فرمان دکمه‌ها را به کنترلر بازمی‌گرداند.
 - `_btns_result`, `_draw_result` و `_draw_result_popup` به عنوان wrapper حفظ شده‌اند تا dispatch اصلی و مسیر پنجره نتیجه تغییر نکند.
+
+## صفحه انتخاب حالت بازی (مرحله پنجم بازآرایی)
+
+`ui/screens/mode_screen.gd` ساخت دکمه‌های انتخاب سختی/تعداد بازیکنان و ترسیم کارت معرفی بازی را به عهده دارد. این Presenter فقط وضعیت فعلی را از `main.gd` می‌خواند؛ تغییر سختی، آغاز مسابقه، اتصال LAN/Online و ناوبری از طریق callbackهای قدیمی در کنترلر انجام می‌شود. `main.gd` توابع `_btns_mode` و `_draw_mode` را به عنوان wrapper نگه می‌دارد تا dispatcher اصلی تغییر نکند.
+
+
+## Online and LAN lobby presentation
+
+The online matchmaking and LAN lobby views are delegated to `ui/screens/online_screen.gd`. This presenter builds the existing buttons and draws the online/lobby screens, while callbacks, connection status, seat assignment, WebSocket transport and application transitions remain in `main.gd` / `services/online_client.gd`. The presenter must not create sockets or mutate matchmaking state.
+
+
+## صفحه فهرست بازی‌ها (مرحله هفتم بازآرایی)
+
+- `ui/screens/menu_screen.gd` فهرست‌کردن بازی‌های متناسب با فیلتر، محاسبه جای کارت‌ها، ساخت دکمه‌ها، ترسیم صفحه انتخاب بازی و کارت‌های بازی را بر عهده دارد.
+- مالکیت `menu_filter`، تغییر فیلتر، انتخاب بازی، فعال/غیرفعال‌سازی موسیقی، خروج از برنامه و ناوبری در `main.gd` باقی مانده است؛ presenter فقط callbackهای قبلی را به دکمه‌ها وصل می‌کند.
+- `main.gd` توابع `_menu_games`, `_tile_rect`, `_btns_menu`, `_draw_menu` و `_draw_game_tile` را به عنوان wrapper سازگاری نگه می‌دارد.
+- `tests/test_ui_menu_screen.py` و `tools/verify_structure.py` وجود ماژول، delegation و عدم مالکیت state توسط presenter را به‌صورت ایستا کنترل می‌کنند. تأیید نهایی به اجرای واقعی Godot و بررسی اسکرول/فیلتر/انتخاب بازی نیاز دارد.
+
+## جداسازی نمایش و ورودی بازی‌ها (مرحله هشتم، پایلوت اتلو)
+
+- `games/othello/rules.gd` مالک state معتبر صفحه، نوبت، حرکت مجاز، گرفتن مهره‌ها، محاسبه امتیاز و پایان مسابقه است.
+- `games/othello/presentation.gd` صرفاً اندازه/مبدأ صفحه، تشخیص نوبت برای نمایش، تبدیل مختصات صفحه به مختصات خانه و ترسیم صفحه را انجام می‌دهد. لمس معتبر همچنان به `rules.gd` از طریق `_othello_place()` تحویل داده می‌شود؛ presenter مستقیماً board یا نوبت را تغییر نمی‌دهد.
+- متدهای `_oth_cell`, `_oth_origin`, `_oth_my_turn`, `_othello_tap` و `_draw_othello` در rules module به عنوان wrapper حفظ شده‌اند؛ در نتیجه `main.gd` و مسیر dispatch ورودی/ترسیم فعلی تغییر نکرده‌اند.
+- این مرحله یک الگوی پایلوت برای بازی‌های دیگر است، نه مهاجرت یک‌باره همه ۱۴ بازی. پس از اجرای عملی اتلو در حالت‌های ۸×۸ و ۱۲×۱۲ می‌توان همین جداسازی را به بازی بعدی تعمیم داد.
+- `tests/test_game_presentations.py` و `tools/verify_structure.py` قرارداد جداسازی را ایستا کنترل می‌کنند. این تست‌ها جای اجرای واقعی Godot و آزمون لمس/ترسیم را نمی‌گیرند.
