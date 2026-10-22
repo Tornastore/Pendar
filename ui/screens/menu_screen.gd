@@ -79,7 +79,7 @@ func render_game_tile(host, game: Dictionary, rect: Rect2, pressed: bool, theme:
 	var chip_width: float = clampf(host._txt_w(player_label, 12, true) + 18.0, 58.0, 108.0)
 	var chip := Rect2(art.position + Vector2(8, 8), Vector2(chip_width, 22))
 	host._panel(chip, Color(0, 0, 0, 0.38), 11)
-	host._txt_c(player_label, chip, host._fit_size(player_label, chip.size.x - 8.0, 12, true), 12, theme["TEXT"], true)
+	host._txt_c(player_label, chip, host._fit_size(player_label, chip.size.x - 8.0, 12, true), theme["TEXT"], true)
 	if game.net:
 		host._draw_icon("wifi", chip.position + Vector2(chip.size.x + 14.0, 11), 14, Color(1, 1, 1, 0.75), 1.6)
 	if game.beta:

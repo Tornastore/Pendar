@@ -26,3 +26,9 @@ def test_menu_screen_does_not_own_application_or_filter_state():
     assert not re.search(r"host\.menu_filter\s*=(?!=)", menu)
     assert "host._set_filter.bind(key)" in menu
     assert "host._select_game.bind(game_id)" in menu
+
+
+def test_menu_tile_text_call_matches_main_text_helper_signature():
+    menu = (ROOT / "ui" / "screens" / "menu_screen.gd").read_text(encoding="utf-8")
+    assert 'host._txt_c(player_label, chip, host._fit_size(player_label, chip.size.x - 8.0, 12, true), theme["TEXT"], true)' in menu
+    assert 'host._txt_c(player_label, chip, host._fit_size(player_label, chip.size.x - 8.0, 12, true), 12, theme["TEXT"], true)' not in menu
