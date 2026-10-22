@@ -355,6 +355,39 @@ else:
             or re.search(r"host\.state\s*=(?!=)", menu_screen)):
         errors.append("MenuScreen must not own filter, game-selection or application state")
 
+
+
+# Chess is the second presentation pilot; chess rules and move/RPC decisions stay authoritative in rules.gd.
+chess_rules_path = ROOT / "games" / "chess" / "rules.gd"
+chess_presentation_path = ROOT / "games" / "chess" / "presentation.gd"
+if not chess_presentation_path.is_file():
+    errors.append("missing Chess presentation module: games/chess/presentation.gd")
+else:
+    chess_rules = chess_rules_path.read_text(encoding="utf-8")
+    chess_presentation = chess_presentation_path.read_text(encoding="utf-8")
+    if 'preload("res://games/chess/presentation.gd")' not in chess_rules:
+        errors.append("Chess rules module does not preload its presentation module")
+    if "var _presentation = ChessPresentationScript.new()" not in chess_rules:
+        errors.append("Chess rules module does not instantiate ChessPresentation")
+    for method in ("is_flipped", "orient_cell", "cell_center", "screen_to_board_cell", "render"):
+        if not re.search(rf"^func\s+{method}\(", chess_presentation, re.M):
+            errors.append(f"ChessPresentation is missing {method}()")
+    for wrapper in (
+        "return _presentation.is_flipped(app)",
+        "return _presentation.orient_cell(app, c)",
+        "return _presentation.cell_center(app, c)",
+        "var c: Vector2i = _presentation.screen_to_board_cell(app, p)",
+        "_presentation.render(app, self)",
+    ):
+        if wrapper not in chess_rules:
+            errors.append(f"Chess compatibility wrapper missing: {wrapper}")
+    if 'app._send_game_action("_rpc_chess_move"' not in chess_rules or "func _chess_make_move(" not in chess_rules:
+        errors.append("Chess move/RPC authority must remain in the rules module")
+    if re.search(r"^\s*game\.(?:chess_difficulty|chess_board|chess_turn|chess_selected|chess_valid|chess_game_over|chess_winner|chess_last)\s*=(?!=)", chess_presentation, re.M):
+        errors.append("Chess presentation must not mutate authoritative game state")
+    if "app._draw_chess_piece(" not in chess_presentation or "app._draw_hud(" not in chess_presentation:
+        errors.append("Chess presentation is missing expected drawing delegation")
+
 # Othello is the first pilot for separating game presentation/input from authoritative rules.
 othello_rules_path = ROOT / "games" / "othello" / "rules.gd"
 othello_presentation_path = ROOT / "games" / "othello" / "presentation.gd"
@@ -398,5 +431,5 @@ print(f"- {module_method_count} app-facing module calls checked for compatibilit
 print(f"- {state_count} module-owned state fields checked")
 print("- scoring, ranking, and game catalog services found")
 print("- menu, dashboard, rankings, mode, online/lobby, pause, rules, dialogs and result presentation delegated to UI modules")
-print("- Othello board rendering and screen-coordinate hit-testing delegated to its presentation module")
+print("- Othello and Chess board presentation/input mapping delegated to game presentation modules")
 print("NOTE: this is a static structural check, not a Godot runtime test.")

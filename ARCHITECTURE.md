@@ -29,6 +29,7 @@ Pendar/
 │   ├── quoridor/rules.gd
 │   ├── domino/rules.gd
 │   ├── chess/rules.gd
+│   ├── chess/presentation.gd  # ترسیم شطرنج و تبدیل کلیک به خانه
 │   ├── pasoor/rules.gd
 │   ├── mastermind/rules.gd
 │   ├── gobblet/rules.gd
@@ -140,3 +141,12 @@ The online matchmaking and LAN lobby views are delegated to `ui/screens/online_s
 - متدهای `_oth_cell`, `_oth_origin`, `_oth_my_turn`, `_othello_tap` و `_draw_othello` در rules module به عنوان wrapper حفظ شده‌اند؛ در نتیجه `main.gd` و مسیر dispatch ورودی/ترسیم فعلی تغییر نکرده‌اند.
 - این مرحله یک الگوی پایلوت برای بازی‌های دیگر است، نه مهاجرت یک‌باره همه ۱۴ بازی. پس از اجرای عملی اتلو در حالت‌های ۸×۸ و ۱۲×۱۲ می‌توان همین جداسازی را به بازی بعدی تعمیم داد.
 - `tests/test_game_presentations.py` و `tools/verify_structure.py` قرارداد جداسازی را ایستا کنترل می‌کنند. این تست‌ها جای اجرای واقعی Godot و آزمون لمس/ترسیم را نمی‌گیرند.
+
+
+## جداسازی نمایش و ورودی بازی‌ها (مرحله هشتم، پایلوت شطرنج)
+
+- `games/chess/rules.gd` مالک صفحه شطرنج، انتخاب مهره، حرکت‌های مجاز، جابه‌جایی، تشخیص وضعیت شاه و پایان بازی است. این مرحله قوانین موجود را تغییر نمی‌دهد.
+- `games/chess/presentation.gd` ترسیم صفحه و مهره‌ها، برجسته‌سازی خانه‌ها، شمارش مهره‌های گرفته‌شده، تبدیل مختصات صفحه به خانه و جهت‌دهی دید بازیکن را انجام می‌دهد. رسم همچنان از طریق APIهای `app` انجام می‌شود.
+- متدهای `_chess_flip`, `_chess_scr`, `_chess_center`, `_chess_tap` و `_draw_chess` در rules module به عنوان wrapper/مرز سازگاری باقی می‌مانند؛ در نتیجه dispatcher اصلی و RPC `_rpc_chess_move` تغییر نکرده‌اند.
+- کلیک فقط به مختصات خانه تبدیل می‌شود؛ انتخاب مهره، اعتبارسنجی حرکت، ارسال حرکت آنلاین و اعمال حرکت آفلاین در rules module می‌مانند.
+- `tests/test_game_presentations.py` و `tools/verify_structure.py` مرزبندی را ایستا کنترل می‌کنند؛ این بررسی‌ها جای اجرای واقعی Godot از دو جهت صفحه را نمی‌گیرند.
