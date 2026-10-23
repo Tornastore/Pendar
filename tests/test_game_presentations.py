@@ -66,7 +66,7 @@ def test_chess_rendering_and_screen_hit_testing_are_separated_from_rules():
 
     # Rules still decide selection, legal movement, local/network move execution, and results.
     assert "func _chess_gen_moves(from: Vector2i) -> Array:" in rules
-    assert "func _chess_make_move(from: Vector2i, to: Vector2i) -> void:" in rules
+    assert "func _chess_make_move(from: Vector2i, to: Vector2i, promotion_type: int = 5) -> void:" in rules
     assert 'app._send_game_action("_rpc_chess_move"' in rules
     assert "if c in chess_valid:" in rules
     assert "app._draw_chess_piece(" in presentation and "app._draw_hud(" in presentation

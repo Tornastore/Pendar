@@ -1342,8 +1342,8 @@ func _chess_gen_moves(from: Vector2i) -> Array:
 func _chess_all_moves(col: int) -> Array:
 	return _game_modules["chess"]._chess_all_moves(col)
 
-func _chess_make_move(from: Vector2i, to: Vector2i) -> void:
-	_game_modules["chess"]._chess_make_move(from, to)
+func _chess_make_move(from: Vector2i, to: Vector2i, promotion_type: int = 5) -> void:
+	_game_modules["chess"]._chess_make_move(from, to, promotion_type)
 
 func _chess_cpu_move() -> void:
 	_game_modules["chess"]._chess_cpu_move()
@@ -1410,9 +1410,9 @@ func _rpc_dom_play(p: int, idx: int, end: String) -> void:
 		_dom_play(p, idx, end)
 
 @rpc("any_peer", "call_local", "reliable")
-func _rpc_chess_move(fx: int, fy: int, tx: int, ty: int) -> void:
+func _rpc_chess_move(fx: int, fy: int, tx: int, ty: int, promotion_type: int = 5) -> void:
 	if selected_game == "chess":
-		_chess_make_move(Vector2i(fx, fy), Vector2i(tx, ty))
+		_chess_make_move(Vector2i(fx, fy), Vector2i(tx, ty), promotion_type)
 
 @rpc("any_peer", "call_local", "reliable")
 func _rpc_quo_move(x: int, y: int, mode: int) -> void:
@@ -2517,7 +2517,9 @@ func _ui_sig() -> String:
 			"uno": s += "|%d|%d|%d|%d|%d|%d|%d|%d" % [_game_modules["uno"].uno_turn, _game_modules["uno"].uno_hands.size(), _game_modules["uno"].uno_draw_pile.size(), _game_modules["uno"].uno_discard_pile.size(), _game_modules["uno"].uno_selected_card, _game_modules["uno"].uno_round_number, _game_modules["uno"].uno_challenge_available, _game_modules["uno"].uno_round_over]
 			"hokm": s += "|%d|%d" % [hokm_turn, hokm_hands[0].size()]
 			"abalone": s += "|%d|%d|%d|%d" % [aba_turn, _game_modules["abalone"].aba_selection.size(), aba_out[0], aba_out[1]]
-			"chess": s += "|%d" % chess_turn
+			"chess":
+				var chess_module = _game_modules["chess"]
+				s += "|%d|%d|%d|%d|%d|%d|%d|%d" % [chess_turn, chess_module.chess_history.size(), int(chess_game_over), chess_selected.x, chess_selected.y, int(not chess_module.chess_promotion_pending.is_empty()), chess_module.chess_halfmove_clock, chess_module.chess_move_log.size()]
 			"othello", "othello12": s += "|%d" % othello_turn
 	return s
 
@@ -2929,6 +2931,7 @@ func _btns_game() -> void:
 		"blockace": _btns_blockace()
 		"quarto": _btns_quarto()
 		"uno": _game_modules["uno"]._btns_uno()
+		"chess": _game_modules["chess"]._btns_chess()
 
 func _seat_me(seat: int) -> bool:
 	if vs_cpu:
@@ -4424,6 +4427,26 @@ func _ws_remote_action_allowed(action: String, args: Array, sender_seat: int) ->
 			_: return false
 	if selected_game == "mastermind" or _ws_game_turn_seat() != sender_seat:
 		return false
+	if action == "_rpc_chess_move":
+		if selected_game != "chess" or (args.size() != 4 and args.size() != 5):
+			return false
+		var fx: int = int(args[0])
+		var fy: int = int(args[1])
+		var tx: int = int(args[2])
+		var ty: int = int(args[3])
+		if fx < 0 or fx > 7 or fy < 0 or fy > 7 or tx < 0 or tx > 7 or ty < 0 or ty > 7:
+			return false
+		var chess_module = _game_modules["chess"]
+		var from := Vector2i(fx, fy)
+		var to := Vector2i(tx, ty)
+		if chess_module.chess_game_over or int(chess_module.chess_turn) != int(chess_module._chess_color(int(chess_module.chess_board[fy][fx]))):
+			return false
+		if not chess_module._chess_gen_moves(from).has(to):
+			return false
+		if args.size() == 5:
+			if int(args[4]) not in [2, 3, 4, 5] or not chess_module._chess_is_promotion_move(from, to):
+				return false
+		return true
 	match action:
 		"_rpc_dom_play", "_rpc_dom_draw", "_rpc_dom_pass", "_rpc_pas_play", "_rpc_hokm_play":
 			if args.is_empty() or int(args[0]) != sender_seat:
@@ -4449,7 +4472,7 @@ func _ws_remote_action_allowed(action: String, args: Array, sender_seat: int) ->
 		"_rpc_bg_move", "_rpc_bg_end_turn":
 			if args.size() < (4 if action == "_rpc_bg_move" else 3) or int(args[0]) != sender_seat:
 				return false
-		"_rpc_othello_place", "_rpc_pent_place", "_rpc_pent_rotate", "_rpc_chess_move", "_rpc_quo_action", "_rpc_bg_step":
+		"_rpc_othello_place", "_rpc_pent_place", "_rpc_pent_rotate", "_rpc_quo_action", "_rpc_bg_step":
 			pass
 		_:
 			return false
@@ -4463,7 +4486,7 @@ func _ws_execute_game_action(action: String, args: Array) -> void:
 		"_rpc_dom_play": _rpc_dom_play(int(args[0]), int(args[1]), str(args[2]))
 		"_rpc_dom_draw": _rpc_dom_draw(int(args[0]))
 		"_rpc_dom_pass": _rpc_dom_pass(int(args[0]))
-		"_rpc_chess_move": _rpc_chess_move(int(args[0]), int(args[1]), int(args[2]), int(args[3]))
+		"_rpc_chess_move": _rpc_chess_move(int(args[0]), int(args[1]), int(args[2]), int(args[3]), int(args[4]) if args.size() > 4 else 5)
 		"_rpc_quo_action": _rpc_quo_action(int(args[0]), int(args[1]), int(args[2]), bool(args[3]), int(args[4]) if args.size() > 4 else -1)
 		"_rpc_pas_play": _rpc_pas_play(int(args[0]), int(args[1]), args[2])
 		"_rpc_gob_place": _rpc_gob_place(int(args[0]), int(args[1]), int(args[2]), int(args[3]))

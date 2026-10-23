@@ -150,3 +150,13 @@ The online matchmaking and LAN lobby views are delegated to `ui/screens/online_s
 - متدهای `_chess_flip`, `_chess_scr`, `_chess_center`, `_chess_tap` و `_draw_chess` در rules module به عنوان wrapper/مرز سازگاری باقی می‌مانند؛ در نتیجه dispatcher اصلی و RPC `_rpc_chess_move` تغییر نکرده‌اند.
 - کلیک فقط به مختصات خانه تبدیل می‌شود؛ انتخاب مهره، اعتبارسنجی حرکت، ارسال حرکت آنلاین و اعمال حرکت آفلاین در rules module می‌مانند.
 - `tests/test_game_presentations.py` و `tools/verify_structure.py` مرزبندی را ایستا کنترل می‌کنند؛ این بررسی‌ها جای اجرای واقعی Godot از دو جهت صفحه را نمی‌گیرند.
+
+
+## Chess rules, history and AI hardening
+
+- `games/chess/rules.gd` is the authoritative FIDE-style rules/state module; `games/chess/presentation.gd` remains responsible for rendering and screen-to-square mapping.
+- Legal moves are filtered by simulating each candidate and rejecting moves that leave the mover's king attacked. King capture is never a move; checkmate/stalemate are terminal states.
+- Castling rights, en-passant availability, promotion choice, half/fullmove counters, position repetition history and notation are included in move snapshots so local Undo can restore the prior position.
+- Local Undo rewinds one ply in hot-seat play and a human/CPU pair in CPU mode; it is disabled in network play to avoid client-state divergence.
+- `games/chess/ai.gd` uses legal move generation, alpha-beta, iterative deepening, time/node budgets, repetition-aware transposition keys and quiescence search. Promotion variants are searched independently.
+- Both Web workflows run `tests/godot/test_chess_rules.gd` under headless Godot, including perft, king safety, castling, en-passant, promotion, Undo and tactical AI checks.

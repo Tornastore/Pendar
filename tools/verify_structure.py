@@ -137,6 +137,13 @@ for game_id in sorted(expected_modules):
         aliased_module_members |= {"bg_legal_cache_key", "bg_legal_cache"}
     if game_id == "quoridor":
         aliased_module_members |= {"quo_cpu_position_history_by_player"}
+    if game_id == "chess":
+        aliased_module_members |= {
+            "chess_castling_rights", "chess_en_passant", "chess_fullmove_number",
+            "chess_halfmove_clock", "chess_history", "chess_last_notation",
+            "chess_move_log", "chess_position_history", "chess_promotion_pending",
+            "chess_terminal_reason",
+        }
     if game_id == "uno":
         aliased_module_members |= {
             "uno_catch_seat", "uno_challenge_target", "uno_current_color", "uno_direction",
@@ -388,6 +395,38 @@ else:
     if "app._draw_chess_piece(" not in chess_presentation or "app._draw_hud(" not in chess_presentation:
         errors.append("Chess presentation is missing expected drawing delegation")
 
+# Chess legality, complete move history, Undo and AI search are verified alongside the presentation adapter.
+chess_rules_path = ROOT / "games" / "chess" / "rules.gd"
+chess_ai_path = ROOT / "games" / "chess" / "ai.gd"
+if chess_rules_path.is_file():
+    chess_rules = chess_rules_path.read_text(encoding="utf-8")
+    for method in (
+        "_chess_is_square_attacked", "_chess_move_keeps_king_safe",
+        "_chess_castle_transit_safe", "_chess_update_terminal_state",
+        "_chess_position_key", "_chess_undo", "_chess_can_undo",
+        "_chess_choose_promotion", "_chess_can_claim_draw",
+    ):
+        if not re.search(rf"^func\s+{method}\(", chess_rules, re.M):
+            errors.append(f"ChessRules is missing {method}()")
+    if "for promotion_type in [5, 4, 3, 2]:" not in chess_rules:
+        errors.append("Chess AI must receive separate underpromotion candidates")
+    if "var promotion_type: int = int(best[2]) if best.size() >= 3 else 5" not in chess_rules:
+        errors.append("Chess CPU move must preserve the AI's underpromotion choice")
+    if 'app._add_btn(Rect2(32.0, 812.0, 154.0, 48.0), "برگشت حرکت"' not in chess_rules:
+        errors.append("Chess undo control is not exposed")
+if chess_ai_path.is_file():
+    chess_ai = chess_ai_path.read_text(encoding="utf-8")
+    for method in ("_search", "_quiescence", "_evaluate", "_budget_reached", "_ordered_moves"):
+        if not re.search(rf"^func\s+{method}\(", chess_ai, re.M):
+            errors.append(f"ChessAI is missing {method}()")
+    if "func _promotion_type_from_move(move: Array) -> int:" not in chess_ai:
+        errors.append("ChessAI must preserve underpromotion choices during search")
+# Production Web workflows run the legal-move, terminal-state and Undo suite in real Godot.
+for workflow_path in (ROOT / ".github" / "workflows" / "build-web.yml", ROOT / ".github" / "workflows" / "deploy-web.yml"):
+    workflow_text = workflow_path.read_text(encoding="utf-8")
+    if "Run chess rules regression tests" not in workflow_text or "res://tests/godot/test_chess_rules.gd" not in workflow_text:
+        errors.append(f"{workflow_path.relative_to(ROOT)} does not run Godot chess regression tests")
+
 # Othello is the first pilot for separating game presentation/input from authoritative rules.
 othello_rules_path = ROOT / "games" / "othello" / "rules.gd"
 othello_presentation_path = ROOT / "games" / "othello" / "presentation.gd"
@@ -432,4 +471,5 @@ print(f"- {state_count} module-owned state fields checked")
 print("- scoring, ranking, and game catalog services found")
 print("- menu, dashboard, rankings, mode, online/lobby, pause, rules, dialogs and result presentation delegated to UI modules")
 print("- Othello and Chess board presentation/input mapping delegated to game presentation modules")
+print("- Chess legality, complete Undo history and bounded AI search checked")
 print("NOTE: this is a static structural check, not a Godot runtime test.")

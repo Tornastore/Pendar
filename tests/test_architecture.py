@@ -115,7 +115,8 @@ def test_chess_ai_has_six_difficulty_levels_and_alpha_beta_search() -> None:
     rules = (project_root / "games" / "chess" / "rules.gd").read_text(encoding="utf-8")
     main = (project_root / "main.gd").read_text(encoding="utf-8")
     assert "func choose_move(game, difficulty: int) -> Array" in ai
-    assert "var depths: Array[int] = [0, 0, 1, 2, 4, 5]" in ai
+    assert "var depth_by_level: Array[int] = [0, 0, 1, 2, 3, 4, 5]" in ai
+    assert "var time_limit_usec_by_level: Array[int] = [0, 0, 180000, 300000, 450000, 650000, 900000]" in ai
     assert "func _search(" in ai
     assert "func _evaluate(" in ai
     assert "ChessAIScript = preload(\"res://games/chess/ai.gd\")" in rules

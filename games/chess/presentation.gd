@@ -109,8 +109,15 @@ func render(app, game) -> void:
 			for k in miss:
 				app._draw_chess_piece(typ, not white_side, Vector2(x + 11, rows_y[side] + 8), 24.0)
 				x += 15.0
-	if not game.chess_game_over:
-		if game._chess_my_turn():
-			app._hint("مهره خود را انتخاب کنید" if game.chess_selected.x < 0 else "مقصد را انتخاب کنید", 764, app.TEXT_DIM)
-		else:
-			app._hint("حریف در حال فکر کردن…", 764, app.TEXT_DIM)
+	if game.chess_game_over:
+		app._hint(game.chess_terminal_reason if game.chess_terminal_reason != "" else "بازی پایان یافت", 764, app.ACCENT)
+	elif game._chess_king_in_check(game.chess_turn).x >= 0:
+		app._hint("شاه در کیش است؛ حرکت قانونی را انتخاب کنید", 764, app.RED)
+	elif game._chess_can_claim_draw():
+		app._hint("امکان اعلام مساوی با قانون ۵۰ حرکت یا تکرار موقعیت", 764, app.ACCENT)
+	elif not game.chess_promotion_pending.is_empty():
+		app._hint("نوع مهره ارتقا را انتخاب کنید", 764, app.TEXT_DIM)
+	elif game._chess_my_turn():
+		app._hint("مهره خود را انتخاب کنید" if game.chess_selected.x < 0 else "مقصد را انتخاب کنید", 764, app.TEXT_DIM)
+	else:
+		app._hint("حریف در حال فکر کردن…", 764, app.TEXT_DIM)

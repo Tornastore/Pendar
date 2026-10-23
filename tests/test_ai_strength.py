@@ -8,14 +8,19 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_chess_uses_quiescence_transposition_table_and_balanced_root_budget():
+def test_chess_uses_legal_move_search_quiescence_transposition_and_time_budgets():
     ai = read("games/chess/ai.gd")
+    rules = read("games/chess/rules.gd")
     assert "func _quiescence(" in ai
     assert "var _transposition: Dictionary = {}" in ai
-    assert "func _position_key(game, turn: int) -> String:" in ai
-    assert "var root_limits: Array[int] = [0, 0, 0, 24, 28, 32]" in ai
-    assert "per_root_budget: int = maxi(120" in ai
-    assert "_transposition[key] = {\"depth\": depth, \"score\": best_value" in ai
+    assert "func _tt_key(game) -> String:" in ai
+    assert "var depth_by_level: Array[int] = [0, 0, 1, 2, 3, 4, 5]" in ai
+    assert "var node_limit_by_level: Array[int] = [0, 0, 1800, 3600, 7200, 14000, 24000]" in ai
+    assert "func _budget_reached() -> bool:" in ai
+    assert '_transposition[position_key] = {"depth": depth, "score": best_score' in ai
+    assert "func _chess_move_keeps_king_safe(" in rules
+    assert "func _chess_castle_transit_safe(" in rules
+    assert "func _chess_undo() -> void:" in rules
 
 
 def test_othello_has_transposition_table_exact_small_endgame_and_pass_depth_fix():
@@ -56,7 +61,7 @@ def test_strong_profiles_have_tactical_lookahead_across_the_game_catalog():
 
 def test_grandmaster_profiles_reduce_randomness_or_search_noise():
     checks = {
-        "games/chess/ai.gd": "if _difficulty < 5:",
+        "games/chess/ai.gd": "var time_limit_usec_by_level: Array[int] = [0, 0, 180000, 300000, 450000, 650000, 900000]",
         "games/othello/ai.gd": "_transposition[key] =",
         "games/gobblet/rules.gd": "var noise_by_level: Array[float] = [0.0, 19.0, 10.0, 4.0, 0.35, 0.0]",
         "games/abalone/rules.gd": "var noise_by_level: Array[float] = [0.0, 18.0, 8.0, 3.5, 0.6, 0.0]",

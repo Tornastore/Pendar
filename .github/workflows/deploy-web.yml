@@ -97,6 +97,22 @@ jobs:
         timeout-minutes: 8
         run: godot --headless --editor --path . --import
 
+      - name: Run chess rules regression tests
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          LOG_FILE="/tmp/pendar-chess-regression.log"
+          godot --headless --path . --script res://tests/godot/test_chess_rules.gd 2>&1 | tee "$LOG_FILE"
+          if grep -E 'SCRIPT ERROR|Parse Error|Parser Error|CHESS_RULES_TESTS: .*failures=[1-9][0-9]*' "$LOG_FILE"; then
+            echo "ERROR: Chess rules regression tests reported script/runtime errors." >&2
+            exit 1
+          fi
+          if ! grep -E 'CHESS_RULES_TESTS: checks=[0-9]+, failures=0' "$LOG_FILE"; then
+            echo "ERROR: Chess rules regression test summary is missing or non-zero." >&2
+            exit 1
+          fi
+
       - name: Smoke-test game startup
         shell: bash
         timeout-minutes: 3
