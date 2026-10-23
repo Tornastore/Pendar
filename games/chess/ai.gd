@@ -30,6 +30,12 @@ func choose_move(game, difficulty: int) -> Array:
 	var legal_moves: Array = game._chess_all_moves(side)
 	if legal_moves.is_empty():
 		return []
+	# Never miss an immediate checkmate, even at the lowest difficulty or when
+	# the deeper search is close to its time/node budget. This tactical pre-pass
+	# also makes mate-in-one behavior deterministic across difficulty settings.
+	var mate_in_one: Array = _find_mate_in_one(game, legal_moves)
+	if not mate_in_one.is_empty():
+		return mate_in_one
 	var ordered: Array[Dictionary] = _ordered_moves(game, legal_moves, side)
 	if _difficulty == 1:
 		return ordered[randi_range(0, ordered.size() - 1)]["move"]
@@ -87,6 +93,21 @@ func choose_move(game, difficulty: int) -> Array:
 	if root_can_claim_draw and ((side == 2 and last_completed_root_score < 0.0) or (side == 1 and last_completed_root_score > 0.0)):
 		should_claim_draw = true
 	return best_move
+
+func _find_mate_in_one(game, moves: Array) -> Array:
+	for move_value in moves:
+		var move: Array = move_value
+		var snapshot: Dictionary = game._chess_simulate_move(move[0], move[1], _promotion_type_from_move(move))
+		if snapshot.is_empty():
+			continue
+		var defending_side: int = int(game.chess_turn)
+		var replies: Array = game._chess_all_moves(defending_side)
+		var is_mate: bool = replies.is_empty() and game._chess_king_in_check(defending_side).x >= 0
+		game._chess_restore_simulation(snapshot)
+		if is_mate:
+			return move
+	return []
+
 
 func _choose_greedy(game, ordered: Array[Dictionary], side: int) -> Array:
 	var best_move: Array = ordered[0]["move"]

@@ -143,7 +143,7 @@ func _test_capture_undo_and_move_counters() -> void:
 	_set_position(game, {"h1": 6, "h8": 12, "a1": 4, "a8": 8})
 	var initial_key: String = game._chess_position_key()
 	game._chess_make_move(_square("a1"), _square("a8"))
-	_expect(int(game.chess_board[0][0]) == 4 and int(game.chess_board[0][7]) == 0, "capture moves the rook and removes the captured knight")
+	_expect(int(game.chess_board[0][0]) == 4 and int(game.chess_board[0][7]) == 12, "capture moves the rook to a8, removes the knight and leaves the black king on h8")
 	_expect(game.chess_turn == 2 and game.chess_fullmove_number == 1, "white capture advances turn without incrementing the fullmove number")
 	_expect(game.chess_move_log.size() == 1 and game.chess_position_history.size() == 2, "a legal capture is appended to both histories")
 	game._chess_undo()
@@ -257,7 +257,16 @@ func _test_ai_finds_mate_in_one() -> void:
 	_set_position(game, {"a1": 6, "c2": 12, "b3": 11}, 2)
 	var ai = ChessAIScript.new()
 	var move: Array = ai.choose_move(game, 5)
-	_expect(move.size() >= 2 and move[0] == _square("b3") and move[1] == _square("b2"), "expert AI finds a forced mate in one")
+	var delivers_mate: bool = false
+	if move.size() >= 2:
+		var promotion_type: int = int(move[2]) if move.size() >= 3 else 5
+		var snapshot: Dictionary = game._chess_simulate_move(move[0], move[1], promotion_type)
+		if not snapshot.is_empty():
+			var defending_side: int = int(game.chess_turn)
+			var replies: Array = game._chess_all_moves(defending_side)
+			delivers_mate = replies.is_empty() and game._chess_king_in_check(defending_side).x >= 0
+			game._chess_restore_simulation(snapshot)
+	_expect(delivers_mate, "expert AI finds a forced mate in one")
 
 func _test_ai_generates_underpromotion_choices() -> void:
 	var fixture: Dictionary = _new_game()
