@@ -29,7 +29,7 @@ def test_backgammon_hit_testing_tracks_visible_top_bottom_rows_and_bar():
     assert "TOP_POINTS_MAX_Y: float = 332.0" in presentation
     assert "BOTTOM_POINTS_MIN_Y: float = 508.0" in presentation
     assert "BOTTOM_POINTS_MAX_Y: float = 662.0" in presentation
-    assert "return candidate if top_row else 23 - candidate" in presentation
+    assert "return 11 - candidate if top_row else 12 + candidate" in presentation
     assert "return -1" in presentation and "return -2" in presentation
 
 
@@ -57,3 +57,20 @@ def test_backgammon_godot_regression_suite_is_wired_into_both_web_workflows():
         workflow = (ROOT / ".github" / "workflows" / workflow_name).read_text(encoding="utf-8")
         assert "Run backgammon rules and presentation regression tests" in workflow
         assert "BACKGAMMON_RULES_TESTS: checks=" in workflow
+
+
+def test_backgammon_has_player_relative_orientation_and_explicit_animated_roll():
+    rules = read("games/backgammon/rules.gd")
+    presentation = read("games/backgammon/presentation.gd")
+    assert "_bg_needs_roll: bool = true" in rules
+    assert "func _bg_roll_button()" in rules
+    assert "await app.get_tree().create_timer(ROLL_ANIM_SECONDS).timeout" in rules
+    assert "await app.get_tree().create_timer(MOVE_ANIM_SECONDS).timeout" in rules
+    assert "func _bg_combined_move_hints(source: int)" in rules
+    assert "func point_column(point: int) -> int:" in presentation
+    assert "جمع دو تاس:" in presentation
+    assert "آخرین حرکت " in presentation
+    assert "_bg_combined_move_hints(game.bg_sel)" in presentation
+    godot_tests = read("tests/godot/test_backgammon_rules.gd")
+    assert "_test_combined_move_hints()" in godot_tests
+    assert "app._fa(24 - i)" in presentation  # Point labels follow the mirrored route.

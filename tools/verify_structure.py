@@ -125,7 +125,9 @@ for game_id in sorted(expected_modules):
     missing_wrappers = sorted(app_calls - main_funcs)
     if missing_wrappers:
         errors.append(f"{game_id}: app-facing methods missing from main: {missing_wrappers}")
-    state_vars = set(re.findall(r"^var\s+(\w+)(?::[^\n]+)?$", rules, re.M))
+    # Leading-underscore fields are module-private implementation/animation state;
+    # only public game state must be exposed to compatibility aliases in main.gd.
+    state_vars = {name for name in re.findall(r"^var\s+(\w+)(?::[^\n]+)?$", rules, re.M) if not name.startswith("_")}
     # State used by legacy UI is proxied; newer code may access a module-owned
     # field explicitly through _game_modules[game_id] instead. Both are valid.
     state_proxies = set(re.findall(r"^var\s+(\w+)(?::[^\n]+)?:\s*$", main, re.M))

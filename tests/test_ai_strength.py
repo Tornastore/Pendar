@@ -125,7 +125,7 @@ def test_backgammon_six_levels_are_wired_to_cpu_turn_and_catalog_is_not_beta():
     mode_screen = read("ui/screens/mode_screen.gd")
     catalog = read("core/game_catalog.gd")
     assert "ai.choose_turn(self, bg_difficulty)" in rules
-    assert "if bg_moves_left.is_empty():" in rules
+    assert "if _bg_needs_roll:" in rules
     assert '"backgammon":' in main
     assert "_schedule_cpu(0.45, _bg_cpu)" in main
     assert "host._set_backgammon_difficulty.bind(i + 1)" in mode_screen
@@ -133,8 +133,8 @@ def test_backgammon_six_levels_are_wired_to_cpu_turn_and_catalog_is_not_beta():
     assert "var branch_limits: Array[int] = [0, 4, 5, 6, 7, 8, 10]" in ai
     assert "if level == 1:" in ai and "if level == 2:" in ai
     assert "if level >= 5:" in ai and "if level >= 6:" in ai
-    assert "while opening_dice[0] == opening_dice[1]:" in rules
-    assert "bg_turn = 0 if opening_dice[0] > opening_dice[1] else 1" in rules
+    assert "if _bg_opening_roll:" in rules and "while int(dice[0]) == int(dice[1]):" in rules
+    assert "bg_turn = 0 if d1 > d2 else 1" in rules
     assert 'opponent_name: String = "CPU" if app.vs_cpu else "حریف"' in presentation
 
 

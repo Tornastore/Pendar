@@ -73,6 +73,9 @@ func _set_position(game, points: Array, bar: Array, off: Array, turn: int, dice:
 	game.bg_game_over = false
 	game.bg_winner = -1
 	game.bg_sel = -2
+	game._bg_needs_roll = false
+	game._bg_opening_roll = false
+	game._bg_roll_animating = false
 	game._bg_invalidate_legal_cache()
 
 func _run_tests() -> void:
@@ -81,6 +84,7 @@ func _run_tests() -> void:
 	_test_hits_and_bearing_off()
 	_test_mandatory_dice_and_doubles()
 	_test_input_hit_testing()
+	_test_combined_move_hints()
 	_test_end_turn_guard()
 	_test_ai_legality_and_state_safety()
 	_test_ai_bar_and_home_board_heuristics()
@@ -101,8 +105,9 @@ func _test_standard_setup() -> void:
 		elif int(value) < 0:
 			player1 += -int(value)
 	_expect(player0 == 15 and player1 == 15, "standard setup has fifteen checkers per player")
-	_expect(game.bg_moves_left.size() == 2, "opening roll supplies both non-equal dice")
-	_expect(game.bg_dice[0] != game.bg_dice[1], "opening dice are rerolled on ties")
+	_expect(game.bg_moves_left.is_empty(), "board waits for the player to roll before showing dice")
+	_expect(game._bg_needs_roll and game._bg_opening_roll, "opening roll starts in a player-triggered state")
+	_expect(game.bg_dice == [0, 0], "dice result stays hidden until the roll button is pressed")
 
 func _test_bar_entry_and_blocked_points() -> void:
 	var game = _new_game().game
@@ -176,13 +181,31 @@ func _test_mandatory_dice_and_doubles() -> void:
 
 func _test_input_hit_testing() -> void:
 	var game = _new_game().game
-	_expect(game._bg_point_from_tap(Vector2(57, 250)) == 0, "top-left visible point maps to point zero")
-	_expect(game._bg_point_from_tap(Vector2(477, 250)) == 11, "top-right visible point maps to point eleven")
-	_expect(game._bg_point_from_tap(Vector2(57, 580)) == 23, "bottom-left visible point maps to point twenty-three")
-	_expect(game._bg_point_from_tap(Vector2(477, 580)) == 12, "bottom-right visible point maps to point twelve")
+	_expect(game._bg_point_from_tap(Vector2(57, 250)) == 11, "top-left visible point maps to point eleven")
+	_expect(game._bg_point_from_tap(Vector2(477, 250)) == 0, "top-right visible point maps to point zero")
+	_expect(game._bg_point_from_tap(Vector2(57, 580)) == 12, "bottom-left visible point maps to point twelve")
+	_expect(game._bg_point_from_tap(Vector2(477, 580)) == 23, "bottom-right visible point maps to point twenty-three")
 	_expect(game._bg_point_from_tap(Vector2(268, 400)) == -1, "central bar channel maps to bar selection")
 	_expect(game._bg_point_from_tap(Vector2(100, 400)) == -2, "blank middle board does not map to a point")
 	_expect(game._bg_point_from_tap(Vector2(100, 480)) == -2, "non-point lower channel does not map to a point")
+
+
+func _test_combined_move_hints() -> void:
+	var game = _new_game().game
+	var points: Array = _empty_points()
+	points[0] = 1
+	_set_position(game, points, [0, 0], [0, 0], 0, [1, 2])
+	var before_points: Array = game.bg_points.duplicate()
+	var hints: Array[Dictionary] = game._bg_combined_move_hints(0)
+	var route_one_two: bool = false
+	var route_two_one: bool = false
+	for hint in hints:
+		if int(hint.via) == 1 and int(hint.target) == 3 and int(hint.first_die) == 1 and int(hint.second_die) == 2:
+			route_one_two = true
+		if int(hint.via) == 2 and int(hint.target) == 3 and int(hint.first_die) == 2 and int(hint.second_die) == 1:
+			route_two_one = true
+	_expect(route_one_two and route_two_one, "sum previews only show legal two-step routes with each die order")
+	_expect(game.bg_points == before_points, "combined-route preview does not mutate the authoritative board")
 
 func _test_end_turn_guard() -> void:
 	var ctx: Dictionary = _new_game()
