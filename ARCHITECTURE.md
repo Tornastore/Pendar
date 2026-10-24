@@ -26,15 +26,20 @@ Pendar/
 │   ├── othello/rules.gd
 │   ├── othello/presentation.gd  # ترسیم اتلو و تبدیل مختصات لمس به خانه
 │   ├── pentago/rules.gd
+│   ├── pentago/presentation.gd # board rendering, cell mapping and quadrant controls
 │   ├── quoridor/rules.gd
+│   ├── quoridor/presentation.gd # board, wall geometry, input-to-edge mapping and HUD
 │   ├── domino/rules.gd
 │   ├── domino/presentation.gd  # ترسیم زنجیره دومینو، دست و نگاشت کلیک
 │   ├── chess/rules.gd
 │   ├── chess/presentation.gd  # ترسیم شطرنج و تبدیل کلیک به خانه
 │   ├── pasoor/rules.gd
+│   ├── pasoor/presentation.gd  # کارت‌های دست/میز، چیدمان و نگاشت لمس
 │   ├── mastermind/rules.gd
 │   ├── gobblet/rules.gd
+│   ├── gobblet/presentation.gd # صفحه، پشته‌ها و ذخیره مهره‌ها
 │   ├── hokm/rules.gd
+│   ├── hokm/presentation.gd    # چیدمان دست و کارت‌های روی زمین
 │   ├── backgammon/rules.gd
 │   ├── abalone/rules.gd
 │   └── blockace/rules.gd
@@ -195,3 +200,24 @@ The online matchmaking and LAN lobby views are delegated to `ui/screens/online_s
 - `games/blockace/rules.gd` همچنان مرجع قطعی اعتبار قرار دادن قطعه، تماس گوشه‌ای، امتیاز، پایان بازی، CPU و اعمال حرکت آنلاین است؛ presenter فقط خانه انتخاب‌شده را به `_blk_handle_target()` تحویل می‌دهد.
 - `_blk_tap`, `_btns_blockace`, `_draw_blk_cell` و `_draw_blockace` به‌عنوان wrapper حفظ شده‌اند تا dispatch موجود در `main.gd` تغییر نکند.
 - `tests/test_blockace_presentation.py` و `tools/verify_structure.py` مرز نمایش/قواعد و سازگاری callbackها را ایستا کنترل می‌کنند؛ برای آزمون نهایی تعامل و چیدمان باید پروژه در Godot اجرا شود.
+
+## جداسازی نمایش پنتاگو
+
+- `games/pentago/presentation.gd` محاسبهٔ مختصات صفحه/خانه‌ها، تبدیل لمس به خانه، ساخت دکمه‌های چرخش چهار ربع و ترسیم صفحه را انجام می‌دهد.
+- `games/pentago/rules.gd` مرجع قطعی وضعیت صفحه، فاز جای‌گذاری/چرخش، نوبت، بررسی پنج‌تایی، چرخش ربع، تصمیم CPU و ارسال کنش شبکه باقی می‌ماند.
+- توابع `_pent_origin`, `_pent_cell_pos`, `_pent_tap`, `_pent_quad_rect`, `_btns_pentago` و `_draw_pentago` به‌عنوان wrapper حفظ شده‌اند؛ مسیر dispatch و RPCهای موجود در `main.gd` تغییر نکرده‌اند.
+- ورودی صفحه ابتدا فقط به خانهٔ منطقی تبدیل می‌شود و سپس به `_pent_handle_cell_tap()` تحویل داده می‌شود؛ قواعد امکان حرکت و ارسال شبکه را خود ماژول قواعد تعیین می‌کند.
+- `tests/test_pentago_presentation.py` مرزبندی ایستا را بررسی می‌کند و هر دو workflow وب آزمون‌های قواعد پنتاگو را با Godot headless اجرا می‌کنند.
+
+
+## Remaining board/card game presentation boundaries
+
+- `games/pentago/presentation.gd` owns the Pentago board geometry, tap-to-cell mapping and quadrant controls; placement, rotation, turn changes, win detection and CPU planning remain in `rules.gd`.
+- `games/quoridor/presentation.gd` owns board/wall visuals, wall-edge hit mapping, player HUD and mode controls. Wall legality, path reachability, turn transitions, CPU search and RPC application remain in `rules.gd` / `ai.gd`.
+- `games/gobblet/presentation.gd` owns the 4×4 board, stack visuals, reserve-piece layout and tap-to-cell mapping. Stack legality, reveal-loss rule, legal moves, CPU search and network actions remain in `rules.gd`.
+- `games/pasoor/presentation.gd` owns card/table layout, selected-card highlight and confirmation button construction. Capture enumeration, card scoring, sweep scoring, AI decisions, turn changes and network actions remain in `rules.gd`.
+- `games/hokm/presentation.gd` owns hand/card/table rendering and maps pointer hits to a hand index. Follow-suit validation, trick resolution, score, CPU decisions and network play remain in `rules.gd`.
+- `games/abalone/presentation.gd` owns hex-cell geometry, pointer-to-cell mapping and board rendering. Selection groups, legal move generation, Sumito/push validation, CPU search and network actions remain in `rules.gd`.
+- `games/quarto/presentation.gd` owns board/piece-palette layout, pointer-to-cell mapping, selection buttons and game rendering. Piece choice, legal placement, Quarto detection, terminal state, CPU planning and RPC validation remain in `rules.gd` / `ai.gd`.
+- The controller-facing entry points remain compatibility wrappers, so `main.gd` keeps the same dispatch contract. The presenters read game state and dispatch actions to the rules module; they do not directly mutate authoritative game state.
+- `tests/test_other_game_presentations.py`, `tests/test_quarto_presentation.py`, `tools/verify_structure.py`, and the headless Quarto regression suite validate the new boundaries. Static tests do not replace a full Godot 4.3 runtime and UI play-through.

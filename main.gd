@@ -4058,9 +4058,7 @@ func _btns_quarto() -> void:
 	_game_modules["quarto"]._btns_quarto()
 
 func _quarto_piece_rect(piece: int) -> Rect2:
-	var col: int = piece % 4
-	var row: int = int(piece / 4)
-	return Rect2(24.0 + col * 124.0, 584.0 + row * 46.0, 116.0, 40.0)
+	return _game_modules["quarto"]._qto_piece_rect(piece)
 
 func _draw_quarto_piece(center: Vector2, piece: int, scale: float = 1.0, opacity: float = 1.0) -> void:
 	# Standard Quarto visual language: four independent, clearly legible features.
@@ -4127,53 +4125,7 @@ func _draw_quarto_piece(center: Vector2, piece: int, scale: float = 1.0, opacity
 			draw_circle(Vector2(center.x - width * 0.15, top_y + 2.2 * scale), 1.0 * scale, Color(1, 1, 1, 0.55 * opacity))
 
 func _draw_quarto() -> void:
-	var mod = _game_modules["quarto"]
-	var c1: Color = Color(0.39, 0.67, 1.0)
-	var c2: Color = Color(1.0, 0.49, 0.48)
-	var pa: Dictionary = _pl("بازیکن ۱", c1, "", qto_turn == 1 and not qto_game_over, _seat_me(0), "انتخاب / جای‌گذاری")
-	var pb: Dictionary = _pl("بازیکن ۲", c2, "", qto_turn == 2 and not qto_game_over, _seat_me(1), "انتخاب / جای‌گذاری")
-	_draw_hud("کوارتو · Quarto", pa, pb)
-	var mine_turn: bool = mod._qto_is_local_actor()
-	var instruction: String = "یک مهره برای حریف انتخاب کنید" if qto_phase == 0 else "مهره‌ی انتخاب‌شده را روی صفحه بگذارید"
-	var status := Rect2(22, 151, VIEW_W - 44, 28)
-	_panel(status, CARD, 14, Color(0.75, 0.62, 0.92, 0.42), 1.0)
-	_txt_c(instruction if mine_turn else "حریف در حال تصمیم‌گیری…", status, 13, TEXT if mine_turn else TEXT_DIM, true)
-	if qto_phase == 1 and qto_piece_to_place >= 0:
-		_draw_quarto_piece(Vector2(VIEW_W - 48, 165), qto_piece_to_place, 0.82, 1.0)
-	var origin: Vector2 = mod._qto_board_origin()
-	var cell: float = QUARTO_CELL
-	var gap: float = QUARTO_GAP
-	var board_size := Vector2(cell * 4.0 + gap * 3.0, cell * 4.0 + gap * 3.0)
-	var board_rect := Rect2(origin - Vector2(10, 10), board_size + Vector2(20, 20))
-	_panel(board_rect, Color(0.12, 0.12, 0.23), 18, Color(0.75, 0.62, 0.92, 0.58), 1.3, 14, 6)
-	for y in range(4):
-		for x in range(4):
-			var r := Rect2(origin.x + x * (cell + gap), origin.y + y * (cell + gap), cell, cell)
-			var col: Color = Color(0.18, 0.20, 0.34) if (x + y) % 2 == 0 else Color(0.14, 0.16, 0.28)
-			_panel(r, col, 9, LINE, 0.8)
-			if Vector2i(x, y) == qto_last_cell:
-				_panel(r.grow(-2), Color(0.24, 0.62, 0.45, 0.14), 8, Color(0.30, 0.92, 0.65, 0.8), 1.8)
-			var piece: int = int(qto_board[y][x])
-			if piece >= 0:
-				_draw_quarto_piece(r.get_center(), piece, 1.0, 1.0)
-			else:
-				_txt_c(_fa(y * 4 + x + 1), r, 11, TEXT_FAINT, false)
-	_hint("بلند/کوتاه · گرد/مربع · تیره/روشن · توپر/توخالی", 531, TEXT_DIM)
-	_txt_r("مهره‌های قابل انتخاب", VIEW_W - 24, 559, 13, TEXT_DIM, true, 220)
-	for piece in range(16):
-		var pr: Rect2 = _quarto_piece_rect(piece)
-		var available: bool = piece in qto_remaining
-		var can_pick: bool = available and qto_phase == 0 and mine_turn
-		_panel(pr, CARD_H if can_pick else (CARD if available else Color(0.08, 0.09, 0.15, 0.78)), 9, ACCENT if can_pick else LINE, 1.1 if can_pick else 0.7)
-		_draw_quarto_piece(Vector2(pr.position.x + 26, pr.get_center().y), piece, 0.80, 1.0 if available else 0.20)
-		_txt_c(_fa(piece + 1), Rect2(pr.position.x + 48, pr.position.y, pr.size.x - 50, pr.size.y), 12, TEXT if available else TEXT_FAINT, true)
-	if qto_game_over:
-		_hint("بازی تمام شد · وضعیت نهایی حفظ شده است", 780, TEXT_DIM)
-	elif qto_phase == 0:
-		_hint("مهره‌ی انتخابی به حریف داده می‌شود؛ ویژگی‌ها را بررسی کنید", 780, ACCENT if mine_turn else TEXT_DIM)
-	else:
-		_hint("یک خانه‌ی خالی انتخاب کنید؛ چهار ویژگی مشترک یعنی برد", 780, ACCENT if mine_turn else TEXT_DIM)
-	_draw_ai_difficulty_chip_at(qto_difficulty, 820.0)
+	_game_modules["quarto"]._draw_quarto()
 
 # ======================================================================
 #  LOGIC REPLACEMENTS

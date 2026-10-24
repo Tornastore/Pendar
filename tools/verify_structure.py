@@ -622,6 +622,132 @@ else:
     if missing_blockace_app_calls:
         errors.append(f"Blockace presentation calls missing app methods: {missing_blockace_app_calls}")
 
+
+# Pentago presentation separates drawing/layout and pointer mapping from authoritative rules.
+pentago_rules_path = ROOT / "games" / "pentago" / "rules.gd"
+pentago_presentation_path = ROOT / "games" / "pentago" / "presentation.gd"
+if not pentago_presentation_path.is_file():
+    errors.append("missing Pentago presentation module: games/pentago/presentation.gd")
+else:
+    pentago_rules = pentago_rules_path.read_text(encoding="utf-8")
+    pentago_presentation = pentago_presentation_path.read_text(encoding="utf-8")
+    if 'preload("res://games/pentago/presentation.gd")' not in pentago_rules:
+        errors.append("Pentago rules module does not preload its presentation module")
+    if "var _pent_presentation = PentagoPresentationScript.new()" not in pentago_rules:
+        errors.append("Pentago rules module does not instantiate its presenter")
+    for method in ("board_origin", "cell_pos", "quad_rect", "handle_tap", "build_buttons", "render"):
+        if not re.search(rf"^func\s+{method}\(", pentago_presentation, re.M):
+            errors.append(f"PentagoPresentation is missing {method}()")
+    for wrapper in (
+        "return _pent_presentation.board_origin(app)",
+        "return _pent_presentation.cell_pos(app, x, y)",
+        "_pent_presentation.handle_tap(app, self, p)",
+        "return _pent_presentation.quad_rect(app, q)",
+        "_pent_presentation.build_buttons(app, self)",
+        "_pent_presentation.render(app, self)",
+    ):
+        if wrapper not in pentago_rules:
+            errors.append(f"Pentago compatibility wrapper missing: {wrapper}")
+    if "game._pent_handle_cell_tap(Vector2i(x, y))" not in pentago_presentation:
+        errors.append("Pentago pointer mapping must delegate the cell to the rules module")
+    if re.search(r"^\s*game\.pent_[A-Za-z0-9_]+\s*=(?!=)", pentago_presentation, re.M):
+        errors.append("Pentago presentation must not mutate authoritative game state")
+    for method in ("_pent_check_win", "_pent_rotate", "_pent_place", "_pent_do_rotate", "_pent_cpu_move", "_pent_choose_cpu_plan", "_pent_evaluate_board"):
+        if not re.search(rf"^func\s+{method}\(", pentago_rules, re.M):
+            errors.append(f"Pentago rules module lost authoritative method {method}()")
+    pentago_app_calls = {name for name in re.findall(r"\bapp\.(\w+)\s*\(", pentago_presentation) if name.startswith("_")}
+    missing_pentago_app_calls = sorted(pentago_app_calls - main_funcs)
+    if missing_pentago_app_calls:
+        errors.append(f"Pentago presentation calls missing app methods: {missing_pentago_app_calls}")
+    for workflow_path in (ROOT / ".github" / "workflows" / "build-web.yml", ROOT / ".github" / "workflows" / "deploy-web.yml"):
+        workflow_text = workflow_path.read_text(encoding="utf-8")
+        if "Run Pentago rules regression tests" not in workflow_text or "res://tests/godot/test_pentago_rules.gd" not in workflow_text:
+            errors.append(f"{workflow_path.relative_to(ROOT)} does not run Pentago regression tests")
+
+# Presentation adapters for the remaining rules modules are read-only views.
+remaining_presentations = {
+    "quoridor": {
+        "instance": "_quo_presentation",
+        "class": "QuoridorPresentationScript",
+        "state_prefix": "quo_",
+        "methods": ("edge_at", "build_buttons", "player_color", "draw_four_player_hud", "render"),
+        "critical": ("_quo_legal_moves", "_quo_wall_placement_legal", "_quo_place_wall", "_quo_advance_turn"),
+    },
+    "gobblet": {
+        "instance": "_gob_presentation",
+        "class": "GobbletPresentationScript",
+        "state_prefix": "gob_",
+        "methods": ("hand_rect", "handle_tap", "build_buttons", "render"),
+        "critical": ("_gob_can_place", "_gob_can_move", "_gob_place", "_gob_move", "_gob_cpu"),
+    },
+    "pasoor": {
+        "instance": "_pas_presentation",
+        "class": "PasoorPresentationScript",
+        "state_prefix": "pas_",
+        "methods": ("hand_rects", "table_rects", "handle_tap", "build_buttons", "render"),
+        "critical": ("_pas_find_captures", "_pas_best_capture", "_pas_play", "_pas_cpu_move"),
+    },
+    "hokm": {
+        "instance": "_hokm_presentation",
+        "class": "HokmPresentationScript",
+        "state_prefix": "hokm_",
+        "methods": ("hand_rects", "handle_tap", "render"),
+        "critical": ("_hokm_legal", "_hokm_play", "_hokm_cpu", "_hokm_card_beats"),
+    },
+    "abalone": {
+        "instance": "_aba_presentation",
+        "class": "AbalonePresentationScript",
+        "state_prefix": "aba_",
+        "methods": ("cell_center", "hit_cell", "handle_tap", "render"),
+        "critical": ("_aba_valid_cell", "_aba_moves_for_selection", "_aba_apply_group_move", "_aba_generate_all_moves"),
+    },
+    "quarto": {
+        "instance": "_qto_presentation",
+        "class": "QuartoPresentationScript",
+        "state_prefix": "qto_",
+        "methods": ("board_origin", "piece_rect", "handle_tap", "build_buttons", "render"),
+        "critical": ("_qto_has_quarto", "_qto_choose_piece", "_qto_place", "_qto_cpu_step"),
+    },
+}
+for game_id, spec in remaining_presentations.items():
+    rules_path = ROOT / "games" / game_id / "rules.gd"
+    presentation_path = ROOT / "games" / game_id / "presentation.gd"
+    if not presentation_path.is_file():
+        errors.append(f"missing {game_id.title()} presentation module: games/{game_id}/presentation.gd")
+        continue
+    rules = rules_path.read_text(encoding="utf-8")
+    presentation = presentation_path.read_text(encoding="utf-8")
+    if f'preload("res://games/{game_id}/presentation.gd")' not in rules:
+        errors.append(f"{game_id.title()} rules module does not preload its presentation module")
+    if f"var {spec['instance']} = {spec['class']}.new()" not in rules:
+        errors.append(f"{game_id.title()} rules module does not instantiate its presenter")
+    for method in spec["methods"]:
+        if not re.search(rf"^func\s+{method}\(", presentation, re.M):
+            errors.append(f"{game_id.title()} presentation is missing {method}()")
+    for method in spec["critical"]:
+        if not re.search(rf"^func\s+{method}\(", rules, re.M):
+            errors.append(f"{game_id.title()} rules module lost authoritative {method}()")
+    if re.search(rf"^\s*game\.{spec['state_prefix']}[A-Za-z0-9_]*\s*=(?!=)", presentation, re.M):
+        errors.append(f"{game_id.title()} presentation must not mutate authoritative game state")
+    app_calls = {name for name in re.findall(r"\bapp\.(\w+)\s*\(", presentation) if name.startswith("_")}
+    missing_calls = sorted(app_calls - main_funcs)
+    if missing_calls:
+        errors.append(f"{game_id.title()} presentation calls missing app methods: {missing_calls}")
+
+# Quarto main entry points remain wrappers, and CI runs its rule regression suite.
+quarto_rules = (ROOT / "games" / "quarto" / "rules.gd").read_text(encoding="utf-8")
+quarto_presentation = (ROOT / "games" / "quarto" / "presentation.gd").read_text(encoding="utf-8")
+if "_qto_presentation.render(app, self)" not in quarto_rules:
+    errors.append("Quarto render entry point does not delegate to the presentation module")
+if 'return _game_modules["quarto"]._qto_piece_rect(piece)' not in (ROOT / "main.gd").read_text(encoding="utf-8"):
+    errors.append("Quarto piece layout entry point is not a compatibility wrapper")
+if "game._qto_handle_board_tap(cell)" not in quarto_presentation:
+    errors.append("Quarto pointer mapping must delegate to authoritative rules")
+for workflow_path in (ROOT / ".github" / "workflows" / "build-web.yml", ROOT / ".github" / "workflows" / "deploy-web.yml"):
+    workflow_text = workflow_path.read_text(encoding="utf-8")
+    if "Run Quarto rules regression tests" not in workflow_text or "res://tests/godot/test_quarto_rules.gd" not in workflow_text:
+        errors.append(f"{workflow_path.relative_to(ROOT)} does not run Quarto rules regression tests")
+
 if errors:
     print("STRUCTURE CHECK FAILED")
     for error in errors:
@@ -634,7 +760,7 @@ print(f"- {module_method_count} app-facing module calls checked for compatibilit
 print(f"- {state_count} module-owned state fields checked")
 print("- scoring, ranking, and game catalog services found")
 print("- menu, dashboard, rankings, mode, online/lobby, pause, rules, dialogs and result presentation delegated to UI modules")
-print("- Othello, Chess, Backgammon, Domino and Blockace presentation/input mapping delegated to game presentation modules")
+print("- Othello, Chess, Pentago, Quoridor, Domino, Backgammon, Gobblet, Pasoor, Hokm, Abalone, Quarto and Blockace presentation/input mapping delegated to game presentation modules")
 print("- UNO drawing and action-button layout delegated to its presentation module; Wild Draw Four challenges and draw/pass guards checked")
 print("- Chess legality, complete Undo history and bounded AI search checked")
 print("- Mastermind state/secret and online race remain in rules; Blockace placement/CPU/network rules remain authoritative; UI delegated to presentation modules")

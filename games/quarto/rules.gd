@@ -3,6 +3,7 @@ extends "res://core/game_module.gd"
 ## A player wins by placing a piece that completes a four-piece line sharing any attribute.
 
 const QuartoAIScript = preload("res://games/quarto/ai.gd")
+const QuartoPresentationScript = preload("res://games/quarto/presentation.gd")
 
 var qto_board: Array = []                 # 4x4, -1 empty, otherwise piece id 0..15
 var qto_remaining: Array[int] = []        # Pieces not yet offered or placed
@@ -14,6 +15,7 @@ var qto_game_over: bool = false
 var qto_winner: int = -1                  # -1 ongoing, 0 draw, 1/2 winner
 var qto_difficulty: int = 3
 var _qto_ai = QuartoAIScript.new()
+var _qto_presentation = QuartoPresentationScript.new()
 
 func reset_game() -> void:
 	_qto_reset()
@@ -159,35 +161,30 @@ func _qto_is_local_actor() -> bool:
 	return app._is_my_turn()
 
 func _qto_tap(p: Vector2) -> void:
+	_qto_presentation.handle_tap(app, self, p)
+
+func _qto_handle_board_tap(cell: Vector2i) -> void:
 	if qto_game_over or not _qto_is_local_actor() or qto_phase != 1:
 		return
-	var origin: Vector2 = _qto_board_origin()
-	var cell_size: float = app.QUARTO_CELL
-	var gap: float = app.QUARTO_GAP
-	for y in range(4):
-		for x in range(4):
-			var rect := Rect2(origin.x + x * (cell_size + gap), origin.y + y * (cell_size + gap), cell_size, cell_size)
-			if not rect.has_point(p):
-				continue
-			if app._net_on():
-				app._send_game_action("_rpc_quarto_place", [app.local_seat, x, y])
-			elif not _qto_place(x, y, qto_turn):
-				app._show_toast("این خانه در دسترس نیست.")
-			return
-	app._show_toast("یک خانه‌ی داخل صفحه را انتخاب کنید.")
+	if cell.x < 0 or cell.x >= 4 or cell.y < 0 or cell.y >= 4:
+		app._show_toast("یک خانه‌ی داخل صفحه را انتخاب کنید.")
+		return
+	if app._net_on():
+		app._send_game_action("_rpc_quarto_place", [app.local_seat, cell.x, cell.y])
+	elif not _qto_place(cell.x, cell.y, qto_turn):
+		app._show_toast("این خانه در دسترس نیست.")
 
 func _qto_board_origin() -> Vector2:
-	return Vector2((app.VIEW_W - (app.QUARTO_CELL * 4.0 + app.QUARTO_GAP * 3.0)) * 0.5, app.QUARTO_ORIGIN_Y)
+	return _qto_presentation.board_origin(app)
+
+func _qto_piece_rect(piece: int) -> Rect2:
+	return _qto_presentation.piece_rect(app, piece)
 
 func _qto_me() -> int:
 	return 1 if app.vs_cpu else app.local_seat + 1
 
 func _btns_quarto() -> void:
-	if qto_game_over or qto_phase != 0 or not _qto_is_local_actor():
-		return
-	for piece in qto_remaining:
-		var rect: Rect2 = app._quarto_piece_rect(int(piece))
-		app._add_hit(rect, _qto_pick_piece.bind(int(piece)), "quarto_piece_%d" % int(piece), false, true)
+	_qto_presentation.build_buttons(app, self)
 
 func _qto_cpu_step() -> void:
 	if qto_game_over or qto_turn != 2 or not app.vs_cpu:
@@ -204,3 +201,7 @@ func _qto_cpu_step() -> void:
 func _qto_difficulty_name() -> String:
 	var labels: Array[String] = ["خیلی آسان", "آسان", "متوسط", "سخت", "استاد", "استادتمام"]
 	return labels[clampi(qto_difficulty, 1, 6) - 1]
+
+
+func _draw_quarto() -> void:
+	_qto_presentation.render(app, self)

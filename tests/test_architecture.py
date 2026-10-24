@@ -49,7 +49,8 @@ def test_quoridor_uses_two_edge_walls_and_supports_four_player_hotseat() -> None
     catalog = (project_root / "core" / "game_catalog.gd").read_text(encoding="utf-8")
     assert "quo_pawns = [Vector2i(4, 0), Vector2i(8, 4), Vector2i(4, 8), Vector2i(0, 4)]" in rules
     assert "quo_walls_left = [5, 5, 5, 5]" in rules
-    assert "cell * 2 - 6" in rules
+    presentation = (project_root / "games" / "quoridor" / "presentation.gd").read_text(encoding="utf-8")
+    assert "cell * 2 - 6" in presentation
     assert 'quo_walls.has("v%d,%d" % [boundary_x, from.y - 1])' in rules
     assert 'quo_walls.has("h%d,%d" % [from.x - 1, boundary_y])' in rules
     assert "func _quo_wall_geometry_clear(" in rules
@@ -167,10 +168,11 @@ def test_pentago_and_domino_difficulty_selectors_reach_their_ai_and_hud() -> Non
     assert "if dom_difficulty <= 1" in domino
 
     # In-game labels make the effective selected profile visible to the player.
-    # Domino rendering was moved to its presentation adapter, so the HUD reference belongs there.
+    # Game HUD drawing is delegated to presentation adapters.
+    pentago_presentation = (project_root / "games" / "pentago" / "presentation.gd").read_text(encoding="utf-8")
     domino_presentation = (project_root / "games" / "domino" / "presentation.gd").read_text(encoding="utf-8")
     assert "func _draw_ai_difficulty_chip(level: int) -> void:" in main
-    assert "app._draw_ai_difficulty_chip(pent_difficulty)" in pentago
+    assert "app._draw_ai_difficulty_chip(game.pent_difficulty)" in pentago_presentation
     assert "app._draw_ai_difficulty_chip(game.dom_difficulty)" in domino_presentation
 
 
@@ -179,6 +181,8 @@ def test_pasoor_and_hokm_difficulty_profiles_reach_ai_and_hud() -> None:
     main = (project_root / "main.gd").read_text(encoding="utf-8")
     pasoor = (project_root / "games" / "pasoor" / "rules.gd").read_text(encoding="utf-8")
     hokm = (project_root / "games" / "hokm" / "rules.gd").read_text(encoding="utf-8")
+    pasoor_presentation = (project_root / "games" / "pasoor" / "presentation.gd").read_text(encoding="utf-8")
+    hokm_presentation = (project_root / "games" / "hokm" / "presentation.gd").read_text(encoding="utf-8")
 
     for game_id, setter, profile_var in (("pasoor", "_set_pasoor_difficulty", "pas_difficulty"),
                                          ("hokm", "_set_hokm_difficulty", "hokm_difficulty")):
@@ -186,7 +190,7 @@ def test_pasoor_and_hokm_difficulty_profiles_reach_ai_and_hud() -> None:
         assert f'"{game_id}_difficulty_%d"' in MODE_SCREEN_PATH.read_text(encoding="utf-8")
         assert f"host.{setter}.bind(i + 1)" in MODE_SCREEN_PATH.read_text(encoding="utf-8")
         assert f'_game_modules["{game_id}"].{profile_var} = clampi(level, 1, 6)' in main
-        assert f"app._draw_ai_difficulty_chip({profile_var})" in (pasoor if game_id == "pasoor" else hokm)
+        assert f"app._draw_ai_difficulty_chip(game.{profile_var})" in (pasoor_presentation if game_id == "pasoor" else hokm_presentation)
 
     # Four Cards evaluates captures, card points, sweeps, and exposed table risk.
     assert "func _pas_exposure_cost(card: Dictionary) -> float:" in pasoor
@@ -213,10 +217,11 @@ def test_gobblet_has_four_piece_sizes_in_rules_and_ui() -> None:
     assert "gob_hand = [[3, 3, 3, 3], [3, 3, 3, 3]]" in gobblet
     assert "for size in [4, 3, 2, 1]:" in gobblet
     assert "func _gob_hand_rect(index: int) -> Rect2:" in gobblet
-    assert gobblet.count("for s in range(4):") >= 3
-    assert '["کوچک", "متوسط", "بزرگ", "خیلی بزرگ"]' in gobblet
+    gobblet_presentation = (project_root / "games" / "gobblet" / "presentation.gd").read_text(encoding="utf-8")
+    assert gobblet_presentation.count("for s in range(4):") >= 2
+    assert '["کوچک", "متوسط", "بزرگ", "خیلی بزرگ"]' in gobblet_presentation
     assert "size < 1 or size > 4" in gobblet
-    assert "خیلی بزرگ" in gobblet
+    assert "خیلی بزرگ" in gobblet_presentation
 
 
 
@@ -275,7 +280,8 @@ def test_gobblet_and_abalone_have_six_ai_difficulty_levels():
         assert f"host.{setter}.bind(i + 1)" in MODE_SCREEN_PATH.read_text(encoding="utf-8")
         assert f'_game_modules["{game_id}"].{field} = clampi(level, 1, 6)' in main
         assert f"var {field}: int = 3" in rules
-        assert (f"app._draw_ai_difficulty_chip({field})" in rules) or (f"app._draw_ai_difficulty_chip_at({field}" in rules)
+        presentation = (project_root / "games" / game_id / "presentation.gd").read_text(encoding="utf-8")
+        assert (f"app._draw_ai_difficulty_chip(game.{field})" in presentation) or (f"app._draw_ai_difficulty_chip_at(game.{field}" in presentation)
 
     assert "func _gob_generate_actions(player: int) -> Array:" in gobblet
     assert "if level == 1:" in gobblet and "if level >= 5:" in gobblet
@@ -330,4 +336,5 @@ def test_quarto_piece_renderer_distinguishes_all_four_standard_attributes() -> N
         assert token in fn
     assert "(30.0 if tall else 17.0)" in fn
     assert "if round_piece:" in fn and "if hollow_piece:" in fn
-    assert "_draw_quarto_piece(Vector2(pr.position.x + 26, pr.get_center().y), piece, 0.80" in main
+    quarto_presentation = (project_root / "games" / "quarto" / "presentation.gd").read_text(encoding="utf-8")
+    assert "app._draw_quarto_piece(Vector2(rect.position.x + 26, rect.get_center().y), piece, 0.80" in quarto_presentation

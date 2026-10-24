@@ -1,4 +1,6 @@
 extends "res://core/game_module.gd"
+const PasoorPresentationScript = preload("res://games/pasoor/presentation.gd")
+var _pas_presentation = PasoorPresentationScript.new()
 ## Rule engine and authoritative state for pasoor.
 
 # ---------- Game-owned state ----------
@@ -363,20 +365,10 @@ func _pas_my_turn() -> bool:
 	return pas_turn == _pas_me() and not pas_game_over
 
 func _pas_hand_rects() -> Array:
-	return app._fan_rects(pas_hands[_pas_me()].size(), 66.0, 96.0, 776.0, 500.0, 8.0)
+	return _pas_presentation.hand_rects(app, self)
 
 func _pas_table_rects() -> Array:
-	var n: int = pas_table.size()
-	var res: Array = []
-	if n <= 14:
-		var r1: int = mini(7, n)
-		var a: Array = app._fan_rects(r1, 56.0, 80.0, 244.0, 480.0, 6.0)
-		res.append_array(a)
-		if n > 7:
-			res.append_array(app._fan_rects(n - 7, 56.0, 80.0, 334.0, 480.0, 6.0))
-	else:
-		res = app._fan_rects(n, 56.0, 80.0, 286.0, 480.0, 6.0)
-	return res
+	return _pas_presentation.table_rects(app, self)
 
 func _pas_confirm() -> void:
 	var me: int = _pas_me()
@@ -390,78 +382,21 @@ func _pas_confirm() -> void:
 		_pas_play(me, i, cap)
 
 func _pas_tap(p: Vector2) -> void:
+	_pas_presentation.handle_tap(app, self, p)
+
+func _pas_handle_hand_index(index: int) -> void:
 	if not _pas_my_turn():
 		return
-	var i: int = app._fan_hit(_pas_hand_rects(), p)
-	if i < 0:
+	if index < 0:
 		pas_selected = -1
 		return
-	if pas_selected == i:
+	if pas_selected == index:
 		_pas_confirm()
 	else:
-		pas_selected = i
+		pas_selected = index
 
 func _btns_pasoor() -> void:
-	if not _pas_my_turn() or pas_selected < 0:
-		return
-	var me: int = _pas_me()
-	if pas_selected >= pas_hands[me].size():
-		return
-	var card: Dictionary = pas_hands[me][pas_selected]
-	var cap: Array = _pas_find_captures(card)
-	if cap.size() > 0:
-		var best: Array = _pas_best_capture(card)
-		app._add_btn(Rect2(60, 710, app.VIEW_W - 120, 54), "گرفتن %s کارت" % app._fa(best.size() + 1), _pas_confirm, true, app.GREEN, "solid", "check", "pas_go")
-	else:
-		app._add_btn(Rect2(60, 710, app.VIEW_W - 120, 54), "گذاشتن روی میز", _pas_confirm, true, app.ACCENT, "solid", "play", "pas_go")
+	_pas_presentation.build_buttons(app, self)
 
 func _draw_pasoor() -> void:
-	var me: int = _pas_me()
-	var opp: int = 1 - me
-	var pa: Dictionary = app._pl("شما", app.BLUE, app._fa(pas_match_scores[me]), pas_turn == me and not pas_game_over, true, "سور: " + app._fa(pas_surs[me]))
-	var pb: Dictionary = app._pl("حریف", app.PINK, app._fa(pas_match_scores[opp]), pas_turn == opp and not pas_game_over, false, "سور: " + app._fa(pas_surs[opp]))
-	if pas_turn == me and not pas_game_over:
-		pa.sub = "نوبت شما"
-	if pas_turn == opp and not pas_game_over:
-		pb.sub = "نوبت حریف"
-	app._draw_hud("پاسور (چهاربرگ)", pa, pb)
-	app._draw_ai_difficulty_chip(pas_difficulty)
-	var orr: Array = app._fan_rects(pas_hands[opp].size(), 40.0, 58.0, 150.0, 300.0, 6.0)
-	for r in orr:
-		app._draw_card_back(r)
-	var info := Rect2(16, 150, 100, 34)
-	app._panel(info, Color(0, 0, 0, 0.3), 17)
-	app._txt_c("دسته: " + app._fa(pas_deck.size()), info, 13, app.TEXT_DIM, true)
-	var felt := Rect2(16, 204, app.VIEW_W - 32, 232)
-	app._panel(felt, Color(0.07, 0.24, 0.20), 26, Color(0.25, 0.65, 0.5, 0.4), 1.5, 18, 6)
-	app._txt_c("میز (" + app._fa(pas_table.size()) + ")", Rect2(felt.position.x, felt.position.y + 4, felt.size.x, 30), 13, Color(1, 1, 1, 0.45), true)
-	var hl: Array = []
-	var me_hand: Array = pas_hands[me]
-	if pas_selected >= 0 and pas_selected < me_hand.size() and _pas_my_turn():
-		hl = _pas_best_capture(me_hand[pas_selected])
-	var trs: Array = _pas_table_rects()
-	for i in trs.size():
-		var r: Rect2 = trs[i]
-		app._draw_card(r, pas_table[i], false, false, i in hl)
-	if pas_table.size() == 0:
-		app._txt_c("میز خالی است", Rect2(felt.position.x, felt.position.y + 80, felt.size.x, 60), 16, Color(1, 1, 1, 0.3))
-	var cap_me := Rect2(16, 446, 240, 30)
-	app._panel(cap_me, Color(app.GREEN.r, app.GREEN.g, app.GREEN.b, 0.12), 15)
-	app._txt_c("کارت‌های گرفته‌شده شما: " + app._fa(pas_captured[me].size()), cap_me, 12, app.GREEN, true)
-	var cap_op := Rect2(app.VIEW_W - 16 - 240, 446, 240, 30)
-	app._panel(cap_op, Color(app.RED.r, app.RED.g, app.RED.b, 0.12), 15)
-	app._txt_c("حریف: " + app._fa(pas_captured[opp].size()), cap_op, 12, app.RED, true)
-	var rects: Array = _pas_hand_rects()
-	var dimmed: bool = false
-	for i in rects.size():
-		var r: Rect2 = rects[i]
-		var sel: bool = (i == pas_selected)
-		if sel:
-			r.position.y -= 20.0
-		app._draw_card(r, me_hand[i], sel, false, false)
-	if not pas_game_over:
-		if _pas_my_turn():
-			if pas_selected < 0:
-				app._hint("یک کارت انتخاب کنید", 740, app.ACCENT)
-		else:
-			app._hint("حریف در حال بازی…", 740, app.TEXT_DIM)
+	_pas_presentation.render(app, self)

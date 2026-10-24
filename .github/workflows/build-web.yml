@@ -163,6 +163,38 @@ jobs:
             exit 1
           fi
 
+      - name: Run Quarto rules regression tests
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          LOG_FILE="/tmp/pendar-quarto-regression.log"
+          godot --headless --path . --script res://tests/godot/test_quarto_rules.gd 2>&1 | tee "$LOG_FILE"
+          if grep -E 'SCRIPT ERROR|Parse Error|Parser Error|QUARTO_RULES_TESTS: .*failures=[1-9][0-9]*' "$LOG_FILE"; then
+            echo "ERROR: Quarto regression tests reported script/runtime errors." >&2
+            exit 1
+          fi
+          if ! grep -E 'QUARTO_RULES_TESTS: checks=[0-9]+, failures=0' "$LOG_FILE"; then
+            echo "ERROR: Quarto regression summary was not found." >&2
+            exit 1
+          fi
+
+      - name: Run Pentago rules regression tests
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          LOG_FILE="/tmp/pendar-pentago-regression.log"
+          godot --headless --path . --script res://tests/godot/test_pentago_rules.gd 2>&1 | tee "$LOG_FILE"
+          if grep -E 'SCRIPT ERROR|Parse Error|Parser Error|PENTAGO_RULES_TESTS: .*failures=[1-9][0-9]*' "$LOG_FILE"; then
+            echo "ERROR: Pentago regression tests reported script/runtime errors." >&2
+            exit 1
+          fi
+          if ! grep -E 'PENTAGO_RULES_TESTS: checks=[0-9]+, failures=0' "$LOG_FILE"; then
+            echo "ERROR: Pentago regression test summary is missing or non-zero." >&2
+            exit 1
+          fi
+
       - name: Smoke-test game startup
         shell: bash
         timeout-minutes: 3
