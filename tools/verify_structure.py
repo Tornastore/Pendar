@@ -748,6 +748,22 @@ for workflow_path in (ROOT / ".github" / "workflows" / "build-web.yml", ROOT / "
     if "Run Quarto rules regression tests" not in workflow_text or "res://tests/godot/test_quarto_rules.gd" not in workflow_text:
         errors.append(f"{workflow_path.relative_to(ROOT)} does not run Quarto rules regression tests")
 
+# Runtime coverage for rule modules that previously only had static/Python checks.
+remaining_runtime_test = ROOT / "tests" / "godot" / "test_remaining_game_rules.gd"
+if not remaining_runtime_test.is_file():
+    errors.append("missing Godot runtime regression suite for remaining game rules")
+else:
+    remaining_test_text = remaining_runtime_test.read_text(encoding="utf-8")
+    for game_id in ("othello", "quoridor", "gobblet", "hokm", "pasoor", "abalone", "blockace"):
+        if f'res://games/{game_id}/rules.gd' not in remaining_test_text:
+            errors.append(f"remaining Godot runtime suite does not preload {game_id} rules")
+    if "REMAINING_RULES_TESTS: checks=%d, failures=%d" not in remaining_test_text:
+        errors.append("remaining Godot runtime suite is missing its machine-readable summary")
+for workflow_path in (ROOT / ".github" / "workflows" / "build-web.yml", ROOT / ".github" / "workflows" / "deploy-web.yml"):
+    workflow_text = workflow_path.read_text(encoding="utf-8")
+    if "Run remaining game rules regression tests" not in workflow_text or "res://tests/godot/test_remaining_game_rules.gd" not in workflow_text:
+        errors.append(f"{workflow_path.relative_to(ROOT)} does not run remaining game rule regressions")
+
 if errors:
     print("STRUCTURE CHECK FAILED")
     for error in errors:

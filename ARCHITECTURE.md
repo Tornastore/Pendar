@@ -221,3 +221,8 @@ The online matchmaking and LAN lobby views are delegated to `ui/screens/online_s
 - `games/quarto/presentation.gd` owns board/piece-palette layout, pointer-to-cell mapping, selection buttons and game rendering. Piece choice, legal placement, Quarto detection, terminal state, CPU planning and RPC validation remain in `rules.gd` / `ai.gd`.
 - The controller-facing entry points remain compatibility wrappers, so `main.gd` keeps the same dispatch contract. The presenters read game state and dispatch actions to the rules module; they do not directly mutate authoritative game state.
 - `tests/test_other_game_presentations.py`, `tests/test_quarto_presentation.py`, `tools/verify_structure.py`, and the headless Quarto regression suite validate the new boundaries. Static tests do not replace a full Godot 4.3 runtime and UI play-through.
+
+
+## Runtime regression coverage for remaining rule engines
+
+`tests/godot/test_remaining_game_rules.gd` runs under Godot 4.3 in both Web build and deploy workflows. It covers Othello opening/capture and score transitions; Quoridor legal pawn moves, wall geometry, and path preservation; Gobblet size/stack rules and four-in-a-row completion; Hokm follow-suit and trick scoring; Pasoor sum-to-eleven capture selection; Abalone board geometry and legal group movement; and Blockace inventory, required first placement, and piece consumption. The suite uses a small mock host and does not exercise rendering, network sessions, or full browser interaction; those remain separate integration checks.

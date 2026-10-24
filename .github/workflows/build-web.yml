@@ -195,6 +195,22 @@ jobs:
             exit 1
           fi
 
+      - name: Run remaining game rules regression tests
+        shell: bash
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          LOG_FILE="/tmp/pendar-remaining-rules-regression.log"
+          godot --headless --path . --script res://tests/godot/test_remaining_game_rules.gd 2>&1 | tee "$LOG_FILE"
+          if grep -E 'SCRIPT ERROR|Parse Error|Parser Error|REMAINING_RULES_TESTS: .*failures=[1-9][0-9]*' "$LOG_FILE"; then
+            echo "ERROR: Remaining game rules regression tests reported script/runtime errors." >&2
+            exit 1
+          fi
+          if ! grep -E 'REMAINING_RULES_TESTS: checks=[0-9]+, failures=0' "$LOG_FILE"; then
+            echo "ERROR: Remaining game rules regression test summary is missing or non-zero." >&2
+            exit 1
+          fi
+
       - name: Smoke-test game startup
         shell: bash
         timeout-minutes: 3
