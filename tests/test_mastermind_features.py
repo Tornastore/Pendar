@@ -5,6 +5,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 RULES = (ROOT / "games/mastermind/rules.gd").read_text(encoding="utf-8")
+PRESENTATION = (ROOT / "games/mastermind/presentation.gd").read_text(encoding="utf-8")
 MAIN = (ROOT / "main.gd").read_text(encoding="utf-8")
 CATALOG = (ROOT / "core/game_catalog.gd").read_text(encoding="utf-8")
 
@@ -30,14 +31,14 @@ class MastermindFeatureTests(unittest.TestCase):
         self.assertIn('"net": true', CATALOG)
 
     def test_feedback_markers_align_under_each_guess_slot(self):
-        self.assertIn('var mark := Vector2(peg.x, y + 14.0)', RULES)
-        self.assertIn('var state_value: int = int(feedback[i])', RULES)
+        self.assertIn('var mark := Vector2(peg.x, y + 14.0)', PRESENTATION)
+        self.assertIn('var state_value: int = int(feedback[i])', PRESENTATION)
         self.assertIn('"f": feedback', RULES)
 
     def test_render_feedback_branches_are_aligned(self):
-        lines = RULES.splitlines()
+        lines = PRESENTATION.splitlines()
         if_line = next(i for i, line in enumerate(lines) if line.strip() == "if gi < used:")
-        elif_line = next(i for i, line in enumerate(lines) if line.strip() == "elif active and mm_filled[i]:")
+        elif_line = next(i for i, line in enumerate(lines) if line.strip() == "elif active and game.mm_filled[i]:")
         feedback_if = next(i for i, line in enumerate(lines) if line.strip() == "if gi < used:" and i > elif_line)
         indent = lambda line: len(line) - len(line.lstrip("\t"))
         self.assertEqual(indent(lines[if_line]), indent(lines[elif_line]))
@@ -52,7 +53,14 @@ class MastermindFeatureTests(unittest.TestCase):
                 stripped.startswith("draw_circle("),
                 f"Bare draw_circle call at games/mastermind/rules.gd:{line_no}; use app.draw_circle().",
             )
-        self.assertEqual(RULES.count("app.draw_circle("), 5)
+        for line_no, line in enumerate(PRESENTATION.splitlines(), 1):
+            stripped = line.lstrip("\t ")
+            self.assertFalse(
+                stripped.startswith("draw_circle("),
+                f"Bare draw_circle call at games/mastermind/presentation.gd:{line_no}; use app.draw_circle().",
+            )
+        self.assertNotIn("app.draw_circle(", RULES)
+        self.assertEqual(PRESENTATION.count("app.draw_circle("), 5)
 
 
     def test_race_rank_remains_live_until_every_player_finishes(self):
@@ -64,15 +72,15 @@ class MastermindFeatureTests(unittest.TestCase):
         self.assertIn('final_secret', MAIN)
 
     def test_public_mastermind_sidebar_does_not_expose_other_guess_rows(self):
-        sidebar = RULES[RULES.index('func _draw_mm_online_sidebar'):RULES.index('func _mm_online_feedback')]
+        sidebar = PRESENTATION[PRESENTATION.index('func render_online_sidebar'):]
         self.assertIn('latest_black', sidebar)
         self.assertIn('progress_ratio', sidebar)
         self.assertNotIn('attempts_used', sidebar)
         self.assertNotIn('entry.get(\"guess\"', sidebar)
 
     def test_guess_slots_and_color_controls_are_dynamic(self):
-        self.assertIn("for i in range(mm_code_len):", RULES)
-        self.assertIn("for i in range(mm_color_count):", RULES)
+        self.assertIn("for i in range(game.mm_code_len):", PRESENTATION)
+        self.assertIn("for i in range(game.mm_color_count):", PRESENTATION)
         self.assertIn("g.size() != mm_code_len", RULES)
         self.assertIn("int(colour) >= mm_color_count", RULES)
 

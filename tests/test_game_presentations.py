@@ -83,3 +83,17 @@ def test_chess_presentation_never_mutates_authoritative_game_state():
     assert "game.chess_board[to.y][to.x] =" not in presentation
     assert re.search(r"^\s*game\.chess_turn\s*=(?!=)", presentation, re.M) is None
     assert "func _chess_make_move(" not in presentation
+
+
+def test_domino_rendering_and_hand_hit_testing_are_separated_from_rules():
+    rules = (ROOT / "games" / "domino" / "rules.gd").read_text(encoding="utf-8")
+    presentation = (ROOT / "games" / "domino" / "presentation.gd").read_text(encoding="utf-8")
+
+    assert 'preload("res://games/domino/presentation.gd")' in rules
+    for method in ("hand_rects", "handle_tap", "build_buttons", "render"):
+        assert re.search(rf"^func {method}\(", presentation, re.M)
+    assert "func _dom_select(index: int) -> void:" in rules
+    assert "game._dom_select(index)" in presentation
+    assert "app._fan_hit(rects, point)" in presentation
+    assert "app._draw_dom_tile(" in presentation
+    assert "app._draw_dom_tile(" not in rules

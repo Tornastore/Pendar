@@ -7,3 +7,11 @@
 - سطح ۱ انتخاب تصادفی از میان شاخه‌های قانونی با رعایت بیشینه‌ی تعداد تاس قابل استفاده دارد؛ سطح ۲ از امتیازدهی حریصانه با کمی تنوع استفاده می‌کند؛ سطح‌های ۳ تا ۶ پیشروی مهره‌ها، زدن مهره‌ی حریف، تک‌مهره‌های در معرض خطر، ساخت خانه‌های بسته، pip race و در سطوح قوی‌تر ساختن prime را بیشتر لحاظ می‌کنند.
 - هوش مصنوعی باید همیشه بیشترین تعداد تاس قانونی را مصرف کند و قانون تاس بزرگ‌تر را رعایت کند؛ کیفیت موقعیت فقط بعد از رعایت این الزام‌ها ملاک انتخاب است.
 - منطق قوانین در `rules.gd` و جست‌وجو/ارزیابی هوش در `ai.gd` نگهداری می‌شوند.
+
+
+## Separation and regression coverage
+
+- `rules.gd` remains the authoritative owner of checker state, dice consumption, legal-turn sequencing, bar entry, hits and bearing off.
+- `presentation.gd` owns board rendering and pointer-to-point mapping. Point hit-testing matches the visible top (`y=178..332`) and bottom (`y=508..662`) point bands; only the central bar channel maps to `-1`.
+- AI position evaluation discounts on-board hit threats while the relevant player still has checkers forced to enter from the bar, and rewards made points that block an opponent's bar entry. The rules engine still controls the legal move set and mandatory dice-use rule.
+- `tests/godot/test_backgammon_rules.gd` covers initial checker counts, forced bar entry, blocked points, hits, bearing off, doubles, mandatory dice usage, screen hit-testing, end-turn guarding and AI state safety. It runs as part of both web build and deploy workflows.

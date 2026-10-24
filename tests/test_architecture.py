@@ -167,9 +167,11 @@ def test_pentago_and_domino_difficulty_selectors_reach_their_ai_and_hud() -> Non
     assert "if dom_difficulty <= 1" in domino
 
     # In-game labels make the effective selected profile visible to the player.
+    # Domino rendering was moved to its presentation adapter, so the HUD reference belongs there.
+    domino_presentation = (project_root / "games" / "domino" / "presentation.gd").read_text(encoding="utf-8")
     assert "func _draw_ai_difficulty_chip(level: int) -> void:" in main
     assert "app._draw_ai_difficulty_chip(pent_difficulty)" in pentago
-    assert "app._draw_ai_difficulty_chip(dom_difficulty)" in domino
+    assert "app._draw_ai_difficulty_chip(game.dom_difficulty)" in domino_presentation
 
 
 def test_pasoor_and_hokm_difficulty_profiles_reach_ai_and_hud() -> None:

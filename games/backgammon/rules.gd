@@ -2,6 +2,9 @@ extends "res://core/game_module.gd"
 ## Rule engine and authoritative state for backgammon.
 
 const BackgammonAIScript = preload("res://games/backgammon/ai.gd")
+const BackgammonPresentationScript = preload("res://games/backgammon/presentation.gd")
+
+var _presentation = BackgammonPresentationScript.new()
 
 # ---------- Game-owned state ----------
 var bg_difficulty: int = 3
@@ -265,7 +268,8 @@ func _bg_cpu_apply_source(source: int, die: int) -> void:
 	_bg_apply_board_move(1, {"source": source, "target": target, "die": die})
 
 func _bg_pt_x(col: int) -> float:
-	return 40.0 + col * 36.0 + (24.0 if col >= 6 else 0.0)
+	# Compatibility wrapper; board geometry belongs to the presentation module.
+	return _presentation.point_x(col)
 
 func _bg_me() -> int:
 	return app._my_seat()
@@ -349,21 +353,8 @@ func _bg_step_apply(d1: int, d2: int) -> void:
 		_bg_request_end_turn()
 
 func _bg_point_from_tap(p: Vector2) -> int:
-	# The centre channel contains the bar; lower-row points are visually mirrored so
-	# adjacent point numbers are adjacent around the perimeter, as on a standard board.
-	if p.x >= 244.0 and p.x <= 280.0 and p.y >= 338.0 and p.y <= 500.0:
-		return -1
-	if p.y < 338.0 or p.y > 500.0:
-		return -2
-	var col: int = -1
-	for candidate in range(12):
-		var x0: float = _bg_pt_x(candidate) - 2.0
-		if p.x >= x0 and p.x <= x0 + 36.0:
-			col = candidate
-			break
-	if col < 0:
-		return -2
-	return col if p.y < 420.0 else 23 - col
+	# Keep the old entry point for input dispatch while keeping geometry out of rules.
+	return _presentation.point_from_tap(p)
 
 func _bg_tap(p: Vector2) -> void:
 	if bg_game_over or app._ov_active() or (app.vs_cpu and bg_turn == 1):
@@ -445,69 +436,5 @@ func _btns_backgammon() -> void:
 		app._add_btn(Rect2(110, 714, app.VIEW_W - 220, 58), label, _bg_step, mine and legal.is_empty(), app.GREEN if legal.is_empty() else app.TEXT_DIM, "solid" if legal.is_empty() else "ghost", "check" if legal.is_empty() else "mouse-pointer", "bg_step")
 
 func _draw_backgammon() -> void:
-	var me: int = _bg_me()
-	var pa: Dictionary = app._pl("شما", Color(0.96, 0.93, 0.84) if me == 0 else Color(0.12, 0.13, 0.18), app._fa(bg_off[me]), bg_turn == me and not bg_game_over, true, "خارج‌شده", 1 if me == 0 else 0)
-	var opponent_name: String = "CPU" if app.vs_cpu else "حریف"
-	var pb: Dictionary = app._pl(opponent_name, Color(0.12, 0.13, 0.18) if me == 0 else Color(0.96, 0.93, 0.84), app._fa(bg_off[1 - me]), bg_turn == 1 - me and not bg_game_over, false, "خارج‌شده", 0 if me == 0 else 1)
-	if pa.active:
-		pa.sub = "نوبت شما"
-	var title: String = "تخته‌نرد"
-	if app.vs_cpu:
-		var levels: Array[String] = ["خیلی آسان", "آسان", "متوسط", "سخت", "استاد", "استادتمام"]
-		title += " · " + levels[clampi(bg_difficulty, 1, 6) - 1]
-	app._draw_hud(title, pa, pb)
-	var board := Rect2(25, 170, 490, 500)
-	app._panel(board, Color(0.30, 0.18, 0.10), 22, Color(0.8, 0.55, 0.3, 0.5), 2.0, 20, 8)
-	app._panel(board.grow(-8), Color(0.12, 0.30, 0.24), 16)
-	app._panel(Rect2(_bg_pt_x(5) + 36, 178, 24, 484), Color(0.30, 0.18, 0.10), 6)
-	var selected_targets: Dictionary = {}
-	if bg_sel != -2:
-		for move in _bg_turn_legal_moves(bg_turn):
-			if int(move.source) == bg_sel and int(move.target) >= 0:
-				selected_targets[int(move.target)] = true
-	for i in range(24):
-		var top: bool = i < 12
-		var col_i: int = i if top else 23 - i
-		var x: float = _bg_pt_x(col_i)
-		var y0: float = 180.0 if top else 660.0
-		var tipy: float = y0 + (150.0 if top else -150.0)
-		var tcol: Color = Color(0.92, 0.70, 0.42) if (col_i + (0 if top else 1)) % 2 == 0 else Color(0.62, 0.22, 0.22)
-		app.draw_colored_polygon(PackedVector2Array([Vector2(x, y0), Vector2(x + 34, y0), Vector2(x + 17, tipy)]), tcol)
-		var n: int = int(bg_points[i])
-		var cnt: int = absi(n)
-		for k in range(mini(cnt, 5)):
-			var cy: float = (y0 + 18.0 + k * 27.0) if top else (y0 - 18.0 - k * 27.0)
-			app._draw_disc(Vector2(x + 17, cy), 13.5, n > 0)
-		if cnt > 5:
-			var ly: float = (y0 + 18.0 + 4 * 27.0) if top else (y0 - 18.0 - 4 * 27.0)
-			app._txt_c(app._fa(cnt), Rect2(x, ly - 14, 34, 28), 14, app.TEXT if n < 0 else Color(0.1, 0.1, 0.15), true)
-		var triangle_center: Vector2 = Vector2(x + 17.0, tipy - 8.0 if top else tipy + 8.0)
-		if i == bg_sel:
-			app._ring(triangle_center, 15.0, app.ACCENT, 2.5)
-		if selected_targets.has(i):
-			app.draw_circle(triangle_center, 7.0, Color(app.GREEN.r, app.GREEN.g, app.GREEN.b, 0.78))
-			app._ring(triangle_center, 11.0, app.GREEN, 1.7)
-	# Bar checkers. Click the central channel to select a checker there when required.
-	for player in range(2):
-		for k in range(mini(int(bg_bar[player]), 5)):
-			var center := Vector2(_bg_pt_x(5) + 48.0, 400.0 + (float(player) * 2.0 - 1.0) * (20.0 + float(k) * 20.0))
-			app._draw_disc(center, 11.0, player == 0)
-		if bg_sel == -1 and int(bg_bar[bg_turn]) > 0:
-			app._ring(Vector2(_bg_pt_x(5) + 48.0, 400.0 + (float(bg_turn) * 2.0 - 1.0) * 20.0), 15.0, app.ACCENT, 2.0)
-	# Dice and remaining playable values.
-	for i in range(2):
-		var dr := Rect2(_bg_pt_x(6) + 20 + i * 54 - 28, 396, 44, 44)
-		var used: bool = bg_moves_left.is_empty()
-		app._draw_dice_face(dr, int(bg_dice[i]), used)
-	var rem: String = "—"
-	if not bg_moves_left.is_empty():
-		var parts: PackedStringArray = []
-		for value in bg_moves_left:
-			parts.append(app._fa(int(value)))
-		rem = " ، ".join(parts)
-	app._txt_c("تاس‌های باقی: " + rem, Rect2(0, 678, app.VIEW_W, 26), 14, app.TEXT_DIM, true)
-	var help: String = "مهره‌ی خود را انتخاب کنید، سپس مقصد را بزنید" if bg_sel == -2 else "خانه‌های سبز مقصدهای مجازند"
-	if int(bg_bar[bg_turn]) > 0 and not (app.vs_cpu and bg_turn == 1):
-		help = "ابتدا مهره‌ی روی بار را وارد کنید"
-	app._txt_c(help, Rect2(16, 682, app.VIEW_W - 32, 24), 11, app.ACCENT if bg_sel != -2 else app.TEXT_DIM, false)
-
+	# Keep main.gd's existing dispatch stable; rendering lives in presentation.gd.
+	_presentation.render(app, self)

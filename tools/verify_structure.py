@@ -427,6 +427,40 @@ for workflow_path in (ROOT / ".github" / "workflows" / "build-web.yml", ROOT / "
     if "Run chess rules regression tests" not in workflow_text or "res://tests/godot/test_chess_rules.gd" not in workflow_text:
         errors.append(f"{workflow_path.relative_to(ROOT)} does not run Godot chess regression tests")
 
+# Domino display and pointer mapping are kept outside authoritative move rules.
+domino_rules_path = ROOT / "games" / "domino" / "rules.gd"
+domino_presentation_path = ROOT / "games" / "domino" / "presentation.gd"
+if not domino_presentation_path.is_file():
+    errors.append("missing Domino presentation module: games/domino/presentation.gd")
+else:
+    domino_rules = domino_rules_path.read_text(encoding="utf-8")
+    domino_presentation = domino_presentation_path.read_text(encoding="utf-8")
+    if 'preload("res://games/domino/presentation.gd")' not in domino_rules:
+        errors.append("Domino rules module does not preload its presentation module")
+    if "var _domino_presentation = DominoPresentationScript.new()" not in domino_rules:
+        errors.append("Domino rules module does not instantiate DominoPresentation")
+    for method in ("hand_rects", "handle_tap", "build_buttons", "render"):
+        if not re.search(rf"^func\s+{method}\(", domino_presentation, re.M):
+            errors.append(f"DominoPresentation is missing {method}()")
+    for wrapper in (
+        "return _domino_presentation.hand_rects(app, self)",
+        "_domino_presentation.handle_tap(app, self, p)",
+        "_domino_presentation.build_buttons(app, self)",
+        "_domino_presentation.render(app, self)",
+    ):
+        if wrapper not in domino_rules:
+            errors.append(f"Domino compatibility wrapper missing: {wrapper}")
+    if "app._draw_dom_tile(" in domino_rules or "app._draw_hud(" in domino_rules:
+        errors.append("Domino drawing must be delegated to DominoPresentation")
+    domino_app_calls = {name for name in re.findall(r"\bapp\.(\w+)\s*\(", domino_presentation) if name.startswith("_")}
+    missing_domino_app_calls = sorted(domino_app_calls - main_funcs)
+    if missing_domino_app_calls:
+        errors.append(f"Domino presentation calls missing app methods: {missing_domino_app_calls}")
+    if "game._dom_select(index)" not in domino_presentation:
+        errors.append("Domino pointer mapping must delegate selection to authoritative rules")
+    if re.search(r"^\s*game\.(?:dom_hands|dom_boneyard|dom_chain|dom_left|dom_right|dom_turn|dom_game_over|dom_winner|dom_selected|dom_scores)\s*=(?!=)", domino_presentation, re.M):
+        errors.append("Domino presentation must not mutate authoritative game state")
+
 # Othello is the first pilot for separating game presentation/input from authoritative rules.
 othello_rules_path = ROOT / "games" / "othello" / "rules.gd"
 othello_presentation_path = ROOT / "games" / "othello" / "presentation.gd"
@@ -458,6 +492,134 @@ else:
     if "app._panel(" not in othello_presentation or "app._draw_hud(" not in othello_presentation:
         errors.append("Othello presentation is missing expected drawing delegation")
 
+# UNO drawing/buttons are presentation-only; rule actions and state transitions stay in UnoRules.
+uno_rules_path = ROOT / "games" / "uno" / "rules.gd"
+uno_presentation_path = ROOT / "games" / "uno" / "presentation.gd"
+if not uno_presentation_path.is_file():
+    errors.append("missing UNO presentation module: games/uno/presentation.gd")
+else:
+    uno_rules = uno_rules_path.read_text(encoding="utf-8")
+    uno_presentation = uno_presentation_path.read_text(encoding="utf-8")
+    if 'preload("res://games/uno/presentation.gd")' not in uno_rules:
+        errors.append("UNO rules module does not preload its presentation module")
+    if "var _uno_presentation = UnoPresentationScript.new()" not in uno_rules:
+        errors.append("UNO rules module does not instantiate UnoPresentation")
+    for method in ("handle_tap", "build_buttons", "draw_card_visual", "render"):
+        if not re.search(rf"^func\s+{method}\(", uno_presentation, re.M):
+            errors.append(f"UnoPresentation is missing {method}()")
+    for wrapper in (
+        "_uno_presentation.build_buttons(app, self)",
+        "_uno_presentation.handle_tap(app, self, p)",
+        "_uno_presentation.draw_card_visual(app, self, r, card, selected, small)",
+        "_uno_presentation.render(app, self)",
+    ):
+        if wrapper not in uno_rules:
+            errors.append(f"UNO compatibility wrapper missing: {wrapper}")
+    if any(token in uno_rules for token in ("app._draw_hud(", "app._panel(", "app._txt_c(", "app._add_btn(")):
+        errors.append("UNO drawing/button construction must be delegated to UnoPresentation")
+    if "game._uno_select_card.bind(index)" not in uno_presentation or "game._uno_submit_play(" not in uno_presentation:
+        errors.append("UNO presentation must bind buttons to existing authoritative action methods")
+    uno_app_calls = {name for name in re.findall(r"\bapp\.(\w+)\s*\(", uno_presentation) if name.startswith("_")}
+    missing_uno_app_calls = sorted(uno_app_calls - main_funcs)
+    if missing_uno_app_calls:
+        errors.append(f"UNO presentation calls missing app methods: {missing_uno_app_calls}")
+    forbidden_uno_state = (
+        "uno_hands", "uno_draw_pile", "uno_discard_pile", "uno_scores", "uno_turn",
+        "uno_direction", "uno_current_color", "uno_game_over", "uno_round_over",
+        "uno_winner", "uno_round_winner", "uno_challenge_available", "uno_challenge_target",
+        "uno_last_wild4_actor", "uno_last_wild4_illegal", "uno_pending_round_winner",
+        "uno_catch_seat", "uno_drawn_card_index",
+    )
+    forbidden_pattern = r"^\s*game\.(?:" + "|".join(forbidden_uno_state) + r")\s*=(?!=)"
+    if re.search(forbidden_pattern, uno_presentation, re.M):
+        errors.append("UNO presentation must not mutate authoritative round state")
+    if "if game.uno_drawn_card_index < 0:" not in uno_presentation:
+        errors.append("UNO UI must not expose a second draw after a playable card was drawn")
+if "func _uno_is_wild4_legal(seat: int, card_index: int = -1) -> bool:" not in uno_rules_path.read_text(encoding="utf-8"):
+    errors.append("UNO Wild Draw Four legality/challenge check is missing")
+if "or uno_drawn_card_index >= 0" not in uno_rules_path.read_text(encoding="utf-8"):
+    errors.append("UNO rules must reject a second draw in the same turn")
+for workflow_path in (ROOT / ".github" / "workflows" / "build-web.yml", ROOT / ".github" / "workflows" / "deploy-web.yml"):
+    workflow_text = workflow_path.read_text(encoding="utf-8")
+    if "Run UNO rules regression tests" not in workflow_text or "res://tests/godot/test_uno_rules.gd" not in workflow_text:
+        errors.append(f"{workflow_path.relative_to(ROOT)} does not run UNO rules regression tests")
+
+# Mastermind is a presentation module while state, the secret and race transitions remain in rules.gd.
+mastermind_rules_path = ROOT / "games" / "mastermind" / "rules.gd"
+mastermind_presentation_path = ROOT / "games" / "mastermind" / "presentation.gd"
+if not mastermind_presentation_path.is_file():
+    errors.append("missing Mastermind presentation module: games/mastermind/presentation.gd")
+else:
+    mastermind_rules = mastermind_rules_path.read_text(encoding="utf-8")
+    mastermind_presentation = mastermind_presentation_path.read_text(encoding="utf-8")
+    if 'preload("res://games/mastermind/presentation.gd")' not in mastermind_rules:
+        errors.append("Mastermind rules module does not preload its presentation module")
+    if "var _mm_presentation = MastermindPresentationScript.new()" not in mastermind_rules:
+        errors.append("Mastermind rules module does not instantiate its presenter")
+    for method in ("slot_pos", "color_pos", "build_buttons", "render", "render_online_sidebar"):
+        if not re.search(rf"^func\s+{method}\(", mastermind_presentation, re.M):
+            errors.append(f"MastermindPresentation is missing {method}()")
+    for wrapper in (
+        "return _mm_presentation.slot_pos(app, self, i)",
+        "return _mm_presentation.color_pos(app, self, i)",
+        "_mm_presentation.build_buttons(app, self)",
+        "_mm_presentation.render(app, self)",
+        "_mm_presentation.render_online_sidebar(app, self)",
+    ):
+        if wrapper not in mastermind_rules:
+            errors.append(f"Mastermind compatibility wrapper missing: {wrapper}")
+    if "game.mm_secret" in mastermind_presentation:
+        errors.append("Mastermind presentation must not read the hidden secret")
+    if re.search(r"^\s*game\.mm_[A-Za-z0-9_]+\s*=(?!=)", mastermind_presentation, re.M):
+        errors.append("Mastermind presentation must not mutate game state")
+    for callback in ("game._mm_pick_slot.bind", "game._mm_pick.bind", "game._mm_clear", "game._mm_submit"):
+        if callback not in mastermind_presentation:
+            errors.append(f"Mastermind presentation is missing authoritative callback {callback}")
+    for method in ("_mm_apply", "_mm_feedback", "_mm_submit", "_mm_accept_race_feedback"):
+        if not re.search(rf"^func\s+{method}\(", mastermind_rules, re.M):
+            errors.append(f"Mastermind rules module lost authoritative method {method}()")
+    for workflow_path in (ROOT / ".github" / "workflows" / "build-web.yml", ROOT / ".github" / "workflows" / "deploy-web.yml"):
+        workflow_text = workflow_path.read_text(encoding="utf-8")
+        if "Run Mastermind rules regression tests" not in workflow_text or "res://tests/godot/test_mastermind_rules.gd" not in workflow_text:
+            errors.append(f"{workflow_path.relative_to(ROOT)} does not run Mastermind regression tests")
+
+
+# Blockace board drawing, piece-tray buttons and pointer mapping are presentation-only;
+# placement rules, CPU decisions and online application remain in rules.gd.
+blockace_rules_path = ROOT / "games" / "blockace" / "rules.gd"
+blockace_presentation_path = ROOT / "games" / "blockace" / "presentation.gd"
+if not blockace_presentation_path.is_file():
+    errors.append("missing Blockace presentation module: games/blockace/presentation.gd")
+else:
+    blockace_rules = blockace_rules_path.read_text(encoding="utf-8")
+    blockace_presentation = blockace_presentation_path.read_text(encoding="utf-8")
+    if 'preload("res://games/blockace/presentation.gd")' not in blockace_rules:
+        errors.append("Blockace rules module does not preload its presentation module")
+    if "var _blockace_presentation = BlockacePresentationScript.new()" not in blockace_rules:
+        errors.append("Blockace rules module does not instantiate its presenter")
+    for method in ("handle_tap", "build_buttons", "draw_cell", "render"):
+        if not re.search(rf"^func\s+{method}\(", blockace_presentation, re.M):
+            errors.append(f"BlockacePresentation is missing {method}()")
+    for wrapper in (
+        "_blockace_presentation.handle_tap(app, self, p)",
+        "_blockace_presentation.build_buttons(app, self)",
+        "_blockace_presentation.draw_cell(app, r, col)",
+        "_blockace_presentation.render(app, self)",
+    ):
+        if wrapper not in blockace_rules:
+            errors.append(f"Blockace compatibility wrapper missing: {wrapper}")
+    if "game._blk_handle_target(Vector2i(gx, gy))" not in blockace_presentation:
+        errors.append("Blockace pointer mapping must delegate the selected cell to rules.gd")
+    if re.search(r"^\s*game\.blk_[A-Za-z0-9_]+\s*=(?!=)", blockace_presentation, re.M):
+        errors.append("Blockace presentation must not mutate authoritative game state")
+    for method in ("_blk_can_place", "_blk_place", "_blk_cpu", "_blk_apply_net"):
+        if not re.search(rf"^func\s+{method}\(", blockace_rules, re.M):
+            errors.append(f"Blockace rules module lost authoritative method {method}()")
+    blockace_app_calls = {name for name in re.findall(r"\bapp\.(\w+)\s*\(", blockace_presentation) if name.startswith("_")}
+    missing_blockace_app_calls = sorted(blockace_app_calls - main_funcs)
+    if missing_blockace_app_calls:
+        errors.append(f"Blockace presentation calls missing app methods: {missing_blockace_app_calls}")
+
 if errors:
     print("STRUCTURE CHECK FAILED")
     for error in errors:
@@ -470,6 +632,8 @@ print(f"- {module_method_count} app-facing module calls checked for compatibilit
 print(f"- {state_count} module-owned state fields checked")
 print("- scoring, ranking, and game catalog services found")
 print("- menu, dashboard, rankings, mode, online/lobby, pause, rules, dialogs and result presentation delegated to UI modules")
-print("- Othello and Chess board presentation/input mapping delegated to game presentation modules")
+print("- Othello, Chess, Backgammon, Domino and Blockace presentation/input mapping delegated to game presentation modules")
+print("- UNO drawing and action-button layout delegated to its presentation module; Wild Draw Four challenges and draw/pass guards checked")
 print("- Chess legality, complete Undo history and bounded AI search checked")
+print("- Mastermind state/secret and online race remain in rules; Blockace placement/CPU/network rules remain authoritative; UI delegated to presentation modules")
 print("NOTE: this is a static structural check, not a Godot runtime test.")

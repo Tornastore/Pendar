@@ -120,6 +120,7 @@ def test_backgammon_six_levels_are_wired_to_cpu_turn_and_catalog_is_not_beta():
     root = Path(__file__).resolve().parents[1]
     ai = read("games/backgammon/ai.gd")
     rules = read("games/backgammon/rules.gd")
+    presentation = read("games/backgammon/presentation.gd")
     main = read("main.gd")
     mode_screen = read("ui/screens/mode_screen.gd")
     catalog = read("core/game_catalog.gd")
@@ -134,11 +135,12 @@ def test_backgammon_six_levels_are_wired_to_cpu_turn_and_catalog_is_not_beta():
     assert "if level >= 5:" in ai and "if level >= 6:" in ai
     assert "while opening_dice[0] == opening_dice[1]:" in rules
     assert "bg_turn = 0 if opening_dice[0] > opening_dice[1] else 1" in rules
-    assert 'opponent_name: String = "CPU" if app.vs_cpu else "حریف"' in rules
+    assert 'opponent_name: String = "CPU" if app.vs_cpu else "حریف"' in presentation
 
 
 def test_backgammon_cpu_uses_only_rule_authorized_moves_and_respects_difficulty():
     rules = read("games/backgammon/rules.gd")
+    presentation = read("games/backgammon/presentation.gd")
     ai = read("games/backgammon/ai.gd")
     main = read("main.gd")
     assert "var legal_turn_moves: Array[Dictionary] = _bg_turn_legal_moves(1)" in rules
@@ -146,5 +148,5 @@ def test_backgammon_cpu_uses_only_rule_authorized_moves_and_respects_difficulty(
     assert "ai.choose_turn(self, bg_difficulty)" in rules
     assert "func choose_legal_first_move(game, legal_moves: Array[Dictionary], difficulty: int)" in ai
     assert "var branch_limits: Array[int] = [0, 4, 5, 6, 7, 8, 10]" in ai
-    assert "levels[clampi(bg_difficulty, 1, 6) - 1]" in rules
+    assert "levels[clampi(game.bg_difficulty, 1, 6) - 1]" in presentation
     assert "_schedule_cpu(0.45, _bg_cpu)" in main

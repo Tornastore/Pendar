@@ -113,6 +113,70 @@ jobs:
             exit 1
           fi
 
+      - name: Run backgammon rules and presentation regression tests
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          LOG_FILE="/tmp/pendar-backgammon-regression.log"
+          godot --headless --path . --script res://tests/godot/test_backgammon_rules.gd 2>&1 | tee "$LOG_FILE"
+          if grep -E 'SCRIPT ERROR|Parse Error|Parser Error|BACKGAMMON_RULES_TESTS: .*failures=[1-9][0-9]*' "$LOG_FILE"; then
+            echo "ERROR: Backgammon regression tests reported script/runtime errors." >&2
+            exit 1
+          fi
+          if ! grep -E 'BACKGAMMON_RULES_TESTS: checks=[0-9]+, failures=0' "$LOG_FILE"; then
+            echo "ERROR: Backgammon regression test summary is missing or non-zero." >&2
+            exit 1
+          fi
+
+      - name: Run domino rules and presentation regression tests
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          LOG_FILE="/tmp/pendar-domino-regression.log"
+          godot --headless --path . --script res://tests/godot/test_domino_rules.gd 2>&1 | tee "$LOG_FILE"
+          if grep -E 'SCRIPT ERROR|Parse Error|Parser Error|DOMINO_RULES_TESTS: .*failures=[1-9][0-9]*' "$LOG_FILE"; then
+            echo "ERROR: Domino regression tests reported script/runtime errors." >&2
+            exit 1
+          fi
+          if ! grep -E 'DOMINO_RULES_TESTS: checks=[0-9]+, failures=0' "$LOG_FILE"; then
+            echo "ERROR: Domino regression test summary is missing or non-zero." >&2
+            exit 1
+          fi
+
+      - name: Run UNO rules regression tests
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          LOG_FILE="/tmp/pendar-uno-regression.log"
+          godot --headless --path . --script res://tests/godot/test_uno_rules.gd 2>&1 | tee "$LOG_FILE"
+          if grep -E 'SCRIPT ERROR|Parse Error|Parser Error|UNO_RULES_TESTS: .*failures=[1-9][0-9]*' "$LOG_FILE"; then
+            echo "ERROR: UNO regression tests reported script/runtime errors." >&2
+            exit 1
+          fi
+          if ! grep -E 'UNO_RULES_TESTS: checks=[0-9]+, failures=0' "$LOG_FILE"; then
+            echo "ERROR: UNO regression test summary is missing or non-zero." >&2
+            exit 1
+          fi
+
+      - name: Run Mastermind rules regression tests
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          LOG_FILE="/tmp/pendar-mastermind-regression.log"
+          godot --headless --path . --script res://tests/godot/test_mastermind_rules.gd 2>&1 | tee "$LOG_FILE"
+          if grep -E 'SCRIPT ERROR|Parse Error|Parser Error|MASTERMIND_RULES_TESTS: .*failures=[1-9][0-9]*' "$LOG_FILE"; then
+            echo "ERROR: Mastermind regression tests reported script/runtime errors." >&2
+            exit 1
+          fi
+          if ! grep -E 'MASTERMIND_RULES_TESTS: checks=[0-9]+, failures=0' "$LOG_FILE"; then
+            echo "ERROR: Mastermind regression test summary is missing or non-zero." >&2
+            exit 1
+          fi
+
       - name: Smoke-test game startup
         shell: bash
         timeout-minutes: 3

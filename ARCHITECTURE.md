@@ -28,6 +28,7 @@ Pendar/
 │   ├── pentago/rules.gd
 │   ├── quoridor/rules.gd
 │   ├── domino/rules.gd
+│   ├── domino/presentation.gd  # ترسیم زنجیره دومینو، دست و نگاشت کلیک
 │   ├── chess/rules.gd
 │   ├── chess/presentation.gd  # ترسیم شطرنج و تبدیل کلیک به خانه
 │   ├── pasoor/rules.gd
@@ -160,3 +161,37 @@ The online matchmaking and LAN lobby views are delegated to `ui/screens/online_s
 - Local Undo rewinds one ply in hot-seat play and a human/CPU pair in CPU mode; it is disabled in network play to avoid client-state divergence.
 - `games/chess/ai.gd` uses legal move generation, alpha-beta, iterative deepening, time/node budgets, repetition-aware transposition keys and quiescence search. Promotion variants are searched independently.
 - Both Web workflows run `tests/godot/test_chess_rules.gd` under headless Godot, including perft, king safety, castling, en-passant, promotion, Undo and tactical AI checks.
+
+
+## جداسازی نمایش دومینو و سخت‌گیری کنش‌ها (مرحله نهم)
+
+- `games/domino/presentation.gd` مسئول محاسبه جای مهره‌های دست، تبدیل کلیک به انتخاب مهره، ساخت دکمه‌های ابتدا/انتها/برداشت/پاس و ترسیم دست و زنجیره روی میز است.
+- `games/domino/rules.gd` مالک وضعیت قطعی دست‌ها، زنجیره، سرهای زنجیر، نوبت، امتیاز و پایان بازی باقی می‌ماند. wrapperهای `_dom_hand_rects`, `_dom_tap`, `_btns_domino` و `_draw_domino` برای حفظ مسیر dispatch موجود نگه داشته شده‌اند.
+- حرکت مهره ورودی بازیکن، اندیس دست، سر انتخابی، نوبت و وضعیت پایان را پیش از تغییر وضعیت اعتبارسنجی می‌کند. برداشت فقط هنگامی مجاز است که بازیکن فعال حرکت قابل اجرا نداشته باشد؛ پاس نیز فقط با خالی بودن انبار و نبود حرکت قانونی پذیرفته می‌شود.
+- `tests/godot/test_domino_rules.gd` موارد شروع دست، یکتایی ۲۸ مهره، جهت‌دهی مهره روی دو سر زنجیر، رد کنش‌های نامعتبر، برداشت و پاس، و پایان دست مسدودشده را در Godot headless بررسی می‌کند. هر دو workflow وب این آزمون را اجرا می‌کنند.
+
+
+## UNO presentation and action-rule hardening (next stage)
+
+- `games/uno/presentation.gd` owns table/card rendering and card/action button layout. Existing main-module entry points `_draw_uno`, `_btns_uno`, `_uno_draw_card_visual` and `_uno_board_tap` remain as compatibility wrappers.
+- `games/uno/rules.gd` remains the authoritative owner of hands, piles, turn order, color, challenge target, penalties, scoring and round completion. The presenter may update only UI paging (`uno_hand_page`) and must send card choices to the existing action methods.
+- Wild Draw Four can be selected as a bluff so that the challenge mechanic is reachable; its legality is evaluated separately against the player's pre-play hand and recorded in `uno_last_wild4_illegal`. An illegal +4 challenge must penalize the actor; a failed challenge must give the challenger six cards.
+- Drawing twice in one turn is rejected by the rules layer. After drawing a playable card, the UI offers only that card (or pass) and moves the hand page to show the drawn card.
+- `tests/godot/test_uno_rules.gd` covers deck/deal conservation, Wild Draw Four challenge outcomes, draw-once behavior, and two-player Reverse/Skip semantics. Both Web workflows run it with headless Godot.
+
+
+## جداسازی نمایش فکر بکر (Mastermind)
+
+- `games/mastermind/rules.gd` مالک کد مخفی، حدس‌ها، بازخورد، فاز بازی، محاسبه CPU، مسابقه‌های CPU/LAN/آنلاین و تغییر وضعیت‌های معتبر است.
+- `games/mastermind/presentation.gd` مسئول چیدمان سوراخ‌های کد، دکمه‌های ورودی، رسم ردیف‌های حدس، نشان‌های سیاه/سفید و نوار پیشرفت عمومی مسابقه است.
+- توابع `_btns_mastermind`, `_draw_mastermind`, `_draw_mm_online_sidebar`, `_mm_slot_pos` و `_mm_color_pos` در rules به‌عنوان wrapper حفظ شده‌اند تا dispatcher موجود تغییر نکند.
+- Presenter کد مخفی را نمی‌خواند و متغیرهای وضعیت بازی را تغییر نمی‌دهد؛ دکمه‌ها فقط callbackهای معتبر rules را فراخوانی می‌کنند.
+- `tests/test_mastermind_presentation.py` مرز معماری و حفظ حریم کد مخفی را ایستا بررسی می‌کند؛ برای تأیید رندر و اجرا باید پروژه در Godot اجرا شود.
+
+
+## جداسازی نمایش بلاک‌آس (مرحله دهم)
+
+- `games/blockace/presentation.gd` ترسیم صفحه ۱۴×۱۴، نمایش ۲۱ قطعه هر بازیکن، کنترل‌های چرخش/وارونگی/قراردهی و تبدیل مختصات صفحه به خانه را انجام می‌دهد.
+- `games/blockace/rules.gd` همچنان مرجع قطعی اعتبار قرار دادن قطعه، تماس گوشه‌ای، امتیاز، پایان بازی، CPU و اعمال حرکت آنلاین است؛ presenter فقط خانه انتخاب‌شده را به `_blk_handle_target()` تحویل می‌دهد.
+- `_blk_tap`, `_btns_blockace`, `_draw_blk_cell` و `_draw_blockace` به‌عنوان wrapper حفظ شده‌اند تا dispatch موجود در `main.gd` تغییر نکند.
+- `tests/test_blockace_presentation.py` و `tools/verify_structure.py` مرز نمایش/قواعد و سازگاری callbackها را ایستا کنترل می‌کنند؛ برای آزمون نهایی تعامل و چیدمان باید پروژه در Godot اجرا شود.

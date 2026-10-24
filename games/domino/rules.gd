@@ -1,6 +1,9 @@
 extends "res://core/game_module.gd"
 ## Rule engine and authoritative state for domino.
 
+const DominoPresentationScript = preload("res://games/domino/presentation.gd")
+var _domino_presentation = DominoPresentationScript.new()
+
 # ---------- Game-owned state ----------
 var dom_hands: Array = [[], []]   # player 0 and 1
 var dom_boneyard: Array = []
@@ -59,12 +62,16 @@ func _reset_domino() -> void:
 	dom_turn = 1 - starter_p
 
 func _dom_can_play(tile: Vector2i, end: String) -> bool:
+	if dom_chain.is_empty() or end not in ["L", "R"]:
+		return false
 	if end == "L":
 		return tile.x == dom_left or tile.y == dom_left
 	return tile.x == dom_right or tile.y == dom_right
 
 func _dom_playable(p: int) -> Array:
 	var res: Array = []
+	if p < 0 or p >= dom_hands.size() or dom_game_over:
+		return res
 	for i in dom_hands[p].size():
 		var t: Vector2i = dom_hands[p][i]
 		if _dom_can_play(t, "L") or _dom_can_play(t, "R"):
@@ -72,6 +79,10 @@ func _dom_playable(p: int) -> Array:
 	return res
 
 func _dom_play(p: int, idx: int, end: String) -> bool:
+	if dom_game_over or p < 0 or p >= dom_hands.size() or p != dom_turn:
+		return false
+	if idx < 0 or idx >= dom_hands[p].size() or end not in ["L", "R"]:
+		return false
 	var tile: Vector2i = dom_hands[p][idx]
 	if not _dom_can_play(tile, end):
 		return false
@@ -117,7 +128,10 @@ func _dom_play(p: int, idx: int, end: String) -> bool:
 	return true
 
 func _dom_draw(p: int) -> void:
-	if dom_boneyard.size() == 0:
+	# Drawing is legal only for the active player when no tile can be played.
+	if dom_game_over or p < 0 or p >= dom_hands.size() or p != dom_turn:
+		return
+	if not _dom_playable(p).is_empty() or dom_boneyard.is_empty():
 		return
 	dom_hands[p].append(dom_boneyard.pop_back())
 
@@ -301,11 +315,15 @@ func _dom_second_ply_value(hand: Array, left_end: int, right_end: int) -> float:
 	return best
 
 func _dom_pass(p: int) -> void:
-	if dom_game_over or dom_turn != p:
+	if dom_game_over or p < 0 or p >= dom_hands.size() or dom_turn != p:
+		return
+	# In draw-until-play domino, a player may pass only after the boneyard is empty
+	# and the current hand has no legal play.
+	if not dom_boneyard.is_empty() or not _dom_playable(p).is_empty():
 		return
 	dom_selected = -1
 	dom_turn = 1 - p
-	if _dom_playable(0).size() == 0 and _dom_playable(1).size() == 0 and dom_boneyard.size() == 0:
+	if _dom_playable(dom_turn).is_empty():
 		dom_game_over = true
 		_dom_calc_scores()
 		if dom_scores[0] < dom_scores[1]:
@@ -323,21 +341,25 @@ func _dom_my_turn() -> bool:
 	return dom_turn == _dom_me() and not dom_game_over
 
 func _dom_hand_rects() -> Array:
-	return app._fan_rects(dom_hands[_dom_me()].size(), 54.0, 88.0, 756.0, 500.0, 8.0)
+	return _domino_presentation.hand_rects(app, self)
 
 func _dom_tap(p: Vector2) -> void:
+	_domino_presentation.handle_tap(app, self, p)
+
+func _dom_select(index: int) -> void:
 	if not _dom_my_turn():
 		return
-	var rects: Array = _dom_hand_rects()
-	var i: int = app._fan_hit(rects, p)
-	if i < 0:
+	if index < 0:
 		dom_selected = -1
 		return
-	var t: Vector2i = dom_hands[_dom_me()][i]
-	if not (_dom_can_play(t, "L") or _dom_can_play(t, "R")):
+	var me: int = _dom_me()
+	if index >= dom_hands[me].size():
+		return
+	var tile: Vector2i = dom_hands[me][index]
+	if not (_dom_can_play(tile, "L") or _dom_can_play(tile, "R")):
 		app._show_toast("این مهره با دو سر زنجیر جور نیست.")
 		return
-	dom_selected = i if dom_selected != i else -1
+	dom_selected = index if dom_selected != index else -1
 
 func _dom_do_play(end: String) -> void:
 	var me: int = _dom_me()
@@ -364,95 +386,7 @@ func _dom_do_pass() -> void:
 		_dom_pass(me)
 
 func _btns_domino() -> void:
-	if not _dom_my_turn():
-		return
-	var me: int = _dom_me()
-	var playable: Array = _dom_playable(me)
-	if dom_selected >= 0 and dom_selected < dom_hands[me].size():
-		var t: Vector2i = dom_hands[me][dom_selected]
-		var l_ok: bool = _dom_can_play(t, "L")
-		var r_ok: bool = _dom_can_play(t, "R")
-		if l_ok and r_ok:
-			app._add_btn(Rect2(app.VIEW_W - 16 - 244, 676, 244, 56), "ابتدا (%s)" % app._fa(dom_left), _dom_do_play.bind("L"), true, app.DOM_END_A, "solid", "", "dom_l")
-			app._add_btn(Rect2(16, 676, 244, 56), "انتها (%s)" % app._fa(dom_right), _dom_do_play.bind("R"), true, app.DOM_END_B, "solid", "", "dom_r")
-		elif l_ok:
-			app._add_btn(Rect2(60, 676, app.VIEW_W - 120, 56), "گذاشتن در ابتدا (%s)" % app._fa(dom_left), _dom_do_play.bind("L"), true, app.DOM_END_A, "solid", "", "dom_l")
-		elif r_ok:
-			app._add_btn(Rect2(60, 676, app.VIEW_W - 120, 56), "گذاشتن در انتها (%s)" % app._fa(dom_right), _dom_do_play.bind("R"), true, app.DOM_END_B, "solid", "", "dom_r")
-	elif playable.size() == 0:
-		if dom_boneyard.size() > 0:
-			app._add_btn(Rect2(60, 676, app.VIEW_W - 120, 56), "برداشتن از انبار (%s)" % app._fa(dom_boneyard.size()), _dom_do_draw, true, app.ACCENT, "solid", "", "dom_draw")
-		else:
-			app._add_btn(Rect2(60, 676, app.VIEW_W - 120, 56), "پاس دادن", _dom_do_pass, true, app.ACCENT, "solid", "", "dom_pass")
+	_domino_presentation.build_buttons(app, self)
 
 func _draw_domino() -> void:
-	var me: int = _dom_me()
-	var opp: int = 1 - me
-	var pa: Dictionary = app._pl("شما", app.BLUE, app._fa(dom_hands[me].size()), dom_turn == me and not dom_game_over, true, "مهره‌ها")
-	var pb: Dictionary = app._pl("حریف", app.PINK, app._fa(dom_hands[opp].size()), dom_turn == opp and not dom_game_over, false, "مهره‌ها")
-	if pa.active:
-		pa.sub = "نوبت شما"
-	app._draw_hud("دومینو", pa, pb)
-	# opponent hand
-	var opr: Array = app._fan_rects(dom_hands[opp].size(), 28.0, 40.0, 152.0, 360.0, 6.0)
-	for r in opr:
-		app._draw_dom_back(r)
-	# boneyard chip
-	var by := Rect2(16, 152, 94, 34)
-	app._panel(by, Color(0, 0, 0, 0.3), 17)
-	app._txt_c("انبار: " + app._fa(dom_boneyard.size()), by, 13, app.TEXT_DIM, true)
-	app._draw_ai_difficulty_chip(dom_difficulty)
-	# table
-	var table := Rect2(16, 200, app.VIEW_W - 32, 456)
-	app._panel(table, Color(0.07, 0.24, 0.20), 26, Color(0.25, 0.65, 0.5, 0.4), 1.5, 18, 6)
-	var n: int = dom_chain.size()
-	var rows: int = int((n + app.DOM_PER_ROW - 1) / app.DOM_PER_ROW)
-	var step_x: float = app.DOM_L + 3.0
-	var row_h: float = app.DOM_W + 12.0
-	var top_y: float = table.get_center().y - rows * row_h * 0.5
-	var first_c := Vector2.ZERO
-	var last_c := Vector2.ZERO
-	for i in n:
-		var row: int = int(i / app.DOM_PER_ROW)
-		var col: int = i % app.DOM_PER_ROW
-		var in_row: int = mini(app.DOM_PER_ROW, n - row * app.DOM_PER_ROW)
-		var rev: bool = (row % 2 == 1)
-		var vis_col: int = (in_row - 1 - col) if rev else col
-		var rw: float = in_row * step_x
-		var x: float = table.get_center().x - rw * 0.5 + vis_col * step_x
-		var rect := Rect2(x, top_y + row * row_h, app.DOM_L, app.DOM_W)
-		var t: Vector2i = dom_chain[i]
-		var a: int = t.y if rev else t.x
-		var b: int = t.x if rev else t.y
-		var glow := Color(0, 0, 0, 0)
-		if i == 0:
-			glow = app.DOM_END_A
-			first_c = rect.get_center()
-		if i == n - 1:
-			glow = app.DOM_END_B
-			last_c = rect.get_center()
-		app._draw_dom_tile(rect, a, b, false, false, true, glow)
-	if n > 0:
-		app._panel(Rect2(table.position.x + 14, table.end.y - 40, 118, 28), Color(app.DOM_END_A.r, app.DOM_END_A.g, app.DOM_END_A.b, 0.18), 14, app.DOM_END_A, 1.0)
-		app._txt_c("ابتدا: " + app._fa(dom_left), Rect2(table.position.x + 14, table.end.y - 40, 118, 28), 13, app.DOM_END_A.lightened(0.3), true)
-		app._panel(Rect2(table.position.x + 142, table.end.y - 40, 118, 28), Color(app.DOM_END_B.r, app.DOM_END_B.g, app.DOM_END_B.b, 0.18), 14, app.DOM_END_B, 1.0)
-		app._txt_c("انتها: " + app._fa(dom_right), Rect2(table.position.x + 142, table.end.y - 40, 118, 28), 13, app.DOM_END_B.lightened(0.3), true)
-	# my hand
-	var rects: Array = _dom_hand_rects()
-	var my_turn: bool = _dom_my_turn()
-	for i in rects.size():
-		var r: Rect2 = rects[i]
-		var t: Vector2i = dom_hands[me][i]
-		var ok: bool = _dom_can_play(t, "L") or _dom_can_play(t, "R")
-		var sel: bool = (i == dom_selected)
-		if sel:
-			r.position.y -= 16.0
-		app._draw_dom_tile(r, t.x, t.y, sel, my_turn and not ok, false)
-	if not dom_game_over:
-		if my_turn:
-			if dom_selected < 0 and _dom_playable(me).size() > 0:
-				app._hint("یک مهره انتخاب کنید", 640, app.ACCENT)
-			elif dom_selected < 0:
-				app._hint("مهره مناسب ندارید", 640, app.ACCENT)
-		else:
-			app._hint("حریف در حال بازی…", 640, app.TEXT_DIM)
+	_domino_presentation.render(app, self)

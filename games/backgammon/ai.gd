@@ -247,11 +247,33 @@ func _evaluate(game, level: int) -> float:
 	score += float(human_pips - cpu_pips) * 0.55
 	if level >= 5:
 		score += float(cpu_made - human_made) * 2.0
+	if level >= 5:
+		# Made points in the opponent's entry board become especially valuable
+		# when that opponent has checkers waiting on the bar.
+		score += _home_board_block_score(game) * (1.0 if level == 5 else 1.5)
 	if level >= 6:
 		score += _prime_score(game)
 	return score + blot_adjustment
 
+func _home_board_block_score(game) -> float:
+	var score: float = 0.0
+	var human_bar: int = int(game.bg_bar[0])
+	var cpu_bar: int = int(game.bg_bar[1])
+	# Positive checkers enter on 18..23; CPU made points there can pin them on the bar.
+	for point in range(18, 24):
+		if int(game.bg_points[point]) <= -2:
+			score += 1.8 + float(mini(human_bar, 3)) * 1.25
+	# CPU checkers enter on 0..5; the human can similarly block those entry points.
+	for point in range(0, 6):
+		if int(game.bg_points[point]) >= 2:
+			score -= 1.8 + float(mini(cpu_bar, 3)) * 1.25
+	return score
+
 func _cpu_can_hit(game, human_blot: int) -> int:
+	# Bar entry has priority; while CPU checkers remain on the bar, board blots
+	# are not hittable by an on-board checker in the current move sequence.
+	if int(game.bg_bar[1]) > 0:
+		return 0
 	var opportunities: int = 0
 	for die in range(1, 7):
 		var source: int = human_blot + die
@@ -260,6 +282,9 @@ func _cpu_can_hit(game, human_blot: int) -> int:
 	return opportunities
 
 func _human_can_hit(game, cpu_blot: int) -> int:
+	# The same bar-entry priority applies to the human side.
+	if int(game.bg_bar[0]) > 0:
+		return 0
 	var threats: int = 0
 	for die in range(1, 7):
 		var source: int = cpu_blot - die

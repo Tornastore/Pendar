@@ -2,10 +2,8 @@ extends "res://core/game_module.gd"
 ## Classic UNO (112-card deck; four blank/customizable cards default to standard Wilds).
 ## 2-10 players, 7 cards each, points from opponents' remaining cards, first to 500 wins.
 
-const COLORS: Array[Color] = [Color("#e9434f"), Color("#2289e8"), Color("#32a765"), Color("#f3c735")]
-const COLOR_NAMES: Array[String] = ["قرمز", "آبی", "سبز", "زرد"]
-const COLOR_SHORT: Array[String] = ["قرمز", "آبی", "سبز", "زرد"]
-const AI_LABELS: Array[String] = ["خیلی آسان", "آسان", "متوسط", "سخت", "استاد", "استادتمام"]
+const UnoPresentationScript = preload("res://games/uno/presentation.gd")
+var _uno_presentation = UnoPresentationScript.new()
 
 var uno_player_count: int = 4
 var uno_difficulty: int = 3
@@ -177,17 +175,25 @@ func _uno_draw_cards(seat: int, amount: int) -> void:
 
 func _uno_is_playable(card: Dictionary, seat: int) -> bool:
 	var kind: String = _uno_card_kind(card)
-	if kind == "wild":
-		return true
-	if kind == "wild4":
-		for held in uno_hands[seat]:
-			if _uno_card_kind(held) != "wild" and _uno_card_kind(held) != "wild4" and _uno_card_color(held) == uno_current_color:
-				return false
+	# A Wild Draw Four may be played as a bluff so the next player can challenge it.
+	# Whether it was legal is recorded separately in _uno_is_wild4_legal().
+	if kind in ["wild", "wild4"]:
 		return true
 	if _uno_card_color(card) == uno_current_color:
 		return true
 	var top: Dictionary = _uno_top_card()
-	return _uno_card_kind(card) == _uno_card_kind(top) and kind != "wild4" or (kind == "num" and _uno_card_kind(top) == "num" and _uno_card_value(card) == _uno_card_value(top))
+	return (_uno_card_kind(card) == _uno_card_kind(top) and kind != "wild4") or (kind == "num" and _uno_card_kind(top) == "num" and _uno_card_value(card) == _uno_card_value(top))
+
+func _uno_is_wild4_legal(seat: int, card_index: int = -1) -> bool:
+	if seat < 0 or seat >= uno_hands.size():
+		return false
+	for i in range(uno_hands[seat].size()):
+		if i == card_index:
+			continue
+		var held: Dictionary = uno_hands[seat][i]
+		if _uno_card_kind(held) not in ["wild", "wild4"] and _uno_card_color(held) == uno_current_color:
+			return false
+	return true
 
 func _uno_playable_indices(seat: int) -> Array[int]:
 	var result: Array[int] = []
@@ -243,7 +249,7 @@ func _uno_submit_play(index: int, chosen_color: int, declared_uno: bool) -> void
 		_uno_apply_play(seat, index, chosen_color, declared_uno)
 
 func _uno_draw_request() -> void:
-	if not _uno_is_local_turn() or uno_challenge_available:
+	if not _uno_is_local_turn() or uno_challenge_available or uno_drawn_card_index >= 0:
 		return
 	var seat: int = app._my_seat()
 	if app._net_on():
@@ -289,17 +295,14 @@ func _uno_apply_play(seat: int, index: int, chosen_color: int, declared_uno: boo
 	if not _uno_is_playable(card, seat):
 		return false
 	var kind: String = _uno_card_kind(card)
-	var legal_wild4: bool = true
-	if kind == "wild4":
-		legal_wild4 = true
-		for held in uno_hands[seat]:
-			if _uno_card_color(held) == uno_current_color and _uno_card_kind(held) not in ["wild", "wild4"]:
-				legal_wild4 = false
-				break
+	var legal_wild4: bool = _uno_is_wild4_legal(seat, index) if kind == "wild4" else true
 	if kind in ["wild", "wild4"] and chosen_color not in range(4):
 		return false
 	uno_hands[seat].remove_at(index)
 	uno_discard_pile.append(card)
+	# Keep the hand-page index valid after the number of cards shrinks.
+	var max_hand_page: int = int(maxi(0, uno_hands[seat].size() - 1) / 7)
+	uno_hand_page = mini(uno_hand_page, max_hand_page)
 	uno_selected_card = -1
 	uno_pending_color = -1
 	uno_drawn_card_index = -1
@@ -343,7 +346,9 @@ func _uno_apply_play(seat: int, index: int, chosen_color: int, declared_uno: boo
 	return true
 
 func _uno_apply_draw(seat: int) -> void:
-	if uno_game_over or uno_round_over or uno_challenge_available or seat != uno_turn:
+	# Once a playable card has been drawn, UNO permits playing that card or passing,
+	# not drawing repeatedly. Keep this guard in the rules path as well as the UI.
+	if uno_game_over or uno_round_over or uno_challenge_available or seat != uno_turn or uno_drawn_card_index >= 0:
 		return
 	uno_catch_seat = -1
 	uno_selected_card = -1
@@ -361,7 +366,9 @@ func _uno_apply_draw(seat: int) -> void:
 		uno_status = "کارت قابل بازی نبود؛ نوبت رد شد."
 		_uno_advance_turn(seat)
 	else:
-		uno_status = "اگر کارت کشیده‌شده قابل بازی است، می‌توانید آن را بازی کنید یا نوبت را رد کنید."
+		# If a long hand is paginated, immediately show the newly drawn playable card.
+		uno_hand_page = int(uno_drawn_card_index / 7)
+		uno_status = "اگر کارت کشیده‌شده قابل بازی است، می‌توانید همان کارت را بازی کنید یا نوبت را رد کنید."
 	app._rebuild_buttons()
 
 func _uno_apply_pass(seat: int) -> void:
@@ -466,10 +473,8 @@ func _uno_cpu_turn() -> void:
 		return
 	var seat: int = uno_turn
 	if uno_challenge_available:
-		var challenge: bool = uno_last_wild4_illegal
-		if not challenge and uno_difficulty >= 5:
-			challenge = randf() < (0.35 if uno_difficulty == 5 else 0.58)
-		_uno_apply_challenge(seat, challenge)
+		# The local CPU has full game state, so it can determine whether +4 was illegal.
+		_uno_apply_challenge(seat, uno_last_wild4_illegal)
 		return
 	var playable := _uno_playable_indices(seat)
 	if playable.is_empty():
@@ -515,6 +520,10 @@ func _uno_cpu_play(seat: int, options: Array) -> void:
 			score += 3.0 + uno_difficulty * 1.4
 			if next_count <= 2:
 				score += 18.0
+			if not _uno_is_wild4_legal(seat, idx):
+				# An opponent can challenge a bluff; high CPU levels should avoid it
+				# unless preventing an almost-certain loss is worth the risk.
+				score -= 8.0 if uno_difficulty <= 2 else 22.0
 		if uno_difficulty >= 4:
 			score += _uno_opponent_pressure(next_seat) * (1.1 if uno_difficulty == 4 else 2.0)
 		if uno_difficulty >= 5:
@@ -588,113 +597,13 @@ func _uno_player_name(seat: int) -> String:
 	return "شما" if seat == 0 else ("CPU %d" % seat if app.vs_cpu else "بازیکن %d" % (seat + 1))
 
 func _btns_uno() -> void:
-	if uno_game_over or uno_round_over:
-		return
-	var seat: int = app._my_seat()
-	var local_turn: bool = _uno_is_local_turn()
-	if local_turn and uno_catch_seat >= 0 and uno_catch_seat != seat and not uno_challenge_available:
-		app._add_btn(Rect2(18, 634, 504, 42), "گرفتن اعلام UNO · جریمه ۲ کارت", _uno_catch_request, true, Color("#ef9d45"), "soft", "alert", "uno_catch")
-	if local_turn and uno_challenge_available:
-		app._add_btn(Rect2(18, 632, 244, 46), "چالش +۴", _uno_challenge_request.bind(true), true, Color("#ef626b"), "soft", "alert", "uno_challenge")
-		app._add_btn(Rect2(278, 632, 244, 46), "قبول +۴ · کشیدن ۴ کارت", _uno_challenge_request.bind(false), true, Color("#6da4ff"), "soft", "check", "uno_accept")
-		return
-	if not local_turn:
-		return
-	var hand_size: int = uno_hands[seat].size()
-	var start: int = mini(uno_hand_page * 7, maxi(0, hand_size - 1))
-	var visible: int = mini(7, hand_size - start)
-	for i in range(visible):
-		var index: int = start + i
-		var card: Dictionary = uno_hands[seat][index]
-		app._add_btn(Rect2(14 + i * 73, 687, 68, 100), "", _uno_select_card.bind(index), true, COLORS[maxi(0, _uno_card_color(card))] if _uno_card_color(card) >= 0 else Color("#9b79ea"), "ghost", "", "uno_hand_%d" % index)
-	if hand_size > 7:
-		app._add_btn(Rect2(18, 644, 74, 34), "◀", func(): uno_hand_page = maxi(0, uno_hand_page - 1); app._rebuild_buttons(), true, app.ACCENT, "ghost", "", "uno_hand_prev")
-		app._add_btn(Rect2(448, 644, 74, 34), "▶", func(): uno_hand_page = mini(int(ceil(float(hand_size) / 7.0)) - 1, uno_hand_page + 1); app._rebuild_buttons(), true, app.ACCENT, "ghost", "", "uno_hand_next")
-	if uno_selected_card >= 0 and uno_selected_card < hand_size:
-		var selected: Dictionary = uno_hands[seat][uno_selected_card]
-		if _uno_card_kind(selected) in ["wild", "wild4"]:
-			for c in range(4):
-				app._add_btn(Rect2(18 + c * 128, 802, 120, 36), COLOR_NAMES[c], func(): uno_pending_color = c; app._rebuild_buttons(), true, COLORS[c], "soft", "", "uno_color_%d" % c)
-		if hand_size == 2:
-			var color_ready: bool = _uno_card_kind(selected) not in ["wild", "wild4"] or uno_pending_color >= 0
-			app._add_btn(Rect2(16, 844, 246, 38), "اعلام UNO و بازی" if color_ready else "رنگ را انتخاب کنید", func(): _uno_submit_play(uno_selected_card, uno_pending_color, true), color_ready, app.GREEN, "solid", "check", "uno_play_call")
-			app._add_btn(Rect2(278, 844, 246, 38), "بدون اعلام و بازی", func(): _uno_submit_play(uno_selected_card, uno_pending_color, false), color_ready, app.RED, "soft", "alert", "uno_play_nocall")
-		else:
-			var color_ready: bool = _uno_card_kind(selected) not in ["wild", "wild4"] or uno_pending_color >= 0
-			app._add_btn(Rect2(18, 844, 244, 38), "بازی کارت", func(): _uno_submit_play(uno_selected_card, uno_pending_color, false), color_ready, app.GREEN, "solid", "check", "uno_play")
-			if uno_drawn_card_index >= 0:
-				app._add_btn(Rect2(278, 844, 244, 38), "رد نوبت", _uno_pass_request, true, app.TEXT_DIM, "ghost", "skip", "uno_pass")
-	else:
-		app._add_btn(Rect2(18, 844, 244, 38), "برداشتن کارت", _uno_draw_request, true, app.BLUE, "solid", "download", "uno_draw")
-		if uno_drawn_card_index >= 0:
-			app._add_btn(Rect2(278, 844, 244, 38), "رد نوبت", _uno_pass_request, true, app.TEXT_DIM, "ghost", "skip", "uno_pass")
+	_uno_presentation.build_buttons(app, self)
 
-
-func _uno_board_tap(_p: Vector2) -> void:
-	# UNO is driven by explicit card/action buttons; no direct board tap is needed.
-	pass
+func _uno_board_tap(p: Vector2) -> void:
+	_uno_presentation.handle_tap(app, self, p)
 
 func _uno_draw_card_visual(r: Rect2, card: Dictionary, selected: bool = false, small: bool = false) -> void:
-	var color_id: int = _uno_card_color(card)
-	var fill: Color = COLORS[color_id] if color_id >= 0 and color_id < 4 else Color("#8b62d9")
-	var radius: float = 9.0 if small else 12.0
-	app._panel(Rect2(r.position + Vector2(0, 3), r.size), Color(0, 0, 0, 0.45), radius)
-	app._panel(r, fill, radius, app.ACCENT if selected else Color(1, 1, 1, 0.9), 2.5 if selected else 1.0)
-	var inner: Rect2 = r.grow(-r.size.x * 0.13)
-	app._panel(inner, Color(0.06, 0.07, 0.12, 0.90), radius * 0.8)
-	var label: String = _uno_card_label(card)
-	if _uno_card_kind(card) == "num":
-		app._txt_c(label, inner, int(minf(r.size.x * 0.66, 26.0 if not small else 18.0)), Color.WHITE, true)
-	else:
-		app._txt_c(label, inner, int(minf(r.size.x * 0.34, 17.0 if not small else 12.0)), Color.WHITE, true)
+	_uno_presentation.draw_card_visual(app, self, r, card, selected, small)
 
 func _draw_uno() -> void:
-	var title: String = "اونو · UNO"
-	app._draw_bar_top(72.0)
-	app._txt_c(title, Rect2(70, 10, 400, 42), 24, app.TEXT, true)
-	app._draw_ai_difficulty_chip_at(uno_difficulty, 50.0)
-	var me: int = app._my_seat()
-	var top: Dictionary = _uno_top_card()
-	# Score and player strip
-	var cols: Array[Color] = [app.BLUE, app.GREEN, app.RED, app.ACCENT, app.PINK, Color("#8b8ef0")]
-	var row_w: float = 504.0 / float(uno_player_count)
-	if uno_player_count > 5:
-		row_w = 504.0 / 5.0
-	for seat in range(uno_player_count):
-		var col_idx: int = seat % 5
-		var row_idx: int = int(seat / 5)
-		var r := Rect2(18 + col_idx * row_w, 88 + row_idx * 58, row_w - 5, 51)
-		var active: bool = seat == uno_turn and not uno_round_over
-		app._panel(r, Color(0.15, 0.19, 0.34) if active else app.CARD, 10, cols[seat % cols.size()] if active else app.LINE_STRONG, 1.5 if active else 0.7)
-		app._txt_r(_uno_player_name(seat), r.end.x - 6, r.position.y + 18, 10 if uno_player_count > 5 else 12, app.TEXT if active else app.TEXT_DIM, true, r.size.x - 38)
-		app._txt_c(str(uno_hands[seat].size()) + " کارت", Rect2(r.position.x + 2, r.position.y + 24, r.size.x * 0.55, 23), 11, app.TEXT_DIM)
-		app._txt_c(str(uno_scores[seat]), Rect2(r.end.x - 36, r.position.y + 24, 32, 23), 11, app.ACCENT if active else app.TEXT_DIM, true)
-	var mid_y: float = 300.0 if uno_player_count <= 5 else 326.0
-	app._panel(Rect2(30, mid_y - 68, 480, 228), Color(0.07, 0.08, 0.15, 0.88), 24, app.LINE_STRONG, 1.0, 10, 4)
-	app._txt_c("رنگ فعال: " + COLOR_NAMES[uno_current_color], Rect2(70, mid_y - 56, 400, 28), 15, COLORS[uno_current_color], true)
-	var top_rect := Rect2(210, mid_y - 15, 120, 162)
-	_uno_draw_card_visual(top_rect, top, false, false)
-	app._panel(Rect2(58, mid_y + 10, 104, 120), Color(0.13, 0.15, 0.25), 12, app.LINE_STRONG)
-	app._txt_c("دسته", Rect2(58, mid_y + 22, 104, 26), 14, app.TEXT_DIM, true)
-	app._txt_c(str(uno_draw_pile.size()), Rect2(58, mid_y + 56, 104, 30), 22, app.TEXT, true)
-	app._txt_c("کارت", Rect2(58, mid_y + 84, 104, 24), 12, app.TEXT_DIM)
-	app._txt_c("کارت رو شده", Rect2(350, mid_y + 48, 140, 25), 12, app.TEXT_DIM)
-	if uno_challenge_available:
-		app._hint("+۴ بازی شده؛ می‌توانید چالش کنید یا ۴ کارت بکشید.", 544, app.RED)
-	elif uno_catch_seat >= 0:
-		app._hint("بازیکن هنوز اعلام UNO نکرده؛ پیش از بازی کارت بگیرید.", 544, Color("#efb253"))
-	else:
-		app._hint(uno_status if not uno_status.is_empty() else ("نوبت شما" if uno_turn == me else "در انتظار حرکت بازیکن"), 544, app.ACCENT if uno_turn == me else app.TEXT_DIM)
-	if me >= 0 and me < uno_hands.size():
-		var hand: Array = uno_hands[me]
-		var start: int = mini(uno_hand_page * 7, maxi(0, hand.size() - 1))
-		var count: int = mini(7, hand.size() - start)
-		for i in range(count):
-			var index: int = start + i
-			_uno_draw_card_visual(Rect2(14 + i * 73, 687, 68, 100), hand[index], index == uno_selected_card, true)
-		app._txt_c("دست شما · %s از %s کارت" % [start + 1 if hand.size() > 0 else 0, hand.size()], Rect2(35, 650, 470, 24), 13, app.TEXT_DIM)
-	if uno_round_over:
-		app._hint("پایان دست · برنده %s · امتیاز این دست %s" % [_uno_player_name(uno_round_winner), uno_last_round_points], 588, app.GREEN)
-	elif uno_turn != me:
-		app._hint("نوبت %s" % _uno_player_name(uno_turn), 588, app.TEXT_DIM)
-	app._txt_c("مسابقه تا ۵۰۰ امتیاز · بدون قانون جمع‌کردن +۲ و +۴", Rect2(35, 610, 470, 24), 11, app.TEXT_FAINT)
+	_uno_presentation.render(app, self)

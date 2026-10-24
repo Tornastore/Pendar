@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MAIN = (ROOT / "main.gd").read_text(encoding="utf-8")
 CATALOG = (ROOT / "core/game_catalog.gd").read_text(encoding="utf-8")
 MM = (ROOT / "games/mastermind/rules.gd").read_text(encoding="utf-8")
+MM_PRESENTATION = (ROOT / "games/mastermind/presentation.gd").read_text(encoding="utf-8")
 PROTO = (ROOT / "online-server/lib/protocol.js").read_text(encoding="utf-8")
 SERVER = (ROOT / "online-server/server.js").read_text(encoding="utf-8")
 
@@ -59,7 +60,7 @@ class MultiplayerCapacityAndResultsTests(unittest.TestCase):
         self.assertIn('func _rpc_register_lan_username(username: String)', MAIN)
 
     def test_mastermind_only_shows_public_exact_progress_for_other_players(self):
-        sidebar = MM[MM.index('func _draw_mm_online_sidebar()'):MM.index('func _mm_online_feedback')]
+        sidebar = MM_PRESENTATION[MM_PRESENTATION.index('func render_online_sidebar'):]
         self.assertIn('latest_black', sidebar)
         self.assertIn('رتبه‌بندی', sidebar)
         self.assertIn('progress_ratio', sidebar)
