@@ -185,7 +185,8 @@ func _legal_sources(game, die: int) -> Array[int]:
 
 func _target_for_source(source: int, die: int) -> int:
 	if source == -1:
-		return die - 1
+		# CPU seat 1 re-enters on points 1..6 (indices 23..18).
+		return 24 - die
 	var target: int = source - die
 	return -1 if target < 0 else target
 
@@ -259,12 +260,12 @@ func _home_board_block_score(game) -> float:
 	var score: float = 0.0
 	var human_bar: int = int(game.bg_bar[0])
 	var cpu_bar: int = int(game.bg_bar[1])
-	# Positive checkers enter on 18..23; CPU made points there can pin them on the bar.
-	for point in range(18, 24):
+	# Positive checkers enter on 0..5 (top-right side); CPU made points there can pin them on the bar.
+	for point in range(0, 6):
 		if int(game.bg_points[point]) <= -2:
 			score += 1.8 + float(mini(human_bar, 3)) * 1.25
-	# CPU checkers enter on 0..5; the human can similarly block those entry points.
-	for point in range(0, 6):
+	# CPU checkers enter on 18..23 (bottom-right side); human made points can block those entries.
+	for point in range(18, 24):
 		if int(game.bg_points[point]) >= 2:
 			score -= 1.8 + float(mini(cpu_bar, 3)) * 1.25
 	return score

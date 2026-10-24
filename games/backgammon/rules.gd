@@ -184,7 +184,7 @@ func _bg_legal_moves_for_die(player: int, die: int) -> Array[Dictionary]:
 		return moves
 	var direction: int = 1 if player == 0 else -1
 	if int(bg_bar[player]) > 0:
-		var entry: int = 24 - die if player == 0 else die - 1
+		var entry: int = die - 1 if player == 0 else 24 - die
 		if _bg_can_land(player, entry):
 			moves.append({"source": -1, "target": entry, "die": die})
 		return moves
@@ -346,7 +346,7 @@ func _bg_cpu() -> void:
 
 func _bg_cpu_apply_source(source: int, die: int) -> void:
 	# Kept as a compatibility wrapper for older callers; new plans include targets.
-	var target: int = die - 1 if source == -1 else source - die
+	var target: int = 24 - die if source == -1 else source - die
 	if source >= 0 and target < 0:
 		target = -1
 	_bg_apply_board_move(1, {"source": source, "target": target, "die": die})

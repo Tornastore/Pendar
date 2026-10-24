@@ -120,12 +120,21 @@ func _test_bar_entry_and_blocked_points() -> void:
 		if int(move.source) != -1:
 			only_bar_moves = false
 	_expect(only_bar_moves, "checkers on bar force entry before all board moves")
-	_expect(_has_move(turn_moves, -1, 20, 4), "bar entry uses 24 minus the die for player zero")
+	_expect(_has_move(turn_moves, -1, 3, 4), "human checker enters the top-right entry board using die four")
+	_expect(_has_move(game._bg_legal_moves_for_die(0, 1), -1, 0, 1), "die one enters at the top-right point 24")
+	_expect(_has_move(game._bg_legal_moves_for_die(0, 6), -1, 5, 6), "die six enters at point 19 on the top row")
 
 	points = _empty_points()
-	points[20] = -2
+	points[3] = -2
 	_set_position(game, points, [1, 0], [0, 0], 0, [4, 2])
-	_expect(game._bg_legal_moves_for_die(0, 4).is_empty(), "two opposing checkers block a bar entry point")
+	_expect(game._bg_legal_moves_for_die(0, 4).is_empty(), "two opposing checkers block the human top-row bar entry")
+
+	points = _empty_points()
+	_set_position(game, points, [0, 1], [0, 0], 1, [4, 2])
+	var cpu_moves: Array[Dictionary] = game._bg_turn_legal_moves(1)
+	_expect(_has_move(cpu_moves, -1, 20, 4), "CPU checker enters the bottom-right entry board using die four")
+	_expect(_has_move(game._bg_legal_moves_for_die(1, 1), -1, 23, 1), "CPU die one enters at the bottom-right point 1")
+	_expect(_has_move(game._bg_legal_moves_for_die(1, 6), -1, 18, 6), "CPU die six enters at point 6 on the bottom row")
 
 func _test_hits_and_bearing_off() -> void:
 	var game = _new_game().game
@@ -255,12 +264,12 @@ func _test_ai_bar_and_home_board_heuristics() -> void:
 	_expect(ai._human_can_hit(game, 8) == 0, "human hit threat is suppressed while the human must enter from the bar")
 
 	points = _empty_points()
-	points[18] = -2
+	points[0] = -2
 	_set_position(game, points, [1, 0], [0, 0], 1, [2, 4])
 	var block_score: float = ai._home_board_block_score(game)
 	_expect(block_score > 0.0, "CPU made points on human entry board are valued when human has a checker on bar")
 	points = _empty_points()
-	points[2] = 2
+	points[18] = 2
 	_set_position(game, points, [0, 1], [0, 0], 1, [2, 4])
 	block_score = ai._home_board_block_score(game)
 	_expect(block_score < 0.0, "human made points blocking CPU entry are penalized when CPU has a checker on bar")
