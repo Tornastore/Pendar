@@ -3,6 +3,10 @@ extends "res://core/game_module.gd"
 
 const OthelloAIScript = preload("res://games/othello/ai.gd")
 const OthelloPresentationScript = preload("res://games/othello/presentation.gd")
+const OTH_DIRS: Array[Vector2i] = [
+	Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
+	Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)
+]
 
 # ---------- Game-owned state ----------
 var oth_size: int = 8
@@ -53,7 +57,7 @@ func _othello_would_flip(c: Vector2i, color: int) -> Array:
 	var flips: Array = []
 	if othello_board[c.y][c.x] != 0:
 		return flips
-	for d in app.OTH_DIRS:
+	for d in OTH_DIRS:
 		var dir: Vector2i = d
 		var line: Array = []
 		var p: Vector2i = c + dir

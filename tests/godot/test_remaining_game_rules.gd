@@ -131,9 +131,12 @@ func _test_hokm_follow_suit_and_trick() -> void:
 	game.hokm_turn = 0
 	game.hokm_trick = []
 	game.hokm_led_suit = -1
-	_expect(not game._hokm_legal(1, {"r": 1, "s": 2}), "Hokm requires following suit when the player holds the led suit")
 	game._hokm_play(0, 0)
 	_expect(game.hokm_turn == 1 and game.hokm_led_suit == 1, "Hokm records the led suit and gives the response turn")
+	_expect(not game._hokm_legal(1, {"r": 1, "s": 2}), "Hokm requires following suit when the player holds the led suit")
+	var response_hand_size: int = game.hokm_hands[1].size()
+	game._hokm_play(1, 1)
+	_expect(game.hokm_trick.size() == 1 and game.hokm_hands[1].size() == response_hand_size, "Hokm rejects an off-suit play while a led-suit card is held")
 	game._hokm_play(1, 0)
 	_expect(game.hokm_scores == [1, 0], "Hokm awards the trick to the higher card in the led suit")
 	_expect(game.hokm_trick.is_empty() and game.hokm_turn == 0, "Hokm clears a completed trick and leads from its winner")
