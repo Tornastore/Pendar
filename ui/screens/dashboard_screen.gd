@@ -1,4 +1,5 @@
 extends RefCounted
+const RankingServiceScript = preload("res://services/ranking_service.gd")
 ## Dashboard page presentation. State and score ownership remain in the main controller/services.
 
 func build_buttons(host, theme: Dictionary) -> void:
@@ -65,11 +66,15 @@ func render(host, theme: Dictionary) -> void:
 	var total_matches: int = int(win_loss_draw[0]) + int(win_loss_draw[1]) + int(win_loss_draw[2])
 	var win_rate: int = int(round(100.0 * float(win_loss_draw[0]) / float(maxi(1, total_matches)))) if total_matches > 0 else 0
 	var card := Rect2(16, 58, float(theme["VIEW_W"]) - 32, 184)
-	var tier: Array = host._tier_info()
+	# This card shows permanent skill (MMR); the monthly league lives on the rankings page.
+	var tier: Array = RankingServiceScript.tier_info(host.scoring_service.global_rating)
 	var tier_color: Color = tier[1]
 	host._panel(card, Color(0.15, 0.18, 0.34), 24, Color(tier_color.r, tier_color.g, tier_color.b, 0.5), 1.5, 12, 5)
 	host._glow(Vector2(card.end.x - 90, card.position.y + 60), 120, Color(tier_color.r, tier_color.g, tier_color.b, 0.25))
-	host._txt_r("رتبه کلی", card.end.x - 22, card.position.y + 34, 14, theme["TEXT_DIM"], true, 200)
+	host._txt_r("رتبه‌ی مهارتی", card.end.x - 22, card.position.y + 34, 14, theme["TEXT_DIM"], true, 200)
+	var level_info: Dictionary = host.scoring_service.level()
+	host._txt_r("سطح %s · %s" % [host._fa(level_info["level"]), str(host._tier_info()[0])], card.position.x + 230, card.position.y + 34, 13, theme["TEXT"], true, 210)
+	host._txt_r("بهترین رشته‌ی برد: %s" % host._fa(host.scoring_service.best_streak), card.position.x + 230, card.position.y + 58, 11, theme["TEXT_DIM"], false, 210)
 	host._txt_r(host._fa(host.scoring_service.global_rating), card.end.x - 22, card.position.y + 90, 52, theme["TEXT"], true, 300)
 	var tier_chip_width: float = host._txt_w(str(tier[0]), 14, true) + 30.0
 	var tier_chip := Rect2(card.end.x - 22 - tier_chip_width, card.position.y + 102, tier_chip_width, 28)

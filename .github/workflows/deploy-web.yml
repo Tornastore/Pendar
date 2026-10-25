@@ -225,6 +225,52 @@ jobs:
             exit 1
           fi
 
+      - name: Run league scoring regression tests
+        shell: bash
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          LOG_FILE="/tmp/pendar-scoring-league.log"
+          godot --headless --path . --script res://tests/godot/test_scoring_league.gd 2>&1 | tee "$LOG_FILE"
+          if grep -E 'SCRIPT ERROR|Parse Error|Parser Error|SCORING_LEAGUE_TESTS: .*failures=[1-9][0-9]*|^FAIL' "$LOG_FILE"; then
+            echo "ERROR: Run league scoring regression tests reported failures or script errors." >&2
+            exit 1
+          fi
+          if ! grep -E 'SCORING_LEAGUE_TESTS: checks=[0-9]+, failures=0' "$LOG_FILE"; then
+            echo "ERROR: Run league scoring regression tests summary is missing or non-zero." >&2
+            exit 1
+          fi
+
+      - name: Run league UI smoke tests
+        shell: bash
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          LOG_FILE="/tmp/pendar-league-ui.log"
+          godot --headless --path . --script res://tests/godot/test_league_ui_smoke.gd 2>&1 | tee "$LOG_FILE"
+          if grep -E 'SCRIPT ERROR|Parse Error|Parser Error|LEAGUE_UI_TESTS: .*failures=[1-9][0-9]*|^FAIL' "$LOG_FILE"; then
+            echo "ERROR: Run league UI smoke tests reported failures or script errors." >&2
+            exit 1
+          fi
+          if ! grep -E 'LEAGUE_UI_TESTS: checks=[0-9]+, failures=0' "$LOG_FILE"; then
+            echo "ERROR: Run league UI smoke tests summary is missing or non-zero." >&2
+            exit 1
+          fi
+
+      - name: Set up Node.js for matchmaking tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run matchmaking server tests
+        shell: bash
+        timeout-minutes: 3
+        working-directory: online-server
+        run: |
+          set -euo pipefail
+          npm install --no-audit --no-fund
+          node --test
+
       - name: Smoke-test game startup
         shell: bash
         timeout-minutes: 3

@@ -1,55 +1,91 @@
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def read(*parts):
+    return (ROOT.joinpath(*parts)).read_text(encoding="utf-8")
+
 
 def test_scoring_service_separates_monthly_points_from_skill_mmr():
-    root = Path(__file__).resolve().parents[1]
-    scoring = (root / "services" / "scoring_service.gd").read_text(encoding="utf-8")
-    ranking = (root / "services" / "ranking_service.gd").read_text(encoding="utf-8")
-    main = (root / "main.gd").read_text(encoding="utf-8")
-    assert 'const WIN_PTS := 24' in scoring
-    assert 'const DRAW_PTS := 4' in scoring
-    assert 'const LOSS_PTS := -12' in scoring
+    scoring = read("services", "scoring_service.gd")
+    ranking = read("services", "ranking_service.gd")
+    main = read("main.gd")
+    assert "const WIN_PTS := 30" in scoring
+    assert "const DRAW_PTS := 6" in scoring
+    assert "const LOSS_PTS := -18" in scoring
     assert 'const SCORE_PATH := "user://pendar_scores.cfg"' in scoring
     assert 'const LEGACY_SCORE_PATH := "user://mind_bastion_scores.cfg"' in scoring
+    assert "const SCHEMA_VERSION := 3" in scoring
     assert '"season_points": 0' in scoring
     assert '"rating": INITIAL_RATING' in scoring
-    assert 'func _roll_season_if_needed()' in scoring
-    assert 'if ranked_human:' in scoring
+    assert "func _rollover_season(" in scoring
+    assert "if ranked_human:" in scoring
     assert 'stats["rating"] = clampi' in scoring
-    assert 'func season_tier_info(points: int)' in ranking
-    assert 'scoring_service.record_result' in main
+    assert "func season_tier_info(points: int)" in ranking
+    assert "scoring_service.record_result" in main
+
+
+def test_two_ladders_are_applied_independently_with_floor_ceiling_and_gate():
+    scoring = read("services", "scoring_service.gd")
+    league = read("services", "league_service.gd")
+    assert "ladder_apply(global_season_points" in scoring
+    assert 'ladder_apply(int(stats["season_points"])' in scoring
+    assert "PRACTICE_CEILING_GLOBAL" in scoring and "PRACTICE_CEILING_GAME" in scoring
+    assert "gate_cap_points" in scoring
+    assert "scaled_start(LeagueScript.league_index_for_points" in scoring  # league floor
+    assert "GAME_LADDER_SCALE := 0.5" in league
+    assert "SEASON_CARRY := 0.35" in league
+    assert '"id": "legend"' in league and '"id": "bronze"' in league
 
 
 def test_cpu_rewards_scale_by_difficulty_and_do_not_change_competitive_mmr():
-    root = Path(__file__).resolve().parents[1]
-    scoring = (root / "services" / "scoring_service.gd").read_text(encoding="utf-8")
-    assert 'CPU_DIFFICULTY_MULTIPLIERS: Array[float] = [0.15, 0.25, 0.38, 0.52, 0.68, 0.82]' in scoring
-    assert 'elif against_cpu:' in scoring
-    assert 'if ranked_human:' in scoring
-    assert 'global_rating = clampi(global_rating + global_rating_delta' in scoring
-    assert 'rating_schema_version' in scoring
-    assert 'else INITIAL_RATING' in scoring
-    assert 'if outcome == "draw":' in scoring
-    assert 'raw_delta = maxi(1, raw_delta)' in scoring
+    scoring = read("services", "scoring_service.gd")
+    assert "CPU_DIFFICULTY_MULTIPLIERS: Array[float] = [0.10, 0.18, 0.30, 0.45, 0.62, 0.80]" in scoring
+    assert "HUMAN_LAN_MULTIPLIER := 0.45" in scoring
+    assert "if ranked_human:" in scoring
+    assert "global_rating = clampi(global_rating_before + global_rating_delta" in scoring
+    assert "rating_schema_version" in scoring
+    assert 'lp = maxi(1, lp)' in scoring  # wins/draws always give at least one point
+    assert '"human_lan"' in scoring
 
 
 def test_scoring_design_documents_honest_online_leaderboard_limitations():
-    root = Path(__file__).resolve().parents[1]
-    doc = (root / "docs" / "SCORING_AND_LEAGUES_FA.md").read_text(encoding="utf-8")
+    doc = read("docs", "SCORING_AND_LEAGUES_FA.md")
     assert "MMR" in doc
     assert "امتیاز لیگ" in doc
     assert "جهانی و مشترک میان تمام کاربران نیست" in doc
     assert "ضدتقلب" in doc
 
 
-def test_match_duration_increases_positive_league_rewards_and_is_capped():
-    root = Path(__file__).resolve().parents[1]
-    scoring = (root / "services" / "scoring_service.gd").read_text(encoding="utf-8")
-    assert '"uno": 1.20' in scoring
-    assert 'func _duration_multiplier(duration_seconds: float) -> float:' in scoring
-    assert 'clampf(duration_seconds, 0.0, 1800.0)' in scoring
-    assert 'duration_factor' in scoring
-    assert 'duration_seconds: float = 0.0' in scoring
-    # Elo/MMR is computed separately; elapsed time only modifies season point awards.
-    assert 'if outcome == "loss":' in scoring
-    assert 'game_rating_delta := 0' in scoring
+def test_match_duration_modifies_league_points_but_not_mmr():
+    scoring = read("services", "scoring_service.gd")
+    assert '"uno": {"weight": 0.85' in scoring
+    assert "static func duration_multiplier(duration_seconds: float" in scoring
+    assert "clampf(duration_seconds, 0.0, LONG_MATCH_SECONDS)" in scoring
+    assert "SHORT_MATCH_SECONDS" in scoring
+    assert "duration_seconds: float = 0.0" in scoring
+    # Elo/MMR is computed separately; elapsed time only modifies league point awards.
+    assert "game_rating_delta := 0" in scoring
+    assert 'if outcome != "loss":' in scoring
+
+
+def test_anti_quit_and_online_integrity_hooks_are_wired():
+    main = read("main.gd")
+    scoring = read("services", "scoring_service.gd")
+    assert "func _settle_unfinished_online_match(" in main
+    assert "begin_pending_match" in main and "settle_pending_match" in main
+    assert '_settle_unfinished_online_match("win", {"forfeit": true})' in main
+    assert '"rating": scoring_service.match_rating(online_game)' in main
+    assert "func begin_pending_match(" in scoring
+    server = read("online-server", "server.js")
+    assert "findBestPair" in server and "pickGroup" in server
+    assert "opponent_rating" in server
+
+
+def test_quests_badges_and_season_calendar_exist():
+    quest = read("services", "quest_service.gd")
+    league = read("services", "league_service.gd")
+    assert "DAILY_POOL" in quest and "WEEKLY_POOL" in quest and "BADGES" in quest
+    assert "func jalali_from_unix" in league
+    assert "TEHRAN_UTC_OFFSET_SECONDS := 12600" in league

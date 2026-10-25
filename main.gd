@@ -8,6 +8,7 @@ const VIEW_H := 960.0
 
 const GameCatalogScript = preload("res://core/game_catalog.gd")
 const ScoringServiceScript = preload("res://services/scoring_service.gd")
+const LeagueScript = preload("res://services/league_service.gd")
 const RankingServiceScript = preload("res://services/ranking_service.gd")
 const OnlineClientScript = preload("res://services/online_client.gd")
 const UIContentScript = preload("res://core/ui_content.gd")
@@ -60,6 +61,12 @@ var state: State = State.MENU:
 	set = _set_state
 var menu_scroll: float = 0.0
 var dash_tab: int = 0
+var rank_tab: int = 0 # rankings page tabs: 0 league, 1 quests, 2 badges
+var _last_score_result: Dictionary = {}
+var _opp_match_rating: int = -1
+var _opp_global_rating: int = -1
+var _opp_league: int = -1
+var _queue_hint_shown: bool = false
 var rank_game_filter: String = "all"
 var online_room_code: String = ""
 var online_searching: bool = false
@@ -853,12 +860,47 @@ func _current_game_difficulty() -> int:
 		"uno": return int(_game_modules["uno"].uno_difficulty)
 	return 3
 
-func _record_match_result(outcome: String, opponent_rating: int = -1, opponent_global_rating: int = -1) -> Dictionary:
-	var opponent_kind := "cpu" if vs_cpu else ("human_online" if _net_on() else "local_friendly")
+func _opponent_kind() -> String:
+	if vs_cpu:
+		return "cpu"
+	if ws_match_active:
+		return "human_online" # matchmaker queue: the only ranked human mode (changes MMR)
+	if multiplayer.multiplayer_peer != null:
+		return "human_lan" # direct Wi-Fi/IP game: friendly, reduced league points, no MMR
+	return "local_friendly"
+
+func _match_player_count() -> int:
+	match selected_game:
+		"uno": return int(_game_modules["uno"].uno_player_count) if vs_cpu else connected_players
+		"quoridor": return int(_game_modules["quoridor"].quo_player_count)
+		"mastermind":
+			if vs_cpu and bool(_game_modules["mastermind"].mm_cpu_race):
+				return 4
+			return connected_players if _net_on() else 2
+	return 2
+
+func _record_match_result(outcome: String, opponent_rating: int = -1, opponent_global_rating: int = -1, extra: Dictionary = {}) -> Dictionary:
+	var opponent_kind := _opponent_kind()
 	var duration_seconds: float = float(Time.get_ticks_msec() - _game_started_msec) / 1000.0
 	if selected_game == "uno" and _game_modules.has("uno"):
 		duration_seconds = float(_game_modules["uno"].uno_round_duration_seconds)
-	return scoring_service.record_result(selected_game, outcome, opponent_kind, _current_game_difficulty(), _game_ids(), opponent_rating, opponent_global_rating, duration_seconds)
+	var opp_rating: int = opponent_rating if opponent_rating > 0 else _opp_match_rating
+	var opp_global: int = opponent_global_rating if opponent_global_rating > 0 else _opp_global_rating
+	var context: Dictionary = {"players": _match_player_count(), "opponent_name": opponent_name if opponent_kind != "cpu" else ""}
+	context.merge(extra, true)
+	_last_score_result = scoring_service.record_result(selected_game, outcome, opponent_kind, _current_game_difficulty(), _game_ids(), opp_rating, opp_global, duration_seconds, context)
+	return _last_score_result
+
+# Leaving, disconnecting or being left during an unfinished ranked online match must settle it, otherwise quitting
+# would be a free way to dodge a loss.
+func _settle_unfinished_online_match(outcome: String, extra: Dictionary = {}) -> void:
+	if not (state == State.PLAYING and ws_match_active and not vs_cpu and not _result_logged and selected_game != ""):
+		return
+	_result_logged = true
+	_result_popup_open = false
+	var res: Dictionary = _record_match_result(outcome, -1, -1, extra)
+	if bool(res.get("recorded", false)):
+		_show_toast("%s: %s امتیاز لیگ" % ["ترک بازی به‌عنوان باخت ثبت شد" if outcome == "loss" else "حریف بازی را ترک کرد؛ برد ثبت شد", RankingServiceScript.signed(int(res.get("delta", 0)))])
 
 func _points_in_period(game_id: String, days: int) -> int:
 	return scoring_service.points_in_period(game_id, days)
@@ -2124,12 +2166,22 @@ func _confirm_exit_app() -> void:
 
 func _confirm_exit_game() -> void:
 	var body := "بازی جاری ناتمام می‌ماند و نتیجه‌ای ثبت نمی‌شود."
-	if _net_on():
+	if ws_match_active and not vs_cpu and not _result_logged:
+		body = "ترک بازی آنلاین به‌عنوان باخت ثبت می‌شود و امتیاز لیگ شما کم می‌شود."
+	elif _net_on():
 		body += "\nارتباط شما با حریف قطع خواهد شد."
 	_show_confirm("exit_game", "خروج از بازی؟", body, "خروج به منو", _back_to_menu, true, "ادامه بازی", "door")
 
+func _resign_cost_text() -> String:
+	var kind: String = _opponent_kind()
+	if kind == "local_friendly":
+		return "بدون امتیاز"
+	var pv: Dictionary = scoring_service.preview_points(selected_game, kind, _current_game_difficulty(), _opp_match_rating, _match_player_count())
+	var applied: int = int(pv.get("loss_applied", 0))
+	return "بدون تغییر امتیاز" if applied == 0 else "%s امتیاز" % _fa(applied).replace("-", "−")
+
 func _confirm_resign() -> void:
-	_show_confirm("resign", "تسلیم می‌شوید؟", "این بازی به‌عنوان باخت ثبت می‌شود (%s امتیاز)." % _fa(scoring_service.LOSS_PTS), "تسلیم", _resign, true, "ادامه بازی", "flag")
+	_show_confirm("resign", "تسلیم می‌شوید؟", "این بازی به‌عنوان باخت ثبت می‌شود (%s)." % _resign_cost_text(), "تسلیم", _resign, true, "ادامه بازی", "flag")
 
 func _confirm_restart() -> void:
 	_show_confirm("restart", "شروع بازی جدید؟", "پیشرفت بازی فعلی از بین می‌رود و نتیجه‌ای ثبت نمی‌شود.", "بازی جدید", _restart_current, true, "انصراف", "restart")
@@ -2159,6 +2211,8 @@ func _select_game(id: String) -> void:
 	_rebuild_buttons()
 
 func _back_to_menu() -> void:
+	_settle_unfinished_online_match("loss", {"abandoned": true})
+	scoring_service.clear_pending_match()
 	_cleanup_network()
 	_result_popup_open = false
 	dialog = {}
@@ -2205,9 +2259,9 @@ func _close_result_popup() -> void:
 
 func _btns_result_popup() -> void:
 	var can_restart: bool = vs_cpu or is_host or not _net_on()
-	_add_ov_btn(Rect2(54, 536, VIEW_W - 108, 52), "ادامه و مشاهده صفحه نهایی", _close_result_popup, GREEN, "solid", "eye", "result_view")
-	_add_ov_btn(Rect2(54, 598, 206, 50), "بازی دوباره", _restart_current, ACCENT, "soft", "restart", "result_again", can_restart)
-	_add_ov_btn(Rect2(280, 598, 206, 50), "منوی اصلی", _back_to_menu, TEXT_DIM, "ghost", "home", "result_home")
+	_add_ov_btn(Rect2(54, 712, VIEW_W - 108, 52), "ادامه و مشاهده صفحه نهایی", _close_result_popup, GREEN, "solid", "eye", "result_view")
+	_add_ov_btn(Rect2(54, 774, 206, 50), "بازی دوباره", _restart_current, ACCENT, "soft", "restart", "result_again", can_restart)
+	_add_ov_btn(Rect2(280, 774, 206, 50), "منوی اصلی", _back_to_menu, TEXT_DIM, "ghost", "home", "result_home")
 
 # wrappers kept for the game-logic code that triggers a UI refresh
 func _build_menu_buttons() -> void:
@@ -2233,6 +2287,7 @@ func _build_result_buttons() -> void:
 		_result_delta = 0
 		_result_rating_delta = 0
 		_result_game_rating_delta = 0
+		_last_score_result = {}
 		var shared_device_four_player: bool = selected_game == "quoridor" and bool(_game_modules["quoridor"].quo_local_multiplayer)
 		# Shared-device four-player matches do not count toward one account's ranked results.
 		var scored_mode: bool = vs_cpu or _net_on()
@@ -2360,6 +2415,8 @@ func _apply_resign(seat: int) -> void:
 # ---------- game start / restart ----------
 func _start_game() -> void:
 	_game_started_msec = Time.get_ticks_msec()
+	if ws_match_active and not vs_cpu and selected_game != "":
+		scoring_service.begin_pending_match(selected_game, connected_players, opponent_name, _opp_match_rating, _opp_global_rating)
 	_result_popup_open = false
 	_result_logged = false
 	_game_epoch += 1
@@ -2601,7 +2658,17 @@ func _btns_menu() -> void:
 	_menu_screen.build_buttons(self, _ui_screen_theme)
 
 func _tier_info() -> Array:
-	return RankingServiceScript.tier_info(scoring_service.global_rating)
+	# Monthly league (label includes the division, e.g. "طلا ۲"); skill MMR lives in scoring_service.skill_tier().
+	return RankingServiceScript.season_tier_info(scoring_service.global_season_points)
+
+func _set_rank_tab(i: int) -> void:
+	rank_tab = clampi(i, 0, 2)
+	scroll_y = 0.0
+	_rebuild_buttons()
+
+func _open_quests() -> void:
+	rank_tab = 1
+	_open_rankings()
 
 func _draw_emblem(c: Vector2, s: float) -> void:
 	var r := Rect2(c - Vector2(s, s) * 0.5, Vector2(s, s))
@@ -2767,6 +2834,7 @@ func _quick_match_search() -> void:
 		_show_toast("اتصال به سرور بازی آغاز نشد: %s" % error_string(err))
 		return
 	ws_state = "connecting"
+	_queue_hint_shown = false
 	ws_queue_join_sent = false
 	ws_match_active = false
 	online_searching = true
@@ -4201,7 +4269,7 @@ func _ws_poll(_delta: float) -> void:
 	if _online_client.is_open() and online_searching and not ws_queue_join_sent:
 		var mm_level: int = int(_game_modules["mastermind"].mm_difficulty)
 		var blk_level: int = int(_game_modules["blockace"].blk_difficulty)
-		if _ws_send_json({"type": "join_queue", "game": online_game, "username": online_username, "mastermind_difficulty": mm_level, "blockace_difficulty": blk_level}):
+		if _ws_send_json({"type": "join_queue", "game": online_game, "username": online_username, "mastermind_difficulty": mm_level, "blockace_difficulty": blk_level, "rating": scoring_service.match_rating(online_game), "global_rating": scoring_service.global_rating, "league": int(scoring_service.global_tier()["league"])}):
 			ws_queue_join_sent = true
 			ws_state = "queued"
 			online_status = "در صف انتظار برای «%s»…" % str(_game_info(online_game).get("name", online_game))
@@ -4213,6 +4281,7 @@ func _ws_poll(_delta: float) -> void:
 	if _online_client.is_closed() and ws_state not in ["idle", "closing"]:
 		var was_waiting: bool = online_searching
 		var was_matched: bool = ws_match_active
+		_settle_unfinished_online_match("loss", {"abandoned": true})
 		_online_client.close()
 		ws_queue_join_sent = false
 		ws_match_active = false
@@ -4232,6 +4301,11 @@ func _ws_handle_server_message(message: Dictionary) -> void:
 			ws_state = "queued"
 			online_searching = true
 			online_status = "در صف انتظار برای %s؛ جایگاه %s" % [str(_game_info(online_game).get("name", online_game)), _fa(int(message.get("position", 1)))]
+			if message.get("search_range", null) != null:
+				online_status += " · دامنه‌ی جست‌وجو ±%s" % _fa(int(message.get("search_range", 0)))
+			if int(message.get("waited_ms", 0)) >= 30000 and not _queue_hint_shown:
+				_queue_hint_shown = true
+				_show_toast("هنوز حریف هم‌سطح پیدا نشد. می‌توانی تا آن موقع با CPU سطح %s تمرین کنی." % _fa(scoring_service.recommended_cpu_level(online_game)))
 			_rebuild_buttons()
 		"match_found":
 			_ws_begin_match(message)
@@ -4278,6 +4352,10 @@ func _ws_handle_server_message(message: Dictionary) -> void:
 			if ws_match_active and not is_host and str(message.get("game", "")) == selected_game:
 				_rpc_start_game(selected_game, int(message.get("seed", 0)), int(message.get("mastermind_difficulty", -1)), int(message.get("blockace_difficulty", -1)), int(message.get("player_count", connected_players)))
 		"opponent_left":
+			if connected_players == 2:
+				_settle_unfinished_online_match("win", {"forfeit": true})
+			else:
+				scoring_service.clear_pending_match()
 			ws_match_active = false
 			ws_state = "idle"
 			online_searching = false
@@ -4325,6 +4403,9 @@ func _ws_begin_match(message: Dictionary) -> void:
 				other_names.append(str(entry.get("username", "بازیکن")))
 		opponent_name = ", ".join(other_names)
 	online_room_code = str(message.get("room_id", ""))
+	_opp_match_rating = int(message.get("opponent_rating", -1))
+	_opp_global_rating = int(message.get("opponent_global_rating", -1))
+	_opp_league = int(message.get("opponent_league", -1))
 	ws_state = "matched"
 	ws_match_active = true
 	ws_queue_join_sent = true
@@ -4338,7 +4419,10 @@ func _ws_begin_match(message: Dictionary) -> void:
 	var mm_level: int = mm_difficulty if game_id == "mastermind" else -1
 	var blk_level: int = blk_difficulty if game_id == "blockace" else -1
 	_rpc_start_game(game_id, seed_value, mm_level, blk_level, connected_players)
-	_show_toast("حریف پیدا شد: " + opponent_name)
+	var opp_note: String = ""
+	if _opp_league >= 0 and connected_players == 2:
+		opp_note = " · لیگ " + str(LeagueScript.LEAGUES[clampi(_opp_league, 0, LeagueScript.LEAGUES.size() - 1)]["name"])
+	_show_toast("حریف پیدا شد: " + opponent_name + opp_note)
 	_rebuild_buttons()
 
 func _ws_game_turn_seat() -> int:
@@ -4510,6 +4594,21 @@ func _ready() -> void:
 	_reset_pasoor()
 	_reset_quarto()
 	_rebuild_buttons()
+	_settle_startup_state()
+
+func _settle_startup_state() -> void:
+	var settled: Dictionary = scoring_service.settle_pending_match(_game_ids())
+	if bool(settled.get("recorded", false)):
+		_show_toast("بازی آنلاین نیمه‌تمام قبلی به‌عنوان باخت ثبت شد (%s امتیاز)." % _fa(int(settled.get("delta", 0))).replace("-", "−"))
+	if scoring_service.report_unseen and not scoring_service.last_report.is_empty():
+		var r: Dictionary = scoring_service.last_report
+		var body: String = "%s تمام شد.\nبالاترین لیگ: %s · امتیاز پایانی %s\nبرد %s · مساوی %s · باخت %s\nفصل جدید را با %s امتیاز شروع می‌کنی؛ پیشرفت دائمی‌ات حفظ شده است." % [str(r.get("label", "")), str(r.get("peak_label", "")), _fa(int(r.get("points", 0))), _fa(int(r.get("wins", 0))), _fa(int(r.get("draws", 0))), _fa(int(r.get("losses", 0))), _fa(int(r.get("carry", 0)))]
+		scoring_service.acknowledge_season_report() # shown once; the archive stays in the rankings page
+		_show_confirm("season_report", "گزارش فصل", body, "دیدن رتبه‌بندی", _season_report_to_rankings, false, "بستن", "trophy")
+
+func _season_report_to_rankings() -> void:
+	rank_tab = 2
+	_open_rankings()
 
 func _process(delta: float) -> void:
 	_time += delta

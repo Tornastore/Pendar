@@ -1,0 +1,47 @@
+diff --git a/core/game_catalog.gd b/core/game_catalog.gd
+index 5e159c9..17549f6 100644
+--- a/core/game_catalog.gd
++++ b/core/game_catalog.gd
+@@ -9,7 +9,7 @@ static func all_games() -> Array:
+ 		{"id": "chess", "name": "شطرنج", "desc": "کلاسیک‌ترین بازی فکری جهان", "short": "شاه را بگیر", "players": "2 نفر", "max_p": 2, "icon_col": Color(0.9, 0.75, 0.3), "cat": "strategy", "net": true, "beta": false},
+ 		{"id": "domino", "name": "دومینو", "desc": "چینش مهره‌های سنگی", "short": "زنجیر بساز", "players": "2 نفر", "max_p": 2, "icon_col": Color(0.55, 0.65, 0.85), "cat": "classic", "net": true, "beta": false},
+ 		{"id": "pasoor", "name": "چهاربرگ (پاسور)", "desc": "جمع ۱۱ — سور و هفت‌خاج", "short": "جمع ۱۱ و سور", "players": "2 نفر", "max_p": 2, "icon_col": Color(0.95, 0.35, 0.4), "cat": "cards", "net": true, "beta": false},
+-		{"id": "hokm", "name": "حکم", "desc": "ورق‌بازی ایرانی با حکم", "short": "حکم بزن", "players": "2 نفر", "max_p": 2, "icon_col": Color(0.9, 0.3, 0.55), "cat": "cards", "net": true, "beta": true},
++		{"id": "hokm", "name": "حکم", "desc": "ورق‌بازی ایرانی با حکم", "short": "حکم بزن", "players": "2 نفر", "max_p": 2, "icon_col": Color(0.9, 0.3, 0.55), "cat": "cards", "net": true, "beta": false},
+ 		{"id": "backgammon", "name": "تخته نرد", "desc": "قوانین استاندارد حرکت، زدن مهره، ورود از بار و خارج‌کردن", "short": "تاس بینداز", "players": "2 نفر", "max_p": 2, "icon_col": Color(0.8, 0.58, 0.28), "cat": "classic", "net": true, "beta": false},
+ 		{"id": "gobblet", "name": "گابلت", "desc": "مهره‌های تو در تو", "short": "بخور و بچین", "players": "2 نفر", "max_p": 2, "icon_col": Color(0.98, 0.58, 0.18), "cat": "strategy", "net": true, "beta": false},
+ 		{"id": "mastermind", "name": "فکر بکر", "desc": "حدس کد رنگی مخفی و رقابت سرعتی", "short": "کد را بشکن", "players": "۲ تا ۴ نفر", "max_p": 4, "icon_col": Color(0.45, 0.7, 0.95), "cat": "classic", "net": true, "beta": false},
+diff --git a/games/hokm/README.md b/games/hokm/README.md
+index 16ef082..81b8593 100644
+--- a/games/hokm/README.md
++++ b/games/hokm/README.md
+@@ -1,5 +1,7 @@
+ # حکم
+ 
++- وضعیت انتشار: نسخهٔ عمومی و فعال؛ برچسب آزمایشی ندارد.
++
+ - شناسه ماژول: `hokm`
+ - پیاده‌سازی قوانین و مالکیت state این بازی در `rules.gd` قرار دارد.
+ - رابط کاربری مشترک فعلاً از طریق adapter در برنامه اصلی به state دسترسی دارد؛ قوانین از کد رابط جدا شده‌اند.
+diff --git a/tests/test_hokm_release_status.py b/tests/test_hokm_release_status.py
+new file mode 100644
+index 0000000..0598b5f
+--- /dev/null
++++ b/tests/test_hokm_release_status.py
+@@ -0,0 +1,16 @@
++from pathlib import Path
++import re
++
++
++def test_hokm_is_released_and_not_marked_experimental() -> None:
++    root = Path(__file__).resolve().parents[1]
++    catalog = (root / "core" / "game_catalog.gd").read_text(encoding="utf-8")
++    hokm_entries = [line for line in catalog.splitlines() if '"id": "hokm"' in line]
++
++    assert len(hokm_entries) == 1, "Hokm must have exactly one catalogue entry"
++    assert re.search(r'"beta"\s*:\s*false', hokm_entries[0]), (
++        "Hokm must be a released game so the menu and mode screen do not show the experimental badge"
++    )
++
++    readme = (root / "games" / "hokm" / "README.md").read_text(encoding="utf-8")
++    assert "نسخهٔ عمومی و فعال" in readme

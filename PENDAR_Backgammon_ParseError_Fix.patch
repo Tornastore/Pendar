@@ -1,0 +1,18 @@
+diff --git a/games/backgammon/rules.gd b/games/backgammon/rules.gd
+index 1ddcbf3..b1d3fdf 100644
+--- a/games/backgammon/rules.gd
++++ b/games/backgammon/rules.gd
+@@ -625,10 +625,10 @@ func _bg_combined_move_hints(source: int) -> Array[Dictionary]:
+ 		for second in tail.get("moves", []):
+ 			if int(second.source) != int(first.target):
+ 				continue
+-			var hint_key: String = "%d:%d:%d:%d" % [int(first.target), int(second.target), int(first.die), int(second.die)]
+-			if seen.has(hint_key):
++			var route_key: String = "%d:%d:%d:%d" % [int(first.target), int(second.target), int(first.die), int(second.die)]
++			if seen.has(route_key):
+ 				continue
+-			seen[hint_key] = true
++			seen[route_key] = true
+ 			hints.append({"source": source, "via": int(first.target), "target": int(second.target), "first_die": int(first.die), "second_die": int(second.die)})
+ 		_bg_restore_board(board_snapshot)
+ 	# Search helpers invalidate their cache while simulating; restore the live-turn cache.

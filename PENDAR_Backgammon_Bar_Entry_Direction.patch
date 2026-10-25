@@ -1,0 +1,97 @@
+diff --git a/games/backgammon/ai.gd b/games/backgammon/ai.gd
+index fdf9610..0a4bc7a 100644
+--- a/games/backgammon/ai.gd
++++ b/games/backgammon/ai.gd
+@@ -185,7 +185,8 @@ func _legal_sources(game, die: int) -> Array[int]:
+ 
+ func _target_for_source(source: int, die: int) -> int:
+ 	if source == -1:
+-		return die - 1
++		# CPU seat 1 re-enters on points 1..6 (indices 23..18).
++		return 24 - die
+ 	var target: int = source - die
+ 	return -1 if target < 0 else target
+ 
+@@ -259,12 +260,12 @@ func _home_board_block_score(game) -> float:
+ 	var score: float = 0.0
+ 	var human_bar: int = int(game.bg_bar[0])
+ 	var cpu_bar: int = int(game.bg_bar[1])
+-	# Positive checkers enter on 18..23; CPU made points there can pin them on the bar.
+-	for point in range(18, 24):
++	# Positive checkers enter on 0..5 (top-right side); CPU made points there can pin them on the bar.
++	for point in range(0, 6):
+ 		if int(game.bg_points[point]) <= -2:
+ 			score += 1.8 + float(mini(human_bar, 3)) * 1.25
+-	# CPU checkers enter on 0..5; the human can similarly block those entry points.
+-	for point in range(0, 6):
++	# CPU checkers enter on 18..23 (bottom-right side); human made points can block those entries.
++	for point in range(18, 24):
+ 		if int(game.bg_points[point]) >= 2:
+ 			score -= 1.8 + float(mini(cpu_bar, 3)) * 1.25
+ 	return score
+diff --git a/games/backgammon/rules.gd b/games/backgammon/rules.gd
+index 1ddcbf3..80ad38f 100644
+--- a/games/backgammon/rules.gd
++++ b/games/backgammon/rules.gd
+@@ -184,7 +184,7 @@ func _bg_legal_moves_for_die(player: int, die: int) -> Array[Dictionary]:
+ 		return moves
+ 	var direction: int = 1 if player == 0 else -1
+ 	if int(bg_bar[player]) > 0:
+-		var entry: int = 24 - die if player == 0 else die - 1
++		var entry: int = die - 1 if player == 0 else 24 - die
+ 		if _bg_can_land(player, entry):
+ 			moves.append({"source": -1, "target": entry, "die": die})
+ 		return moves
+@@ -346,7 +346,7 @@ func _bg_cpu() -> void:
+ 
+ func _bg_cpu_apply_source(source: int, die: int) -> void:
+ 	# Kept as a compatibility wrapper for older callers; new plans include targets.
+-	var target: int = die - 1 if source == -1 else source - die
++	var target: int = 24 - die if source == -1 else source - die
+ 	if source >= 0 and target < 0:
+ 		target = -1
+ 	_bg_apply_board_move(1, {"source": source, "target": target, "die": die})
+diff --git a/tests/godot/test_backgammon_rules.gd b/tests/godot/test_backgammon_rules.gd
+index 65415da..2ece368 100644
+--- a/tests/godot/test_backgammon_rules.gd
++++ b/tests/godot/test_backgammon_rules.gd
+@@ -120,12 +120,21 @@ func _test_bar_entry_and_blocked_points() -> void:
+ 		if int(move.source) != -1:
+ 			only_bar_moves = false
+ 	_expect(only_bar_moves, "checkers on bar force entry before all board moves")
+-	_expect(_has_move(turn_moves, -1, 20, 4), "bar entry uses 24 minus the die for player zero")
++	_expect(_has_move(turn_moves, -1, 3, 4), "human checker enters the top-right entry board using die four")
++	_expect(_has_move(game._bg_legal_moves_for_die(0, 1), -1, 0, 1), "die one enters at the top-right point 24")
++	_expect(_has_move(game._bg_legal_moves_for_die(0, 6), -1, 5, 6), "die six enters at point 19 on the top row")
+ 
+ 	points = _empty_points()
+-	points[20] = -2
++	points[3] = -2
+ 	_set_position(game, points, [1, 0], [0, 0], 0, [4, 2])
+-	_expect(game._bg_legal_moves_for_die(0, 4).is_empty(), "two opposing checkers block a bar entry point")
++	_expect(game._bg_legal_moves_for_die(0, 4).is_empty(), "two opposing checkers block the human top-row bar entry")
++
++	points = _empty_points()
++	_set_position(game, points, [0, 1], [0, 0], 1, [4, 2])
++	var cpu_moves: Array[Dictionary] = game._bg_turn_legal_moves(1)
++	_expect(_has_move(cpu_moves, -1, 20, 4), "CPU checker enters the bottom-right entry board using die four")
++	_expect(_has_move(game._bg_legal_moves_for_die(1, 1), -1, 23, 1), "CPU die one enters at the bottom-right point 1")
++	_expect(_has_move(game._bg_legal_moves_for_die(1, 6), -1, 18, 6), "CPU die six enters at point 6 on the bottom row")
+ 
+ func _test_hits_and_bearing_off() -> void:
+ 	var game = _new_game().game
+@@ -255,12 +264,12 @@ func _test_ai_bar_and_home_board_heuristics() -> void:
+ 	_expect(ai._human_can_hit(game, 8) == 0, "human hit threat is suppressed while the human must enter from the bar")
+ 
+ 	points = _empty_points()
+-	points[18] = -2
++	points[0] = -2
+ 	_set_position(game, points, [1, 0], [0, 0], 1, [2, 4])
+ 	var block_score: float = ai._home_board_block_score(game)
+ 	_expect(block_score > 0.0, "CPU made points on human entry board are valued when human has a checker on bar")
+ 	points = _empty_points()
+-	points[2] = 2
++	points[18] = 2
+ 	_set_position(game, points, [0, 1], [0, 0], 1, [2, 4])
+ 	block_score = ai._home_board_block_score(game)
+ 	_expect(block_score < 0.0, "human made points blocking CPU entry are penalized when CPU has a checker on bar")
