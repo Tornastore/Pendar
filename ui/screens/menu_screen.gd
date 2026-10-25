@@ -30,6 +30,13 @@ func build_buttons(host, theme: Dictionary) -> void:
 	host._add_btn(Rect2(16, 22, 44, 44), "", host._confirm_exit_app, true, theme["TEXT_DIM"], "icon", "power", "exit")
 	host._add_btn(Rect2(214, 22, 44, 44), "", host._toggle_music, true, theme["ACCENT"] if host.scoring_service.music_on else theme["TEXT_DIM"], "icon", host._music_icon(), "music")
 	host._add_btn(Rect2(16, 72, 104, 34), "راهنما", host._open_general_help, true, theme["BLUE"], "soft", "help", "menu_help")
+	var quests_done: int = 0
+	for q in host.scoring_service.quests_daily:
+		if bool(q.get("done", false)):
+			quests_done += 1
+	var quests_total: int = host.scoring_service.quests_daily.size()
+	var all_done: bool = quests_total > 0 and quests_done >= quests_total
+	host._add_btn(Rect2(128, 72, 176, 34), "ماموریت امروز %s/%s" % [host._fa(quests_done), host._fa(quests_total)], host._open_quests, quests_total > 0, theme["GREEN"] if all_done else theme["ACCENT"], "soft", "star", "menu_quests")
 	var x: float = float(theme["VIEW_W"]) - 16.0
 	for key in ["all", "strategy", "cards", "classic"]:
 		var label: String = theme["CATEGORY_LABELS"][key]
@@ -57,7 +64,8 @@ func render(host, theme: Dictionary) -> void:
 	var pill := Rect2(68, 26, 138, 36)
 	host._panel(pill, Color(1, 1, 1, 0.06), 18, Color(tier_color.r, tier_color.g, tier_color.b, 0.5), 1.0)
 	host.draw_circle(Vector2(pill.end.x - 18, pill.get_center().y), 7, tier_color)
-	host._txt_c("%s · %s" % [tier[0], host._fa(host.scoring_service.global_rating)], Rect2(pill.position.x + 4, pill.position.y, pill.size.x - 36, pill.size.y), 14, theme["TEXT"], true)
+	var pill_text: String = "%s · %s" % [tier[0], host._fa(host.scoring_service.global_season_points)]
+	host._txt_c(pill_text, Rect2(pill.position.x + 4, pill.position.y, pill.size.x - 36, pill.size.y), host._fit_size(pill_text, pill.size.x - 40.0, 14, true), theme["TEXT"], true)
 	if games.is_empty():
 		host._txt_c("بازی‌ای پیدا نشد", Rect2(0, 400, float(theme["VIEW_W"]), 40), 18, theme["TEXT_DIM"])
 	if host._scroll_max() > 4.0 and host.scroll_y < host._scroll_max() - 4.0:

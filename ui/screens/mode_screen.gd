@@ -1,4 +1,5 @@
 extends RefCounted
+const RankingServiceScript = preload("res://services/ranking_service.gd")
 ## Game-mode screen presenter. Reads selection state from main.gd and creates UI controls.
 ## Difficulty changes, mode starts and navigation remain controller-owned callbacks.
 
@@ -158,6 +159,30 @@ func build_buttons(host, theme: Dictionary) -> void:
 		host.buttons[host.buttons.size() - 1].hint = "این بازی فعلاً فقط با کامپیوتر قابل بازی است."
 
 
+const DIFFICULTY_LABELS: Array[String] = ["خیلی آسان", "آسان", "متوسط", "سخت", "استاد", "استادتمام"]
+
+
+func _points_text(host, preview: Dictionary) -> String:
+	var win: int = int(preview.get("win_applied", 0))
+	var loss: int = int(preview.get("loss_applied", 0))
+	return "برد %s · باخت %s" % [RankingServiceScript.signed(win) if win > 0 else "۰", RankingServiceScript.signed(loss) if loss < 0 else "۰"]
+
+
+# Shows what a win / loss is worth right now so players can see the risk-reward of harder levels and online matches.
+func _draw_reward_preview(host, theme: Dictionary, hero: Rect2, rx: float) -> void:
+	var svc = host.scoring_service
+	var gid: String = host.selected_game
+	var level: int = host._current_game_difficulty()
+	var cpu_pv: Dictionary = svc.preview_points(gid, "cpu", level)
+	var human_pv: Dictionary = svc.preview_points(gid, "human_online", level, svc.match_rating(gid))
+	var cpu_line: String = "کامپیوتر (این سطح) · " + _points_text(host, cpu_pv)
+	if int(cpu_pv.get("win_applied", 0)) == 0 and int(cpu_pv.get("win", 0)) > 0:
+		cpu_line = "کامپیوتر · سقف امتیاز تمرین پر است"
+	var on_line: String = "آنلاین با انسان · " + _points_text(host, human_pv)
+	host._txt_r(cpu_line, rx, hero.position.y + 190, host._fit_size(cpu_line, 250.0, 13, true), theme["TEXT_DIM"], true, 252)
+	host._txt_r(on_line, rx, hero.position.y + 210, host._fit_size(on_line, 250.0, 13, true), theme["GREEN"], true, 252)
+
+
 func render(host, theme: Dictionary) -> void:
 	var info: Dictionary = host._game_info(host.selected_game)
 	var col: Color = info.get("icon_col", theme["ACCENT"])
@@ -190,12 +215,15 @@ func render(host, theme: Dictionary) -> void:
 		host._panel(Rect2(cx, chip_y, w, 28), Color(cc.r, cc.g, cc.b, 0.16), 14, Color(cc.r, cc.g, cc.b, 0.6), 1.0)
 		host._txt_c(t, Rect2(cx, chip_y, w, 28), 13, cc.lightened(0.3), true)
 		cx -= 8.0
+	_draw_reward_preview(host, theme, hero, rx)
+	var rec_label: String = DIFFICULTY_LABELS[host.scoring_service.recommended_cpu_level(host.selected_game) - 1]
+	var prompt_suffix: String = " · پیشنهاد: " + rec_label
 	if host.selected_game == "quoridor":
-		host._txt_r("سطح هوش کامپیوتر را انتخاب کنید", host.VIEW_W - 28, 333, 13, theme["TEXT_DIM"], true, 310)
+		host._txt_r("سطح هوش کامپیوتر را انتخاب کنید" + prompt_suffix, host.VIEW_W - 28, 333, 13, theme["TEXT_DIM"], true, 380)
 		host._txt_r("روش بازی", host.VIEW_W - 28, 389, 13, theme["TEXT_DIM"], true, 180)
-	elif host.selected_game in ["othello", "othello12", "pentago", "domino", "gobblet", "abalone", "mastermind", "blockace", "quarto", "backgammon", "uno"]:
+	elif host.selected_game in ["othello", "othello12", "pentago", "domino", "gobblet", "abalone", "mastermind", "blockace", "quarto", "backgammon", "uno", "chess"]:
 		var difficulty_prompt: String = "درجه سختی، طول کد و تعداد رنگ‌ها" if host.selected_game == "mastermind" else "سطح هوش کامپیوتر را انتخاب کنید"
-		host._txt_r(difficulty_prompt, host.VIEW_W - 28, 333, 13, theme["TEXT_DIM"], true, 310)
+		host._txt_r(difficulty_prompt + prompt_suffix, host.VIEW_W - 28, 333, 13, theme["TEXT_DIM"], true, 380)
 		var mode_prompt: String = "کد: %s خانه · %s رنگ" % [host._fa(3 + host.mm_difficulty), host._fa(3 + host.mm_difficulty)] if host.selected_game == "mastermind" else ("بازیکنان: %s · هدف: ۵۰۰ امتیاز" % host._fa(host._game_modules["uno"].uno_player_count) if host.selected_game == "uno" else "روش بازی")
 		host._txt_r(mode_prompt, host.VIEW_W - 28, 389, 13, theme["TEXT_DIM"], true, 180)
 	else:

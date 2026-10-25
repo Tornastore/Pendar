@@ -1,0 +1,2418 @@
+diff --git a/.github/workflows/build-web.yml b/.github/workflows/build-web.yml
+index b9f282e..3b6a637 100644
+--- a/.github/workflows/build-web.yml
++++ b/.github/workflows/build-web.yml
+@@ -163,6 +163,38 @@ jobs:
+             exit 1
+           fi
+ 
++      - name: Run Quarto rules regression tests
++        shell: bash
++        timeout-minutes: 3
++        run: |
++          set -euo pipefail
++          LOG_FILE="/tmp/pendar-quarto-regression.log"
++          godot --headless --path . --script res://tests/godot/test_quarto_rules.gd 2>&1 | tee "$LOG_FILE"
++          if grep -E 'SCRIPT ERROR|Parse Error|Parser Error|QUARTO_RULES_TESTS: .*failures=[1-9][0-9]*' "$LOG_FILE"; then
++            echo "ERROR: Quarto regression tests reported script/runtime errors." >&2
++            exit 1
++          fi
++          if ! grep -E 'QUARTO_RULES_TESTS: checks=[0-9]+, failures=0' "$LOG_FILE"; then
++            echo "ERROR: Quarto regression summary was not found." >&2
++            exit 1
++          fi
++
++      - name: Run Pentago rules regression tests
++        shell: bash
++        timeout-minutes: 3
++        run: |
++          set -euo pipefail
++          LOG_FILE="/tmp/pendar-pentago-regression.log"
++          godot --headless --path . --script res://tests/godot/test_pentago_rules.gd 2>&1 | tee "$LOG_FILE"
++          if grep -E 'SCRIPT ERROR|Parse Error|Parser Error|PENTAGO_RULES_TESTS: .*failures=[1-9][0-9]*' "$LOG_FILE"; then
++            echo "ERROR: Pentago regression tests reported script/runtime errors." >&2
++            exit 1
++          fi
++          if ! grep -E 'PENTAGO_RULES_TESTS: checks=[0-9]+, failures=0' "$LOG_FILE"; then
++            echo "ERROR: Pentago regression test summary is missing or non-zero." >&2
++            exit 1
++          fi
++
+       - name: Smoke-test game startup
+         shell: bash
+         timeout-minutes: 3
+diff --git a/.github/workflows/deploy-web.yml b/.github/workflows/deploy-web.yml
+index 90f9936..b07b103 100644
+--- a/.github/workflows/deploy-web.yml
++++ b/.github/workflows/deploy-web.yml
+@@ -177,6 +177,38 @@ jobs:
+             exit 1
+           fi
+ 
++      - name: Run Quarto rules regression tests
++        shell: bash
++        timeout-minutes: 3
++        run: |
++          set -euo pipefail
++          LOG_FILE="/tmp/pendar-quarto-regression.log"
++          godot --headless --path . --script res://tests/godot/test_quarto_rules.gd 2>&1 | tee "$LOG_FILE"
++          if grep -E 'SCRIPT ERROR|Parse Error|Parser Error|QUARTO_RULES_TESTS: .*failures=[1-9][0-9]*' "$LOG_FILE"; then
++            echo "ERROR: Quarto regression tests reported script/runtime errors." >&2
++            exit 1
++          fi
++          if ! grep -E 'QUARTO_RULES_TESTS: checks=[0-9]+, failures=0' "$LOG_FILE"; then
++            echo "ERROR: Quarto regression summary was not found." >&2
++            exit 1
++          fi
++
++      - name: Run Pentago rules regression tests
++        shell: bash
++        timeout-minutes: 3
++        run: |
++          set -euo pipefail
++          LOG_FILE="/tmp/pendar-pentago-regression.log"
++          godot --headless --path . --script res://tests/godot/test_pentago_rules.gd 2>&1 | tee "$LOG_FILE"
++          if grep -E 'SCRIPT ERROR|Parse Error|Parser Error|PENTAGO_RULES_TESTS: .*failures=[1-9][0-9]*' "$LOG_FILE"; then
++            echo "ERROR: Pentago regression tests reported script/runtime errors." >&2
++            exit 1
++          fi
++          if ! grep -E 'PENTAGO_RULES_TESTS: checks=[0-9]+, failures=0' "$LOG_FILE"; then
++            echo "ERROR: Pentago regression test summary is missing or non-zero." >&2
++            exit 1
++          fi
++
+       - name: Smoke-test game startup
+         shell: bash
+         timeout-minutes: 3
+diff --git a/ARCHITECTURE.md b/ARCHITECTURE.md
+index 7d15e49..436c134 100644
+--- a/ARCHITECTURE.md
++++ b/ARCHITECTURE.md
+@@ -26,15 +26,20 @@ Pendar/
+ │   ├── othello/rules.gd
+ │   ├── othello/presentation.gd  # ترسیم اتلو و تبدیل مختصات لمس به خانه
+ │   ├── pentago/rules.gd
++│   ├── pentago/presentation.gd # board rendering, cell mapping and quadrant controls
+ │   ├── quoridor/rules.gd
++│   ├── quoridor/presentation.gd # board, wall geometry, input-to-edge mapping and HUD
+ │   ├── domino/rules.gd
+ │   ├── domino/presentation.gd  # ترسیم زنجیره دومینو، دست و نگاشت کلیک
+ │   ├── chess/rules.gd
+ │   ├── chess/presentation.gd  # ترسیم شطرنج و تبدیل کلیک به خانه
+ │   ├── pasoor/rules.gd
++│   ├── pasoor/presentation.gd  # کارت‌های دست/میز، چیدمان و نگاشت لمس
+ │   ├── mastermind/rules.gd
+ │   ├── gobblet/rules.gd
++│   ├── gobblet/presentation.gd # صفحه، پشته‌ها و ذخیره مهره‌ها
+ │   ├── hokm/rules.gd
++│   ├── hokm/presentation.gd    # چیدمان دست و کارت‌های روی زمین
+ │   ├── backgammon/rules.gd
+ │   ├── abalone/rules.gd
+ │   └── blockace/rules.gd
+@@ -195,3 +200,24 @@ The online matchmaking and LAN lobby views are delegated to `ui/screens/online_s
+ - `games/blockace/rules.gd` همچنان مرجع قطعی اعتبار قرار دادن قطعه، تماس گوشه‌ای، امتیاز، پایان بازی، CPU و اعمال حرکت آنلاین است؛ presenter فقط خانه انتخاب‌شده را به `_blk_handle_target()` تحویل می‌دهد.
+ - `_blk_tap`, `_btns_blockace`, `_draw_blk_cell` و `_draw_blockace` به‌عنوان wrapper حفظ شده‌اند تا dispatch موجود در `main.gd` تغییر نکند.
+ - `tests/test_blockace_presentation.py` و `tools/verify_structure.py` مرز نمایش/قواعد و سازگاری callbackها را ایستا کنترل می‌کنند؛ برای آزمون نهایی تعامل و چیدمان باید پروژه در Godot اجرا شود.
++
++## جداسازی نمایش پنتاگو
++
++- `games/pentago/presentation.gd` محاسبهٔ مختصات صفحه/خانه‌ها، تبدیل لمس به خانه، ساخت دکمه‌های چرخش چهار ربع و ترسیم صفحه را انجام می‌دهد.
++- `games/pentago/rules.gd` مرجع قطعی وضعیت صفحه، فاز جای‌گذاری/چرخش، نوبت، بررسی پنج‌تایی، چرخش ربع، تصمیم CPU و ارسال کنش شبکه باقی می‌ماند.
++- توابع `_pent_origin`, `_pent_cell_pos`, `_pent_tap`, `_pent_quad_rect`, `_btns_pentago` و `_draw_pentago` به‌عنوان wrapper حفظ شده‌اند؛ مسیر dispatch و RPCهای موجود در `main.gd` تغییر نکرده‌اند.
++- ورودی صفحه ابتدا فقط به خانهٔ منطقی تبدیل می‌شود و سپس به `_pent_handle_cell_tap()` تحویل داده می‌شود؛ قواعد امکان حرکت و ارسال شبکه را خود ماژول قواعد تعیین می‌کند.
++- `tests/test_pentago_presentation.py` مرزبندی ایستا را بررسی می‌کند و هر دو workflow وب آزمون‌های قواعد پنتاگو را با Godot headless اجرا می‌کنند.
++
++
++## Remaining board/card game presentation boundaries
++
++- `games/pentago/presentation.gd` owns the Pentago board geometry, tap-to-cell mapping and quadrant controls; placement, rotation, turn changes, win detection and CPU planning remain in `rules.gd`.
++- `games/quoridor/presentation.gd` owns board/wall visuals, wall-edge hit mapping, player HUD and mode controls. Wall legality, path reachability, turn transitions, CPU search and RPC application remain in `rules.gd` / `ai.gd`.
++- `games/gobblet/presentation.gd` owns the 4×4 board, stack visuals, reserve-piece layout and tap-to-cell mapping. Stack legality, reveal-loss rule, legal moves, CPU search and network actions remain in `rules.gd`.
++- `games/pasoor/presentation.gd` owns card/table layout, selected-card highlight and confirmation button construction. Capture enumeration, card scoring, sweep scoring, AI decisions, turn changes and network actions remain in `rules.gd`.
++- `games/hokm/presentation.gd` owns hand/card/table rendering and maps pointer hits to a hand index. Follow-suit validation, trick resolution, score, CPU decisions and network play remain in `rules.gd`.
++- `games/abalone/presentation.gd` owns hex-cell geometry, pointer-to-cell mapping and board rendering. Selection groups, legal move generation, Sumito/push validation, CPU search and network actions remain in `rules.gd`.
++- `games/quarto/presentation.gd` owns board/piece-palette layout, pointer-to-cell mapping, selection buttons and game rendering. Piece choice, legal placement, Quarto detection, terminal state, CPU planning and RPC validation remain in `rules.gd` / `ai.gd`.
++- The controller-facing entry points remain compatibility wrappers, so `main.gd` keeps the same dispatch contract. The presenters read game state and dispatch actions to the rules module; they do not directly mutate authoritative game state.
++- `tests/test_other_game_presentations.py`, `tests/test_quarto_presentation.py`, `tools/verify_structure.py`, and the headless Quarto regression suite validate the new boundaries. Static tests do not replace a full Godot 4.3 runtime and UI play-through.
+diff --git a/games/abalone/README.md b/games/abalone/README.md
+index 76db4fb..9357f74 100644
+--- a/games/abalone/README.md
++++ b/games/abalone/README.md
+@@ -11,3 +11,7 @@
+ - پیاده‌سازی قوانین، هوش کامپیوتر و صفحه‌ی شش‌ضلعی در `rules.gd` قرار دارند.
+ 
+ - درجه‌ی هوش کامپیوتر ۶ سطح دارد: سطح‌های پایین‌تر حرکت‌های متنوع‌تری انتخاب می‌کنند؛ سطح‌های ۵ و ۶ پاسخ‌های احتمالی حریف را بررسی می‌کنند.
++
++## مسئولیت ماژول‌ها
++
++`presentation.gd` هندسهٔ خانه‌های شش‌ضلعی، تبدیل لمس به مختصات و ترسیم مهره‌ها و مقصدهای مجاز را مدیریت می‌کند. انتخاب گروه، اعتبار حرکت، Sumito، خروج مهره، CPU و شبکه در `rules.gd` باقی می‌مانند.
+diff --git a/games/abalone/presentation.gd b/games/abalone/presentation.gd
+new file mode 100644
+index 0000000..127d6be
+--- /dev/null
++++ b/games/abalone/presentation.gd
+@@ -0,0 +1,75 @@
++extends RefCounted
++## Abalone geometry and board presentation; all selection, push and movement rules remain in rules.gd.
++
++func cell_center(app, q: int, r: int) -> Vector2:
++	var cell_size: float = app.ABA_CELL
++	return app.ABA_ORIGIN + Vector2((float(q) + float(r) * 0.5) * cell_size, float(r) * cell_size * 0.8660254)
++
++func hit_cell(app, game, p: Vector2) -> Vector2i:
++	var best_cell := Vector2i(-99, -99)
++	var best_distance: float = INF
++	for r in range(-4, 5):
++		for q in range(-4, 5):
++			if not game._aba_valid_cell(q, r):
++				continue
++			var distance: float = cell_center(app, q, r).distance_to(p)
++			if distance < best_distance:
++				best_distance = distance
++				best_cell = Vector2i(q, r)
++	if best_distance > app.ABA_CELL * 0.46:
++		return Vector2i(-99, -99)
++	return best_cell
++
++func handle_tap(app, game, point: Vector2) -> void:
++	game._aba_handle_cell_tap(hit_cell(app, game, point))
++
++func render(app, game) -> void:
++	var flat: Array = []
++	for gy in range(9):
++		for gx in range(9):
++			flat.append(game.aba_board[gy][gx])
++	app._track_board("aba", flat)
++	var me: int = game._aba_me()
++	var white_col: Color = Color(0.9, 0.9, 0.95)
++	var black_col: Color = Color(0.15, 0.15, 0.2)
++	var pa: Dictionary = app._pl("شما", white_col if me == 1 else black_col, app._fa(game.aba_out[me - 1]), game.aba_turn == me and not game.aba_game_over, true, "مهره‌ی خارج‌شده", 1 if me == 1 else 0)
++	var pb: Dictionary = app._pl("حریف", black_col if me == 1 else white_col, app._fa(game.aba_out[2 - me]), game.aba_turn == 3 - me and not game.aba_game_over, false, "مهره‌ی خارج‌شده", 0 if me == 1 else 1)
++	app._draw_hud("ابلون", pa, pb)
++	app._draw_ai_difficulty_chip(game.aba_difficulty)
++	var o: Vector2 = app.ABA_ORIGIN
++	var cs: float = app.ABA_CELL
++	app._panel(Rect2(o - Vector2(cs * 4.9, cs * 4.05), Vector2(cs * 9.8, cs * 8.1)), Color(0.10, 0.12, 0.23), 30, Color(0.55, 0.5, 0.95, 0.40), 1.5, 22, 8)
++	var legal_targets: Array[Vector2i] = []
++	if not game.aba_selection.is_empty() and game._aba_me() == game.aba_turn:
++		for move in game._aba_moves_for_selection(game.aba_selection, game.aba_turn):
++			var target: Vector2i = move.click
++			if not legal_targets.has(target):
++				legal_targets.append(target)
++	for r in range(-4, 5):
++		for q in range(-4, 5):
++			if not game._aba_valid_cell(q, r):
++				continue
++			var cell := Vector2i(q, r)
++			var center: Vector2 = cell_center(app, q, r)
++			app.draw_circle(center + Vector2(0, 2), cs * 0.43, Color(0.03, 0.04, 0.10, 0.8))
++			app.draw_circle(center, cs * 0.40, Color(0.20, 0.23, 0.39))
++			if legal_targets.has(cell):
++				app.draw_circle(center, cs * 0.16, Color(app.ACCENT.r, app.ACCENT.g, app.ACCENT.b, 0.88))
++			var value: int = game._aba_value(q, r)
++			if value != 0:
++				var idx: int = (r + 4) * 9 + q + 4
++				var t: float = app._cell_t("aba", idx)[0]
++				app._draw_disc(center, cs * 0.35 * (app._ease_back(t) if t < 1.0 else 1.0), value == 1)
++			if legal_targets.has(cell):
++				# Outline occupied push targets too, so their marker remains visible above the marble.
++				app._ring(center, cs * 0.44, app.ACCENT, 2.5)
++			if game.aba_selection.has(cell):
++				app._ring(center, cs * 0.43, app.ACCENT, 3.0)
++	if not game.aba_game_over:
++		if game.aba_turn != me:
++			app._hint("حریف در حال بازی…", 668, app.TEXT_DIM)
++		elif game.aba_selection.is_empty():
++			app._hint("یک، دو یا سه مهره‌ی هم‌رنگ و هم‌راستا را انتخاب کنید", 668, app.TEXT_DIM)
++		else:
++			app._hint("خانه‌ی علامت‌خورده را بزنید تا مهره‌ها حرکت کنند", 668, app.TEXT_DIM)
++		app._hint("با برتری عددی می‌توان مهره‌های حریف را هل داد؛ خروج ۶ مهره = برد", 708, app.TEXT_DIM)
+diff --git a/games/abalone/rules.gd b/games/abalone/rules.gd
+index 2f72a6d..42ce98b 100644
+--- a/games/abalone/rules.gd
++++ b/games/abalone/rules.gd
+@@ -2,6 +2,9 @@ extends "res://core/game_module.gd"
+ ## Standard two-player Abalone rules on a 61-cell hexagonal board.
+ ## Axial coordinates (q, r) are stored in the 9x9 array with a +4 offset.
+ 
++const AbalonePresentationScript = preload("res://games/abalone/presentation.gd")
++var _aba_presentation = AbalonePresentationScript.new()
++
+ const ABA_DIRECTIONS: Array[Vector2i] = [
+ 	Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1),
+ 	Vector2i(0, -1), Vector2i(1, -1), Vector2i(-1, 1),
+@@ -401,28 +404,17 @@ func _aba_me() -> int:
+ 	return app._my_seat() + 1
+ 
+ func _aba_pixel(q: int, r: int) -> Vector2:
+-	var cell_size: float = app.ABA_CELL
+-	return app.ABA_ORIGIN + Vector2((float(q) + float(r) * 0.5) * cell_size, float(r) * cell_size * 0.8660254)
++	return _aba_presentation.cell_center(app, q, r)
+ 
+ func _aba_hit_cell(p: Vector2) -> Vector2i:
+-	var best_cell := Vector2i(-99, -99)
+-	var best_distance: float = INF
+-	for r in range(-4, 5):
+-		for q in range(-4, 5):
+-			if not _aba_valid_cell(q, r):
+-				continue
+-			var distance: float = _aba_pixel(q, r).distance_to(p)
+-			if distance < best_distance:
+-				best_distance = distance
+-				best_cell = Vector2i(q, r)
+-	if best_distance > app.ABA_CELL * 0.46:
+-		return Vector2i(-99, -99)
+-	return best_cell
++	return _aba_presentation.hit_cell(app, self, p)
+ 
+ func _aba_tap(p: Vector2) -> void:
++	_aba_presentation.handle_tap(app, self, p)
++
++func _aba_handle_cell_tap(tapped: Vector2i) -> void:
+ 	if aba_game_over or aba_turn != _aba_me():
+ 		return
+-	var tapped: Vector2i = _aba_hit_cell(p)
+ 	if tapped.x == -99:
+ 		return
+ 	if not aba_selection.is_empty():
+@@ -461,52 +453,4 @@ func _aba_tap(p: Vector2) -> void:
+ 		app._show_toast("خانه‌ی انتخاب‌شده مقصد مجازی نیست؛ یکی از خانه‌های علامت‌خورده را بزنید.")
+ 
+ func _draw_abalone() -> void:
+-	var flat: Array = []
+-	for gy in range(9):
+-		for gx in range(9):
+-			flat.append(aba_board[gy][gx])
+-	app._track_board("aba", flat)
+-	var me: int = _aba_me()
+-	var white_col: Color = Color(0.9, 0.9, 0.95)
+-	var black_col: Color = Color(0.15, 0.15, 0.2)
+-	var pa: Dictionary = app._pl("شما", white_col if me == 1 else black_col, app._fa(aba_out[me - 1]), aba_turn == me and not aba_game_over, true, "مهره‌ی خارج‌شده", 1 if me == 1 else 0)
+-	var pb: Dictionary = app._pl("حریف", black_col if me == 1 else white_col, app._fa(aba_out[2 - me]), aba_turn == 3 - me and not aba_game_over, false, "مهره‌ی خارج‌شده", 0 if me == 1 else 1)
+-	app._draw_hud("ابلون", pa, pb)
+-	app._draw_ai_difficulty_chip(aba_difficulty)
+-	var o: Vector2 = app.ABA_ORIGIN
+-	var cs: float = app.ABA_CELL
+-	app._panel(Rect2(o - Vector2(cs * 4.9, cs * 4.05), Vector2(cs * 9.8, cs * 8.1)), Color(0.10, 0.12, 0.23), 30, Color(0.55, 0.5, 0.95, 0.40), 1.5, 22, 8)
+-	var legal_targets: Array[Vector2i] = []
+-	if not aba_selection.is_empty() and _aba_me() == aba_turn:
+-		for move in _aba_moves_for_selection(aba_selection, aba_turn):
+-			var target: Vector2i = move.click
+-			if not legal_targets.has(target):
+-				legal_targets.append(target)
+-	for r in range(-4, 5):
+-		for q in range(-4, 5):
+-			if not _aba_valid_cell(q, r):
+-				continue
+-			var cell := Vector2i(q, r)
+-			var center: Vector2 = _aba_pixel(q, r)
+-			app.draw_circle(center + Vector2(0, 2), cs * 0.43, Color(0.03, 0.04, 0.10, 0.8))
+-			app.draw_circle(center, cs * 0.40, Color(0.20, 0.23, 0.39))
+-			if legal_targets.has(cell):
+-				app.draw_circle(center, cs * 0.16, Color(app.ACCENT.r, app.ACCENT.g, app.ACCENT.b, 0.88))
+-			var value: int = _aba_value(q, r)
+-			if value != 0:
+-				var idx: int = (r + 4) * 9 + q + 4
+-				var t: float = app._cell_t("aba", idx)[0]
+-				app._draw_disc(center, cs * 0.35 * (app._ease_back(t) if t < 1.0 else 1.0), value == 1)
+-			if legal_targets.has(cell):
+-				# Outline occupied push targets too, so their marker remains visible above the marble.
+-				app._ring(center, cs * 0.44, app.ACCENT, 2.5)
+-			if aba_selection.has(cell):
+-				app._ring(center, cs * 0.43, app.ACCENT, 3.0)
+-	if not aba_game_over:
+-		if aba_turn != me:
+-			app._hint("حریف در حال بازی…", 668, app.TEXT_DIM)
+-		elif aba_selection.is_empty():
+-			app._hint("یک، دو یا سه مهره‌ی هم‌رنگ و هم‌راستا را انتخاب کنید", 668, app.TEXT_DIM)
+-		else:
+-			app._hint("خانه‌ی علامت‌خورده را بزنید تا مهره‌ها حرکت کنند", 668, app.TEXT_DIM)
+-		app._hint("با برتری عددی می‌توان مهره‌های حریف را هل داد؛ خروج ۶ مهره = برد", 708, app.TEXT_DIM)
++	_aba_presentation.render(app, self)
+diff --git a/games/gobblet/README.md b/games/gobblet/README.md
+index de30205..68df601 100644
+--- a/games/gobblet/README.md
++++ b/games/gobblet/README.md
+@@ -9,3 +9,7 @@
+ - پیاده‌سازی منطق بازی در `rules.gd` قرار دارد.
+ 
+ - درجه‌ی هوش کامپیوتر ۶ سطح دارد: از انتخاب نسبتاً تصادفی تا ارزیابی پاسخ احتمالی حریف؛ سطح از منوی پیش از بازی انتخاب می‌شود.
++
++## مسئولیت ماژول‌ها
++
++`presentation.gd` نمایش صفحه، پشته‌ها، موجودی مهره‌ها و تبدیل لمس به خانه را مدیریت می‌کند. قواعد پوشاندن مهره، حرکت، قانون باخت ناشی از آشکارشدن ردیف حریف، CPU و شبکه در `rules.gd` باقی می‌مانند.
+diff --git a/games/gobblet/presentation.gd b/games/gobblet/presentation.gd
+new file mode 100644
+index 0000000..7a82ad2
+--- /dev/null
++++ b/games/gobblet/presentation.gd
+@@ -0,0 +1,95 @@
++extends RefCounted
++## Gobblet board and reserve presentation; all stack and win rules stay in rules.gd.
++
++func hand_rect(app, index: int) -> Rect2:
++	var col: int = index % 2
++	var row: int = int(index / 2)
++	return Rect2(20.0 + col * 260.0, 612.0 + row * 92.0, 240.0, 80.0)
++
++func handle_tap(app, game, point: Vector2) -> void:
++	var x: int = int(floor((point.x - app.GOB_ORIGIN.x) / app.GOB_CELL))
++	var y: int = int(floor((point.y - app.GOB_ORIGIN.y) / app.GOB_CELL))
++	game._gob_handle_cell_tap(Vector2i(x, y))
++
++func build_buttons(app, game) -> void:
++	for size_index in range(4):
++		var rect: Rect2 = hand_rect(app, size_index)
++		var allowed: bool = game._gob_my_turn() and int(game.gob_hand[game._gob_me() - 1][size_index]) > 0
++		app._add_hit(rect, game._gob_pick.bind(size_index + 1), "gob_%d" % size_index, false, allowed)
++
++func render(app, game) -> void:
++	var me: int = game._gob_me()
++	var tot0: int = 0
++	var tot1: int = 0
++	for s in range(4):
++		tot0 += game.gob_hand[me - 1][s]
++		tot1 += game.gob_hand[2 - me][s]
++	var c_p1 := Color(1.0, 0.45, 0.35)
++	var c_p2 := Color(0.35, 0.58, 1.0)
++	var c0: Color = c_p1 if me == 1 else c_p2
++	var c1: Color = c_p2 if me == 1 else c_p1
++	var pa: Dictionary = app._pl("شما", c0, app._fa(tot0), game.gob_turn == me and not game.gob_game_over, true, "مهره باقی‌مانده")
++	var pb: Dictionary = app._pl("حریف", c1, app._fa(tot1), game.gob_turn == 3 - me and not game.gob_game_over, false, "مهره باقی‌مانده")
++	if pa.active:
++		pa.sub = "نوبت شما"
++	app._draw_hud("گابلت", pa, pb)
++	app._draw_ai_difficulty_chip_at(game.gob_difficulty, 140.0)
++	var flat: Array = []
++	for y in range(4):
++		for x in range(4):
++			var st: Array = game.gob_board[y][x]
++			flat.append(st.size() * 10 + (int(st[st.size() - 1].s) + int(st[st.size() - 1].o) * 100 if st.size() > 0 else 0))
++	app._track_board("gob", flat)
++	var o: Vector2 = app.GOB_ORIGIN
++	app._panel(Rect2(o - Vector2(10, 10), Vector2(app.GOB_CELL * 4 + 20, app.GOB_CELL * 4 + 20)), Color(0.16, 0.12, 0.10), 24, Color(0.9, 0.6, 0.3, 0.4), 1.5, 22, 8)
++	for y in range(4):
++		for x in range(4):
++			var r := Rect2(o.x + x * app.GOB_CELL + 3, o.y + y * app.GOB_CELL + 3, app.GOB_CELL - 6, app.GOB_CELL - 6)
++			app._panel(r, Color(0.27, 0.21, 0.17), 14)
++			var cell := Vector2i(x, y)
++			var ok_cell: bool = false
++			if game._gob_my_turn() and game.gob_sel_size > 0:
++				ok_cell = game._gob_can_place(x, y, game.gob_sel_size, me)
++			elif game._gob_my_turn() and game.gob_sel_from.x >= 0:
++				ok_cell = game._gob_can_move(game.gob_sel_from, cell, me)
++			if ok_cell:
++				app._panel(r, Color(app.ACCENT.r, app.ACCENT.g, app.ACCENT.b, 0.12), 14, Color(app.ACCENT.r, app.ACCENT.g, app.ACCENT.b, 0.50), 1.5)
++			var cc: Vector2 = r.get_center()
++			var st2: Array = game.gob_board[y][x]
++			var t: float = app._cell_t("gob", y * 4 + x)[0]
++			for k in range(st2.size()):
++				var pc: Dictionary = st2[k]
++				var col: Color = c0 if int(pc.o) == me else c1
++				var rad: float = 11.0 + int(pc.s) * 10.0
++				if k == st2.size() - 1 and t < 1.0:
++					rad *= app._ease_back(t)
++				app.draw_circle(cc + Vector2(0, 2), rad, Color(0, 0, 0, 0.30))
++				app.draw_circle(cc, rad, col.darkened(0.35))
++				app.draw_circle(cc + Vector2(0, -1), rad - 3.5, col)
++				if k == st2.size() - 1:
++					app.draw_circle(cc + Vector2(-rad * 0.3, -rad * 0.36), rad * 0.2, Color(1, 1, 1, 0.4))
++			if game.gob_sel_from == cell:
++				app._ring(cc, app.GOB_CELL * 0.43, app.ACCENT, 3.0)
++	var size_names: Array[String] = ["کوچک", "متوسط", "بزرگ", "خیلی بزرگ"]
++	for s in range(4):
++		var r: Rect2 = hand_rect(app, s)
++		var n: int = game.gob_hand[me - 1][s]
++		var sel: bool = (game.gob_sel_size == s + 1)
++		var can: bool = game._gob_my_turn() and n > 0
++		app._panel(r, app.CARD_H if sel else app.CARD, 18, app.ACCENT if sel else app.LINE_STRONG, 2.5 if sel else 1.0, 8, 3)
++		var rad2: float = 10.0 + (s + 1) * 5.0
++		var cc2 := Vector2(r.end.x - 48, r.get_center().y)
++		app.draw_circle(cc2 + Vector2(0, 2), rad2, (c0 if can else Color(0.4, 0.4, 0.45)).darkened(0.35))
++		app.draw_circle(cc2, rad2 - 2.5, c0 if can else Color(0.45, 0.45, 0.5))
++		app._txt_c(size_names[s], Rect2(r.position.x + 8, r.position.y + 10, r.size.x - 76, 26), 15, app.TEXT if can else app.TEXT_FAINT, true)
++		app._txt_c("× " + app._fa(n), Rect2(r.position.x + 8, r.position.y + 40, r.size.x - 76, 26), 18, app.ACCENT if can else app.TEXT_FAINT, true)
++	if not game.gob_game_over:
++		if game._gob_my_turn():
++			if game.gob_sel_size > 0:
++				app._hint("مهره‌ی تازه را روی خانه‌ی مجاز قرار دهید", 804, app.TEXT_DIM)
++			elif game.gob_sel_from.x >= 0:
++				app._hint("مهره‌ی انتخاب‌شده را به خانه‌ی علامت‌خورده ببرید", 804, app.TEXT_DIM)
++			else:
++				app._hint("اندازه‌ی تازه را انتخاب کنید یا مهره‌ی روی صفحه را برای جابه‌جایی بزنید", 804, app.TEXT_DIM)
++		else:
++			app._hint("حریف در حال بازی…", 804, app.TEXT_DIM)
+diff --git a/games/gobblet/rules.gd b/games/gobblet/rules.gd
+index ec50695..e8c9418 100644
+--- a/games/gobblet/rules.gd
++++ b/games/gobblet/rules.gd
+@@ -1,4 +1,6 @@
+ extends "res://core/game_module.gd"
++const GobbletPresentationScript = preload("res://games/gobblet/presentation.gd")
++var _gob_presentation = GobbletPresentationScript.new()
+ ## Rule engine and authoritative state for Gobblet.
+ ## Board pieces may move to any legal square. Revealing an opponent's four-in-a-row
+ ## during a move loses unless the move itself covers that exposed line.
+@@ -352,13 +354,17 @@ func _gob_pick(s: int) -> void:
+ 	gob_sel_from = Vector2i(-1, -1)
+ 
+ func _gob_tap(p: Vector2) -> void:
++	_gob_presentation.handle_tap(app, self, p)
++
++func _gob_handle_cell_tap(cell: Vector2i) -> void:
+ 	if not _gob_my_turn():
+ 		return
+-	var gx: int = int(floor((p.x - app.GOB_ORIGIN.x) / app.GOB_CELL))
+-	var gy: int = int(floor((p.y - app.GOB_ORIGIN.y) / app.GOB_CELL))
++	var gx: int = cell.x
++	var gy: int = cell.y
+ 	if gx < 0 or gx >= 4 or gy < 0 or gy >= 4:
+ 		return
+ 	var me: int = _gob_me()
++	var tapped_top: Dictionary = _gob_top(gx, gy)
+ 	if gob_sel_size > 0:
+ 		if not _gob_can_place(gx, gy, gob_sel_size, me):
+ 			app._show_toast("مهره‌ی تازه معمولاً روی خانه‌ی خالی قرار می‌گیرد؛ فقط برای شکستن ردیف سه‌تایی حریف می‌توان روی مهره‌ی او گذاشت.")
+@@ -367,7 +373,6 @@ func _gob_tap(p: Vector2) -> void:
+ 		else:
+ 			_gob_place(gx, gy, gob_sel_size, me)
+ 		return
+-	var tapped_top: Dictionary = _gob_top(gx, gy)
+ 	if gob_sel_from.x >= 0:
+ 		var destination := Vector2i(gx, gy)
+ 		if _gob_can_move(gob_sel_from, destination, me):
+@@ -388,89 +393,10 @@ func _gob_tap(p: Vector2) -> void:
+ 	app._show_toast("از پایین یک اندازه انتخاب کنید، یا یکی از مهره‌های روی صفحه را برای جابه‌جایی بزنید.")
+ 
+ func _gob_hand_rect(index: int) -> Rect2:
+-	var col: int = index % 2
+-	var row: int = int(index / 2)
+-	return Rect2(20.0 + col * 260.0, 612.0 + row * 92.0, 240.0, 80.0)
++	return _gob_presentation.hand_rect(app, index)
+ 
+ func _btns_gobblet() -> void:
+-	for s in range(4):
+-		var r: Rect2 = _gob_hand_rect(s)
+-		var ok: bool = _gob_my_turn() and gob_hand[_gob_me() - 1][s] > 0
+-		app._add_hit(r, _gob_pick.bind(s + 1), "gob_%d" % s, false, ok)
++	_gob_presentation.build_buttons(app, self)
+ 
+ func _draw_gobblet() -> void:
+-	var me: int = _gob_me()
+-	var tot0: int = 0
+-	var tot1: int = 0
+-	for s in range(4):
+-		tot0 += gob_hand[me - 1][s]
+-		tot1 += gob_hand[2 - me][s]
+-	var c_p1 := Color(1.0, 0.45, 0.35)
+-	var c_p2 := Color(0.35, 0.58, 1.0)
+-	var c0: Color = c_p1 if me == 1 else c_p2
+-	var c1: Color = c_p2 if me == 1 else c_p1
+-	var pa: Dictionary = app._pl("شما", c0, app._fa(tot0), gob_turn == me and not gob_game_over, true, "مهره باقی‌مانده")
+-	var pb: Dictionary = app._pl("حریف", c1, app._fa(tot1), gob_turn == 3 - me and not gob_game_over, false, "مهره باقی‌مانده")
+-	if pa.active:
+-		pa.sub = "نوبت شما"
+-	app._draw_hud("گابلت", pa, pb)
+-	app._draw_ai_difficulty_chip_at(gob_difficulty, 140.0)
+-	var flat: Array = []
+-	for y in range(4):
+-		for x in range(4):
+-			var st: Array = gob_board[y][x]
+-			flat.append(st.size() * 10 + (int(st[st.size() - 1].s) + int(st[st.size() - 1].o) * 100 if st.size() > 0 else 0))
+-	app._track_board("gob", flat)
+-	var o: Vector2 = app.GOB_ORIGIN
+-	app._panel(Rect2(o - Vector2(10, 10), Vector2(app.GOB_CELL * 4 + 20, app.GOB_CELL * 4 + 20)), Color(0.16, 0.12, 0.10), 24, Color(0.9, 0.6, 0.3, 0.4), 1.5, 22, 8)
+-	for y in range(4):
+-		for x in range(4):
+-			var r := Rect2(o.x + x * app.GOB_CELL + 3, o.y + y * app.GOB_CELL + 3, app.GOB_CELL - 6, app.GOB_CELL - 6)
+-			app._panel(r, Color(0.27, 0.21, 0.17), 14)
+-			var cell := Vector2i(x, y)
+-			var ok_cell: bool = false
+-			if _gob_my_turn() and gob_sel_size > 0:
+-				ok_cell = _gob_can_place(x, y, gob_sel_size, me)
+-			elif _gob_my_turn() and gob_sel_from.x >= 0:
+-				ok_cell = _gob_can_move(gob_sel_from, cell, me)
+-			if ok_cell:
+-				app._panel(r, Color(app.ACCENT.r, app.ACCENT.g, app.ACCENT.b, 0.12), 14, Color(app.ACCENT.r, app.ACCENT.g, app.ACCENT.b, 0.50), 1.5)
+-			var cc: Vector2 = r.get_center()
+-			var st2: Array = gob_board[y][x]
+-			var t: float = app._cell_t("gob", y * 4 + x)[0]
+-			for k in range(st2.size()):
+-				var pc: Dictionary = st2[k]
+-				var col: Color = c0 if int(pc.o) == me else c1
+-				var rad: float = 11.0 + int(pc.s) * 10.0
+-				if k == st2.size() - 1 and t < 1.0:
+-					rad *= app._ease_back(t)
+-				app.draw_circle(cc + Vector2(0, 2), rad, Color(0, 0, 0, 0.30))
+-				app.draw_circle(cc, rad, col.darkened(0.35))
+-				app.draw_circle(cc + Vector2(0, -1), rad - 3.5, col)
+-				if k == st2.size() - 1:
+-					app.draw_circle(cc + Vector2(-rad * 0.3, -rad * 0.36), rad * 0.2, Color(1, 1, 1, 0.4))
+-			if gob_sel_from == cell:
+-				app._ring(cc, app.GOB_CELL * 0.43, app.ACCENT, 3.0)
+-	var size_names: Array[String] = ["کوچک", "متوسط", "بزرگ", "خیلی بزرگ"]
+-	for s in range(4):
+-		var r: Rect2 = _gob_hand_rect(s)
+-		var n: int = gob_hand[me - 1][s]
+-		var sel: bool = (gob_sel_size == s + 1)
+-		var can: bool = _gob_my_turn() and n > 0
+-		app._panel(r, app.CARD_H if sel else app.CARD, 18, app.ACCENT if sel else app.LINE_STRONG, 2.5 if sel else 1.0, 8, 3)
+-		var rad2: float = 10.0 + (s + 1) * 5.0
+-		var cc2 := Vector2(r.end.x - 48, r.get_center().y)
+-		app.draw_circle(cc2 + Vector2(0, 2), rad2, (c0 if can else Color(0.4, 0.4, 0.45)).darkened(0.35))
+-		app.draw_circle(cc2, rad2 - 2.5, c0 if can else Color(0.45, 0.45, 0.5))
+-		app._txt_c(size_names[s], Rect2(r.position.x + 8, r.position.y + 10, r.size.x - 76, 26), 15, app.TEXT if can else app.TEXT_FAINT, true)
+-		app._txt_c("× " + app._fa(n), Rect2(r.position.x + 8, r.position.y + 40, r.size.x - 76, 26), 18, app.ACCENT if can else app.TEXT_FAINT, true)
+-	if not gob_game_over:
+-		if _gob_my_turn():
+-			if gob_sel_size > 0:
+-				app._hint("مهره‌ی تازه را روی خانه‌ی مجاز قرار دهید", 804, app.TEXT_DIM)
+-			elif gob_sel_from.x >= 0:
+-				app._hint("مهره‌ی انتخاب‌شده را به خانه‌ی علامت‌خورده ببرید", 804, app.TEXT_DIM)
+-			else:
+-				app._hint("اندازه‌ی تازه را انتخاب کنید یا مهره‌ی روی صفحه را برای جابه‌جایی بزنید", 804, app.TEXT_DIM)
+-		else:
+-			app._hint("حریف در حال بازی…", 804, app.TEXT_DIM)
++	_gob_presentation.render(app, self)
+diff --git a/games/hokm/README.md b/games/hokm/README.md
+index d2e34b2..16ef082 100644
+--- a/games/hokm/README.md
++++ b/games/hokm/README.md
+@@ -4,3 +4,7 @@
+ - پیاده‌سازی قوانین و مالکیت state این بازی در `rules.gd` قرار دارد.
+ - رابط کاربری مشترک فعلاً از طریق adapter در برنامه اصلی به state دسترسی دارد؛ قوانین از کد رابط جدا شده‌اند.
+ - برای تغییر قوانین این بازی، در درجه اول همین ماژول را ویرایش کنید.
++
++## مسئولیت ماژول‌ها
++
++`presentation.gd` چیدمان دست و کارت‌های بازی‌شده و تبدیل لمس به شاخص کارت را مدیریت می‌کند. اعتبار خال، بردن دست، امتیاز، تاریخچهٔ کارت‌ها، CPU و شبکه در `rules.gd` باقی می‌مانند.
+diff --git a/games/hokm/presentation.gd b/games/hokm/presentation.gd
+new file mode 100644
+index 0000000..597487a
+--- /dev/null
++++ b/games/hokm/presentation.gd
+@@ -0,0 +1,48 @@
++extends RefCounted
++## Hokm card layout and table rendering; turn legality and tricks remain in rules.gd.
++
++func hand_rects(app, game) -> Array:
++	return app._fan_rects(game.hokm_hands[game._hokm_me()].size(), 58.0, 86.0, 762.0, 500.0, 6.0)
++
++func handle_tap(app, game, point: Vector2) -> void:
++	var index: int = app._fan_hit(hand_rects(app, game), point)
++	game._hokm_handle_card_index(index)
++
++func render(app, game) -> void:
++	var me: int = game._hokm_me()
++	var pa: Dictionary = app._pl("شما", app.BLUE, app._fa(game.hokm_scores[me]), game.hokm_turn == me and not game.hokm_game_over, true, "دست برده")
++	var pb: Dictionary = app._pl("حریف", app.PINK, app._fa(game.hokm_scores[1 - me]), game.hokm_turn == 1 - me and not game.hokm_game_over, false, "دست برده")
++	if pa.active:
++		pa.sub = "نوبت شما"
++	app._draw_hud("حکم", pa, pb)
++	app._draw_ai_difficulty_chip(game.hokm_difficulty)
++	var orr: Array = app._fan_rects(game.hokm_hands[1 - me].size(), 36.0, 52.0, 150.0, 240.0, 4.0)
++	for r in orr:
++		app._draw_card_back(r)
++	var badge := Rect2(16, 150, 118, 40)
++	app._panel(badge, Color(1, 1, 1, 0.07), 20, app.ACCENT, 1.2)
++	app._txt_r("حکم", badge.end.x - 14, badge.position.y + 26, 15, app.TEXT, true, 60)
++	var sc: Color = Color(0.9, 0.25, 0.3) if (game.hokm_trump == 1 or game.hokm_trump == 2) else Color(0.95, 0.96, 1.0)
++	app._draw_suit(game.hokm_trump, Vector2(badge.position.x + 34, badge.get_center().y), 22, sc)
++	var table := Rect2(16, 210, app.VIEW_W - 32, 380)
++	app._panel(table, Color(0.07, 0.24, 0.20), 26, Color(0.25, 0.65, 0.5, 0.4), 1.5, 18, 6)
++	var slot_opp := Rect2(app.VIEW_W * 0.5 - 45, 236, 90, 126)
++	var slot_me := Rect2(app.VIEW_W * 0.5 - 45, 424, 90, 126)
++	for s in [slot_opp, slot_me]:
++		app._panel(s, Color(1, 1, 1, 0.05), 12, Color(1, 1, 1, 0.15), 1.0)
++	var showing_last: bool = game.hokm_trick.size() == 0 and game.hokm_last.size() == 2 and app._time - game.hokm_last_t < 1.4
++	var plays: Array = game.hokm_last if showing_last else game.hokm_trick
++	for it in plays:
++		var rr: Rect2 = slot_me if int(it.p) == me else slot_opp
++		var won: bool = showing_last and int(it.p) == game.hokm_last_winner
++		app._draw_card(rr, it.c, false, false, won)
++	if showing_last:
++		app._txt_c("برنده این دست: " + ("شما" if game.hokm_last_winner == me else "حریف"), Rect2(table.position.x, table.position.y + 4, table.size.x, 26), 13, app.ACCENT, true)
++	app._txt_c("هنوز ۱۳ دست: " + app._fa(13 - game.hokm_hands[me].size()) + " / " + app._fa(13), Rect2(table.position.x, table.end.y - 30, table.size.x, 24), 12, Color(1, 1, 1, 0.4))
++	var rects: Array = hand_rects(app, game)
++	for i in rects.size():
++		var c: Dictionary = game.hokm_hands[me][i]
++		var ok: bool = game.hokm_turn == me and game._hokm_legal(me, c)
++		app._draw_card(rects[i], c, false, game.hokm_turn == me and not ok, false)
++	if not game.hokm_game_over:
++		app._hint("کارت بزنید تا بازی شود" if game.hokm_turn == me else "حریف در حال بازی…", 706, app.TEXT_DIM)
+diff --git a/games/hokm/rules.gd b/games/hokm/rules.gd
+index 0da0e5e..e00694f 100644
+--- a/games/hokm/rules.gd
++++ b/games/hokm/rules.gd
+@@ -1,4 +1,6 @@
+ extends "res://core/game_module.gd"
++const HokmPresentationScript = preload("res://games/hokm/presentation.gd")
++var _hokm_presentation = HokmPresentationScript.new()
+ ## Rule engine and authoritative state for hokm.
+ 
+ # ---------- Game-owned state ----------
+@@ -276,59 +278,24 @@ func _hokm_me() -> int:
+ 	return app._my_seat()
+ 
+ func _hokm_rects() -> Array:
+-	return app._fan_rects(hokm_hands[_hokm_me()].size(), 58.0, 86.0, 762.0, 500.0, 6.0)
++	return _hokm_presentation.hand_rects(app, self)
+ 
+ func _hokm_tap(p: Vector2) -> void:
++	_hokm_presentation.handle_tap(app, self, p)
++
++func _hokm_handle_card_index(index: int) -> void:
+ 	var me: int = _hokm_me()
+ 	if hokm_game_over or hokm_turn != me or app._time - hokm_last_t < 0.9:
+ 		return
+-	var i: int = app._fan_hit(_hokm_rects(), p)
+-	if i < 0:
++	if index < 0 or index >= hokm_hands[me].size():
+ 		return
+-	if not _hokm_legal(me, hokm_hands[me][i]):
++	if not _hokm_legal(me, hokm_hands[me][index]):
+ 		app._show_toast("باید هم‌خالِ زمین بازی کنید.")
+ 		return
+ 	if app._net_on():
+-		app._send_game_action("_rpc_hokm_play", [me, i])
++		app._send_game_action("_rpc_hokm_play", [me, index])
+ 	else:
+-		_hokm_play(me, i)
++		_hokm_play(me, index)
+ 
+ func _draw_hokm() -> void:
+-	var suit_cols := [app.TEXT, app.RED, app.RED, app.TEXT]
+-	var me: int = _hokm_me()
+-	var pa: Dictionary = app._pl("شما", app.BLUE, app._fa(hokm_scores[me]), hokm_turn == me and not hokm_game_over, true, "دست برده")
+-	var pb: Dictionary = app._pl("حریف", app.PINK, app._fa(hokm_scores[1 - me]), hokm_turn == 1 - me and not hokm_game_over, false, "دست برده")
+-	if pa.active:
+-		pa.sub = "نوبت شما"
+-	app._draw_hud("حکم", pa, pb)
+-	app._draw_ai_difficulty_chip(hokm_difficulty)
+-	var orr: Array = app._fan_rects(hokm_hands[1 - me].size(), 36.0, 52.0, 150.0, 240.0, 4.0)
+-	for r in orr:
+-		app._draw_card_back(r)
+-	var badge := Rect2(16, 150, 118, 40)
+-	app._panel(badge, Color(1, 1, 1, 0.07), 20, app.ACCENT, 1.2)
+-	app._txt_r("حکم", badge.end.x - 14, badge.position.y + 26, 15, app.TEXT, true, 60)
+-	var sc: Color = Color(0.9, 0.25, 0.3) if (hokm_trump == 1 or hokm_trump == 2) else Color(0.95, 0.96, 1.0)
+-	app._draw_suit(hokm_trump, Vector2(badge.position.x + 34, badge.get_center().y), 22, sc)
+-	var table := Rect2(16, 210, app.VIEW_W - 32, 380)
+-	app._panel(table, Color(0.07, 0.24, 0.20), 26, Color(0.25, 0.65, 0.5, 0.4), 1.5, 18, 6)
+-	var slot_opp := Rect2(app.VIEW_W * 0.5 - 45, 236, 90, 126)
+-	var slot_me := Rect2(app.VIEW_W * 0.5 - 45, 424, 90, 126)
+-	for s in [slot_opp, slot_me]:
+-		app._panel(s, Color(1, 1, 1, 0.05), 12, Color(1, 1, 1, 0.15), 1.0)
+-	var showing_last: bool = hokm_trick.size() == 0 and hokm_last.size() == 2 and app._time - hokm_last_t < 1.4
+-	var plays: Array = hokm_last if showing_last else hokm_trick
+-	for it in plays:
+-		var rr: Rect2 = slot_me if int(it.p) == me else slot_opp
+-		var won: bool = showing_last and int(it.p) == hokm_last_winner
+-		app._draw_card(rr, it.c, false, false, won)
+-	if showing_last:
+-		app._txt_c("برنده این دست: " + ("شما" if hokm_last_winner == me else "حریف"), Rect2(table.position.x, table.position.y + 4, table.size.x, 26), 13, app.ACCENT, true)
+-	app._txt_c("هنوز ۱۳ دست: " + app._fa(13 - hokm_hands[me].size()) + " / " + app._fa(13), Rect2(table.position.x, table.end.y - 30, table.size.x, 24), 12, Color(1, 1, 1, 0.4))
+-	var rects: Array = _hokm_rects()
+-	for i in rects.size():
+-		var c: Dictionary = hokm_hands[me][i]
+-		var ok: bool = hokm_turn == me and _hokm_legal(me, c)
+-		app._draw_card(rects[i], c, false, hokm_turn == me and not ok, false)
+-	if not hokm_game_over:
+-		app._hint("کارت بزنید تا بازی شود" if hokm_turn == me else "حریف در حال بازی…", 706, app.TEXT_DIM)
++	_hokm_presentation.render(app, self)
+diff --git a/games/pasoor/README.md b/games/pasoor/README.md
+index 371e1bb..47c2240 100644
+--- a/games/pasoor/README.md
++++ b/games/pasoor/README.md
+@@ -4,3 +4,7 @@
+ - پیاده‌سازی قوانین و مالکیت state این بازی در `rules.gd` قرار دارد.
+ - رابط کاربری مشترک فعلاً از طریق adapter در برنامه اصلی به state دسترسی دارد؛ قوانین از کد رابط جدا شده‌اند.
+ - برای تغییر قوانین این بازی، در درجه اول همین ماژول را ویرایش کنید.
++
++## مسئولیت ماژول‌ها
++
++`presentation.gd` چیدمان دست و میز، برجسته‌سازی کارت‌های گرفته‌شدنی، دکمهٔ تأیید و تبدیل لمس به انتخاب کارت را مدیریت می‌کند. محاسبهٔ گرفتن، سور، امتیاز، نوبت، CPU و شبکه در `rules.gd` باقی می‌مانند.
+diff --git a/games/pasoor/presentation.gd b/games/pasoor/presentation.gd
+new file mode 100644
+index 0000000..c7fc554
+--- /dev/null
++++ b/games/pasoor/presentation.gd
+@@ -0,0 +1,86 @@
++extends RefCounted
++## Pasoor cards/table layout and presentation; capture scoring and play legality stay in rules.gd.
++
++func hand_rects(app, game) -> Array:
++	return app._fan_rects(game.pas_hands[game._pas_me()].size(), 66.0, 96.0, 776.0, 500.0, 8.0)
++
++func table_rects(app, game) -> Array:
++	var n: int = game.pas_table.size()
++	var res: Array = []
++	if n <= 14:
++		var r1: int = mini(7, n)
++		var a: Array = app._fan_rects(r1, 56.0, 80.0, 244.0, 480.0, 6.0)
++		res.append_array(a)
++		if n > 7:
++			res.append_array(app._fan_rects(n - 7, 56.0, 80.0, 334.0, 480.0, 6.0))
++	else:
++		res = app._fan_rects(n, 56.0, 80.0, 286.0, 480.0, 6.0)
++	return res
++
++func handle_tap(app, game, point: Vector2) -> void:
++	var index: int = app._fan_hit(hand_rects(app, game), point)
++	game._pas_handle_hand_index(index)
++
++func build_buttons(app, game) -> void:
++	if not game._pas_my_turn() or game.pas_selected < 0:
++		return
++	var me: int = game._pas_me()
++	if game.pas_selected >= game.pas_hands[me].size():
++		return
++	var card: Dictionary = game.pas_hands[me][game.pas_selected]
++	var captures: Array = game._pas_find_captures(card)
++	if captures.size() > 0:
++		var best: Array = game._pas_best_capture(card)
++		app._add_btn(Rect2(60, 710, app.VIEW_W - 120, 54), "گرفتن %s کارت" % app._fa(best.size() + 1), game._pas_confirm, true, app.GREEN, "solid", "check", "pas_go")
++	else:
++		app._add_btn(Rect2(60, 710, app.VIEW_W - 120, 54), "گذاشتن روی میز", game._pas_confirm, true, app.ACCENT, "solid", "play", "pas_go")
++
++func render(app, game) -> void:
++	var me: int = game._pas_me()
++	var opp: int = 1 - me
++	var pa: Dictionary = app._pl("شما", app.BLUE, app._fa(game.pas_match_scores[me]), game.pas_turn == me and not game.pas_game_over, true, "سور: " + app._fa(game.pas_surs[me]))
++	var pb: Dictionary = app._pl("حریف", app.PINK, app._fa(game.pas_match_scores[opp]), game.pas_turn == opp and not game.pas_game_over, false, "سور: " + app._fa(game.pas_surs[opp]))
++	if game.pas_turn == me and not game.pas_game_over:
++		pa.sub = "نوبت شما"
++	if game.pas_turn == opp and not game.pas_game_over:
++		pb.sub = "نوبت حریف"
++	app._draw_hud("پاسور (چهاربرگ)", pa, pb)
++	app._draw_ai_difficulty_chip(game.pas_difficulty)
++	var orr: Array = app._fan_rects(game.pas_hands[opp].size(), 40.0, 58.0, 150.0, 300.0, 6.0)
++	for r in orr:
++		app._draw_card_back(r)
++	var info := Rect2(16, 150, 100, 34)
++	app._panel(info, Color(0, 0, 0, 0.3), 17)
++	app._txt_c("دسته: " + app._fa(game.pas_deck.size()), info, 13, app.TEXT_DIM, true)
++	var felt := Rect2(16, 204, app.VIEW_W - 32, 232)
++	app._panel(felt, Color(0.07, 0.24, 0.20), 26, Color(0.25, 0.65, 0.5, 0.4), 1.5, 18, 6)
++	app._txt_c("میز (" + app._fa(game.pas_table.size()) + ")", Rect2(felt.position.x, felt.position.y + 4, felt.size.x, 30), 13, Color(1, 1, 1, 0.45), true)
++	var hl: Array = []
++	var me_hand: Array = game.pas_hands[me]
++	if game.pas_selected >= 0 and game.pas_selected < me_hand.size() and game._pas_my_turn():
++		hl = game._pas_best_capture(me_hand[game.pas_selected])
++	var trs: Array = table_rects(app, game)
++	for i in trs.size():
++		var r: Rect2 = trs[i]
++		app._draw_card(r, game.pas_table[i], false, false, i in hl)
++	if game.pas_table.size() == 0:
++		app._txt_c("میز خالی است", Rect2(felt.position.x, felt.position.y + 80, felt.size.x, 60), 16, Color(1, 1, 1, 0.3))
++	var cap_me := Rect2(16, 446, 240, 30)
++	app._panel(cap_me, Color(app.GREEN.r, app.GREEN.g, app.GREEN.b, 0.12), 15)
++	app._txt_c("کارت‌های گرفته‌شده شما: " + app._fa(game.pas_captured[me].size()), cap_me, 12, app.GREEN, true)
++	var cap_op := Rect2(app.VIEW_W - 16 - 240, 446, 240, 30)
++	app._panel(cap_op, Color(app.RED.r, app.RED.g, app.RED.b, 0.12), 15)
++	app._txt_c("حریف: " + app._fa(game.pas_captured[opp].size()), cap_op, 12, app.RED, true)
++	var rects: Array = hand_rects(app, game)
++	for i in rects.size():
++		var r: Rect2 = rects[i]
++		var sel: bool = (i == game.pas_selected)
++		if sel:
++			r.position.y -= 20.0
++		app._draw_card(r, me_hand[i], sel, false, false)
++	if not game.pas_game_over:
++		if game._pas_my_turn():
++			if game.pas_selected < 0:
++				app._hint("یک کارت انتخاب کنید", 740, app.ACCENT)
++		else:
++			app._hint("حریف در حال بازی…", 740, app.TEXT_DIM)
+diff --git a/games/pasoor/rules.gd b/games/pasoor/rules.gd
+index 6c7c489..1640746 100644
+--- a/games/pasoor/rules.gd
++++ b/games/pasoor/rules.gd
+@@ -1,4 +1,6 @@
+ extends "res://core/game_module.gd"
++const PasoorPresentationScript = preload("res://games/pasoor/presentation.gd")
++var _pas_presentation = PasoorPresentationScript.new()
+ ## Rule engine and authoritative state for pasoor.
+ 
+ # ---------- Game-owned state ----------
+@@ -363,20 +365,10 @@ func _pas_my_turn() -> bool:
+ 	return pas_turn == _pas_me() and not pas_game_over
+ 
+ func _pas_hand_rects() -> Array:
+-	return app._fan_rects(pas_hands[_pas_me()].size(), 66.0, 96.0, 776.0, 500.0, 8.0)
++	return _pas_presentation.hand_rects(app, self)
+ 
+ func _pas_table_rects() -> Array:
+-	var n: int = pas_table.size()
+-	var res: Array = []
+-	if n <= 14:
+-		var r1: int = mini(7, n)
+-		var a: Array = app._fan_rects(r1, 56.0, 80.0, 244.0, 480.0, 6.0)
+-		res.append_array(a)
+-		if n > 7:
+-			res.append_array(app._fan_rects(n - 7, 56.0, 80.0, 334.0, 480.0, 6.0))
+-	else:
+-		res = app._fan_rects(n, 56.0, 80.0, 286.0, 480.0, 6.0)
+-	return res
++	return _pas_presentation.table_rects(app, self)
+ 
+ func _pas_confirm() -> void:
+ 	var me: int = _pas_me()
+@@ -390,78 +382,21 @@ func _pas_confirm() -> void:
+ 		_pas_play(me, i, cap)
+ 
+ func _pas_tap(p: Vector2) -> void:
++	_pas_presentation.handle_tap(app, self, p)
++
++func _pas_handle_hand_index(index: int) -> void:
+ 	if not _pas_my_turn():
+ 		return
+-	var i: int = app._fan_hit(_pas_hand_rects(), p)
+-	if i < 0:
++	if index < 0:
+ 		pas_selected = -1
+ 		return
+-	if pas_selected == i:
++	if pas_selected == index:
+ 		_pas_confirm()
+ 	else:
+-		pas_selected = i
++		pas_selected = index
+ 
+ func _btns_pasoor() -> void:
+-	if not _pas_my_turn() or pas_selected < 0:
+-		return
+-	var me: int = _pas_me()
+-	if pas_selected >= pas_hands[me].size():
+-		return
+-	var card: Dictionary = pas_hands[me][pas_selected]
+-	var cap: Array = _pas_find_captures(card)
+-	if cap.size() > 0:
+-		var best: Array = _pas_best_capture(card)
+-		app._add_btn(Rect2(60, 710, app.VIEW_W - 120, 54), "گرفتن %s کارت" % app._fa(best.size() + 1), _pas_confirm, true, app.GREEN, "solid", "check", "pas_go")
+-	else:
+-		app._add_btn(Rect2(60, 710, app.VIEW_W - 120, 54), "گذاشتن روی میز", _pas_confirm, true, app.ACCENT, "solid", "play", "pas_go")
++	_pas_presentation.build_buttons(app, self)
+ 
+ func _draw_pasoor() -> void:
+-	var me: int = _pas_me()
+-	var opp: int = 1 - me
+-	var pa: Dictionary = app._pl("شما", app.BLUE, app._fa(pas_match_scores[me]), pas_turn == me and not pas_game_over, true, "سور: " + app._fa(pas_surs[me]))
+-	var pb: Dictionary = app._pl("حریف", app.PINK, app._fa(pas_match_scores[opp]), pas_turn == opp and not pas_game_over, false, "سور: " + app._fa(pas_surs[opp]))
+-	if pas_turn == me and not pas_game_over:
+-		pa.sub = "نوبت شما"
+-	if pas_turn == opp and not pas_game_over:
+-		pb.sub = "نوبت حریف"
+-	app._draw_hud("پاسور (چهاربرگ)", pa, pb)
+-	app._draw_ai_difficulty_chip(pas_difficulty)
+-	var orr: Array = app._fan_rects(pas_hands[opp].size(), 40.0, 58.0, 150.0, 300.0, 6.0)
+-	for r in orr:
+-		app._draw_card_back(r)
+-	var info := Rect2(16, 150, 100, 34)
+-	app._panel(info, Color(0, 0, 0, 0.3), 17)
+-	app._txt_c("دسته: " + app._fa(pas_deck.size()), info, 13, app.TEXT_DIM, true)
+-	var felt := Rect2(16, 204, app.VIEW_W - 32, 232)
+-	app._panel(felt, Color(0.07, 0.24, 0.20), 26, Color(0.25, 0.65, 0.5, 0.4), 1.5, 18, 6)
+-	app._txt_c("میز (" + app._fa(pas_table.size()) + ")", Rect2(felt.position.x, felt.position.y + 4, felt.size.x, 30), 13, Color(1, 1, 1, 0.45), true)
+-	var hl: Array = []
+-	var me_hand: Array = pas_hands[me]
+-	if pas_selected >= 0 and pas_selected < me_hand.size() and _pas_my_turn():
+-		hl = _pas_best_capture(me_hand[pas_selected])
+-	var trs: Array = _pas_table_rects()
+-	for i in trs.size():
+-		var r: Rect2 = trs[i]
+-		app._draw_card(r, pas_table[i], false, false, i in hl)
+-	if pas_table.size() == 0:
+-		app._txt_c("میز خالی است", Rect2(felt.position.x, felt.position.y + 80, felt.size.x, 60), 16, Color(1, 1, 1, 0.3))
+-	var cap_me := Rect2(16, 446, 240, 30)
+-	app._panel(cap_me, Color(app.GREEN.r, app.GREEN.g, app.GREEN.b, 0.12), 15)
+-	app._txt_c("کارت‌های گرفته‌شده شما: " + app._fa(pas_captured[me].size()), cap_me, 12, app.GREEN, true)
+-	var cap_op := Rect2(app.VIEW_W - 16 - 240, 446, 240, 30)
+-	app._panel(cap_op, Color(app.RED.r, app.RED.g, app.RED.b, 0.12), 15)
+-	app._txt_c("حریف: " + app._fa(pas_captured[opp].size()), cap_op, 12, app.RED, true)
+-	var rects: Array = _pas_hand_rects()
+-	var dimmed: bool = false
+-	for i in rects.size():
+-		var r: Rect2 = rects[i]
+-		var sel: bool = (i == pas_selected)
+-		if sel:
+-			r.position.y -= 20.0
+-		app._draw_card(r, me_hand[i], sel, false, false)
+-	if not pas_game_over:
+-		if _pas_my_turn():
+-			if pas_selected < 0:
+-				app._hint("یک کارت انتخاب کنید", 740, app.ACCENT)
+-		else:
+-			app._hint("حریف در حال بازی…", 740, app.TEXT_DIM)
++	_pas_presentation.render(app, self)
+diff --git a/games/pentago/README.md b/games/pentago/README.md
+index a3c9a4a..4e56def 100644
+--- a/games/pentago/README.md
++++ b/games/pentago/README.md
+@@ -7,3 +7,14 @@
+ 
+ - هوش کامپیوتر دارای ۶ سطح سختی است: از حرکت‌های تصادفی تا ارزیابی تهدیدها و بررسی برد فوری حریف در سطح‌های بالاتر. انتخاب سطح در صفحهٔ حالت بازی انجام می‌شود.
+ - سطح انتخاب‌شده هنگام بازی با کامپیوتر در نشان «هوش CPU» دیده می‌شود تا مشخص باشد پروفایل فعال است.
++
++## جداسازی نمایش و ورودی
++
++- `presentation.gd` مبدأ/مختصات خانه‌ها، تشخیص خانه از لمس، چیدمان دکمه‌های چرخش و ترسیم صفحه را انجام می‌دهد.
++- `rules.gd` مالک قطعی صفحه، نوبت، فاز قراردهی/چرخش، تشخیص برد، چرخاندن ربع، تصمیم CPU و ارسال کنش شبکه می‌ماند.
++- توابع `_pent_origin`, `_pent_cell_pos`, `_pent_tap`, `_pent_quad_rect`, `_btns_pentago` و `_draw_pentago` به‌عنوان wrapper حفظ شده‌اند تا قرارداد `main.gd` و مسیر RPC تغییر نکند.
++- `tests/test_pentago_presentation.py` مرز نمایش/قواعد را ایستا بررسی می‌کند؛ آزمون GDScript پنتاگو نیز در هر دو workflow وب اجرا می‌شود.
++
++## مسئولیت ماژول‌ها
++
++`presentation.gd` هندسهٔ صفحه، تبدیل لمس به خانه، کنترل چرخش ربع‌ها و رسم را انجام می‌دهد. تشخیص برد، قرار دادن مهره، چرخش واقعی، تغییر نوبت، CPU و شبکه در `rules.gd` باقی مانده‌اند.
+diff --git a/games/pentago/presentation.gd b/games/pentago/presentation.gd
+new file mode 100644
+index 0000000..4b07c90
+--- /dev/null
++++ b/games/pentago/presentation.gd
+@@ -0,0 +1,86 @@
++extends RefCounted
++## Pentago board presentation, pointer mapping, and rotation-control layout.
++## All game state changes, CPU plans, and network actions stay in Pentago rules.
++
++func board_origin(app) -> Vector2:
++	return Vector2((app.VIEW_W - (app.PENT_CELL * 6.0 + app.PENT_GAP)) * 0.5, 196.0)
++
++func cell_pos(app, x: int, y: int) -> Vector2:
++	var origin: Vector2 = board_origin(app)
++	return origin + Vector2(x * app.PENT_CELL + (app.PENT_GAP if x >= 3 else 0.0), y * app.PENT_CELL + (app.PENT_GAP if y >= 3 else 0.0))
++
++func quad_rect(app, q: int) -> Rect2:
++	var origin: Vector2 = board_origin(app)
++	var quad_size: float = app.PENT_CELL * 3.0
++	return Rect2(origin.x + (q % 2) * (quad_size + app.PENT_GAP), origin.y + int(q / 2) * (quad_size + app.PENT_GAP), quad_size, quad_size)
++
++func handle_tap(app, game, point: Vector2) -> void:
++	# Convert the pointer to a logical cell; the rules module makes the legal decision.
++	for y in range(6):
++		for x in range(6):
++			var cell_rect := Rect2(cell_pos(app, x, y), Vector2(app.PENT_CELL, app.PENT_CELL))
++			if cell_rect.has_point(point):
++				game._pent_handle_cell_tap(Vector2i(x, y))
++				return
++
++func build_buttons(app, game) -> void:
++	if game.pent_phase != 1 or not game._pent_my_turn() or game.pent_game_over:
++		return
++	for q in range(4):
++		var quad: Rect2 = quad_rect(app, q)
++		var row_y: float = 676.0 + int(q / 2) * 64.0
++		var left_x: float = quad.position.x
++		app._add_btn(Rect2(left_x, row_y, 62, 52), "", game._pent_rot.bind(q, false), true, app.ACCENT, "disc", "rot_ccw", "rot_%d_ccw" % q)
++		app._add_btn(Rect2(left_x + quad.size.x - 62, row_y, 62, 52), "", game._pent_rot.bind(q, true), true, app.ACCENT, "disc", "rot_cw", "rot_%d_cw" % q)
++
++func render(app, game) -> void:
++	var flat: Array = []
++	for y in range(6):
++		for x in range(6):
++			flat.append(game.pent_board[y][x])
++	app._track_board("pent", flat)
++	var player_a: Dictionary = app._pl("سیاه", Color(0.1, 0.1, 0.14), "", game.pent_turn == 1 and not game.pent_game_over, app._seat_me(0), "", 0)
++	var player_b: Dictionary = app._pl("سفید", Color(0.9, 0.9, 0.95), "", game.pent_turn == 2 and not game.pent_game_over, app._seat_me(1), "", 1)
++	var phase_text: String = "قرار دادن مهره" if game.pent_phase == 0 else "چرخش یک بخش"
++	if game.pent_turn == 1:
++		player_a.sub = phase_text if not game.pent_game_over else ""
++	else:
++		player_b.sub = phase_text if not game.pent_game_over else ""
++	app._draw_hud("پنتاگو", player_a, player_b)
++	app._draw_ai_difficulty_chip(game.pent_difficulty)
++
++	var hovered_quad: int = -1
++	if app._press_active and app._press_id.begins_with("rot_"):
++		hovered_quad = int(app._press_id.substr(4, 1))
++	for q in range(4):
++		var quad: Rect2 = quad_rect(app, q)
++		var rotate_phase: bool = game.pent_phase == 1 and game._pent_my_turn() and not game.pent_game_over
++		var is_hovered: bool = q == hovered_quad
++		app._panel(quad.grow(6), Color(0.33, 0.22, 0.12) if not is_hovered else Color(0.55, 0.38, 0.18), 22, Color(app.ACCENT.r, app.ACCENT.g, app.ACCENT.b, 0.9) if is_hovered else (Color(0.8, 0.6, 0.3, 0.35 + 0.15 * sin(app._time * 3.0)) if rotate_phase else Color(0.8, 0.6, 0.3, 0.25)), 2.0 if is_hovered else 1.5, 14, 6)
++	for y in range(6):
++		for x in range(6):
++			var top_left: Vector2 = cell_pos(app, x, y)
++			var center: Vector2 = top_left + Vector2(app.PENT_CELL, app.PENT_CELL) * 0.5
++			app.draw_circle(center, 27, Color(0.12, 0.08, 0.04))
++			app.draw_circle(center + Vector2(0, 1.5), 25, Color(0.20, 0.13, 0.07))
++			var piece: int = int(game.pent_board[y][x])
++			if piece != 0:
++				var cell_anim: float = app._cell_t("pent", y * 6 + x)[0]
++				var radius: float = 23.0 * (app._ease_back(cell_anim) if cell_anim < 1.0 else 1.0)
++				app._draw_disc(center, radius, piece == 2)
++	if game.pent_last.x >= 0:
++		var last_center: Vector2 = cell_pos(app, game.pent_last.x, game.pent_last.y) + Vector2(app.PENT_CELL, app.PENT_CELL) * 0.5
++		app._ring(last_center, 28, Color(app.ACCENT.r, app.ACCENT.g, app.ACCENT.b, 0.9), 2.5)
++	if not game.pent_game_over:
++		if game.pent_phase == 0:
++			app._hint("یک خانه خالی را انتخاب کنید" if game._pent_my_turn() else "حریف در حال حرکت…", 650, app.TEXT_DIM)
++		elif game._pent_my_turn():
++			app._hint("یک بخش را با دکمه‌های زیر بچرخانید", 646, app.ACCENT)
++		else:
++			app._hint("حریف در حال چرخاندن…", 646, app.TEXT_DIM)
++	if game.pent_phase == 1 and game._pent_my_turn() and not game.pent_game_over:
++		var quad_names: Array[String] = ["بالا چپ", "بالا راست", "پایین چپ", "پایین راست"]
++		for q in range(4):
++			var quad: Rect2 = quad_rect(app, q)
++			var row_y: float = 676.0 + int(q / 2) * 64.0
++			app._txt_c(quad_names[q], Rect2(quad.position.x + 62, row_y, quad.size.x - 124, 52), 14, app.TEXT_DIM, true)
+diff --git a/games/pentago/rules.gd b/games/pentago/rules.gd
+index 817abdb..3b10f24 100644
+--- a/games/pentago/rules.gd
++++ b/games/pentago/rules.gd
+@@ -1,6 +1,9 @@
+ extends "res://core/game_module.gd"
+ ## Rule engine and authoritative state for pentago.
+ 
++const PentagoPresentationScript = preload("res://games/pentago/presentation.gd")
++var _pent_presentation = PentagoPresentationScript.new()
++
+ # ---------- Game-owned state ----------
+ var pent_board: Array = []      # 6x6
+ var pent_turn: int = 1
+@@ -237,11 +240,10 @@ func _pent_opponent_has_winning_turn() -> bool:
+ 	return false
+ 
+ func _pent_origin() -> Vector2:
+-	return Vector2((app.VIEW_W - (app.PENT_CELL * 6.0 + app.PENT_GAP)) * 0.5, 196.0)
++	return _pent_presentation.board_origin(app)
+ 
+ func _pent_cell_pos(x: int, y: int) -> Vector2:
+-	var o: Vector2 = _pent_origin()
+-	return o + Vector2(x * app.PENT_CELL + (app.PENT_GAP if x >= 3 else 0.0), y * app.PENT_CELL + (app.PENT_GAP if y >= 3 else 0.0))
++	return _pent_presentation.cell_pos(app, x, y)
+ 
+ func _pent_my_turn() -> bool:
+ 	if app.vs_cpu:
+@@ -249,19 +251,20 @@ func _pent_my_turn() -> bool:
+ 	return app._is_my_turn()
+ 
+ func _pent_tap(p: Vector2) -> void:
++	_pent_presentation.handle_tap(app, self, p)
++
++func _pent_handle_cell_tap(c: Vector2i) -> void:
++	# Authoritative guards stay in rules.gd; presentation only maps pointer to a cell.
+ 	if pent_game_over or pent_phase != 0 or not _pent_my_turn():
+ 		return
+-	for y in 6:
+-		for x in 6:
+-			var r := Rect2(_pent_cell_pos(x, y), Vector2(app.PENT_CELL, app.PENT_CELL))
+-			if r.has_point(p):
+-				if pent_board[y][x] != 0:
+-					return
+-				if app._net_on():
+-					app._send_game_action("_rpc_pent_place", [x, y])
+-				else:
+-					_pent_place(Vector2i(x, y))
+-				return
++	if c.x < 0 or c.x >= 6 or c.y < 0 or c.y >= 6:
++		return
++	if pent_board[c.y][c.x] != 0:
++		return
++	if app._net_on():
++		app._send_game_action("_rpc_pent_place", [c.x, c.y])
++	else:
++		_pent_place(c)
+ 
+ func _pent_rot(q: int, cw: bool) -> void:
+ 	if not _pent_my_turn() or pent_phase != 1:
+@@ -272,69 +275,10 @@ func _pent_rot(q: int, cw: bool) -> void:
+ 		_pent_do_rotate(q, cw)
+ 
+ func _pent_quad_rect(q: int) -> Rect2:
+-	var o: Vector2 = _pent_origin()
+-	var qs: float = app.PENT_CELL * 3.0
+-	return Rect2(o.x + (q % 2) * (qs + app.PENT_GAP), o.y + int(q / 2) * (qs + app.PENT_GAP), qs, qs)
++	return _pent_presentation.quad_rect(app, q)
+ 
+ func _btns_pentago() -> void:
+-	if pent_phase != 1 or not _pent_my_turn() or pent_game_over:
+-		return
+-	var names: Array = ["بالا چپ", "بالا راست", "پایین چپ", "پایین راست"]
+-	for q in 4:
+-		var qr: Rect2 = _pent_quad_rect(q)
+-		var gy: float = 676.0 + int(q / 2) * 64.0
+-		var x0: float = qr.position.x
+-		app._add_btn(Rect2(x0, gy, 62, 52), "", _pent_rot.bind(q, false), true, app.ACCENT, "disc", "rot_ccw", "rot_%d_ccw" % q)
+-		app._add_btn(Rect2(x0 + qr.size.x - 62, gy, 62, 52), "", _pent_rot.bind(q, true), true, app.ACCENT, "disc", "rot_cw", "rot_%d_cw" % q)
++	_pent_presentation.build_buttons(app, self)
+ 
+ func _draw_pentago() -> void:
+-	var flat: Array = []
+-	for y in 6:
+-		for x in 6:
+-			flat.append(pent_board[y][x])
+-	app._track_board("pent", flat)
+-	var pa: Dictionary = app._pl("سیاه", Color(0.1, 0.1, 0.14), "", pent_turn == 1 and not pent_game_over, app._seat_me(0), "", 0)
+-	var pb: Dictionary = app._pl("سفید", Color(0.9, 0.9, 0.95), "", pent_turn == 2 and not pent_game_over, app._seat_me(1), "", 1)
+-	var ph: String = "قرار دادن مهره" if pent_phase == 0 else "چرخش یک بخش"
+-	if pent_turn == 1:
+-		pa.sub = ph if not pent_game_over else ""
+-	else:
+-		pb.sub = ph if not pent_game_over else ""
+-	app._draw_hud("پنتاگو", pa, pb)
+-	app._draw_ai_difficulty_chip(pent_difficulty)
+-	var hov: int = -1
+-	if app._press_active and app._press_id.begins_with("rot_"):
+-		hov = int(app._press_id.substr(4, 1))
+-	for q in 4:
+-		var qr: Rect2 = _pent_quad_rect(q)
+-		var glow: bool = (pent_phase == 1 and _pent_my_turn() and not pent_game_over)
+-		var hl: bool = (q == hov)
+-		app._panel(qr.grow(6), Color(0.33, 0.22, 0.12) if not hl else Color(0.55, 0.38, 0.18), 22, Color(app.ACCENT.r, app.ACCENT.g, app.ACCENT.b, 0.9) if hl else (Color(0.8, 0.6, 0.3, 0.35 + 0.15 * sin(app._time * 3.0)) if glow else Color(0.8, 0.6, 0.3, 0.25)), 2.0 if hl else 1.5, 14, 6)
+-	for y in 6:
+-		for x in 6:
+-			var tl: Vector2 = _pent_cell_pos(x, y)
+-			var cc: Vector2 = tl + Vector2(app.PENT_CELL, app.PENT_CELL) * 0.5
+-			app.draw_circle(cc, 27, Color(0.12, 0.08, 0.04))
+-			app.draw_circle(cc + Vector2(0, 1.5), 25, Color(0.20, 0.13, 0.07))
+-			var v: int = pent_board[y][x]
+-			if v != 0:
+-				var t: float = app._cell_t("pent", y * 6 + x)[0]
+-				var rr: float = 23.0 * (app._ease_back(t) if t < 1.0 else 1.0)
+-				app._draw_disc(cc, rr, v == 2)
+-	if pent_last.x >= 0:
+-		var lc: Vector2 = _pent_cell_pos(pent_last.x, pent_last.y) + Vector2(app.PENT_CELL, app.PENT_CELL) * 0.5
+-		app._ring(lc, 28, Color(app.ACCENT.r, app.ACCENT.g, app.ACCENT.b, 0.9), 2.5)
+-	if not pent_game_over:
+-		if pent_phase == 0:
+-			app._hint("یک خانه خالی را انتخاب کنید" if _pent_my_turn() else "حریف در حال حرکت…", 650, app.TEXT_DIM)
+-		else:
+-			if _pent_my_turn():
+-				app._hint("یک بخش را با دکمه‌های زیر بچرخانید", 646, app.ACCENT)
+-			else:
+-				app._hint("حریف در حال چرخاندن…", 646, app.TEXT_DIM)
+-	if pent_phase == 1 and _pent_my_turn() and not pent_game_over:
+-		var names: Array = ["بالا چپ", "بالا راست", "پایین چپ", "پایین راست"]
+-		for q in 4:
+-			var qr2: Rect2 = _pent_quad_rect(q)
+-			var gy: float = 676.0 + int(q / 2) * 64.0
+-			app._txt_c(names[q], Rect2(qr2.position.x + 62, gy, qr2.size.x - 124, 52), 14, app.TEXT_DIM, true)
++	_pent_presentation.render(app, self)
+diff --git a/games/quarto/README.md b/games/quarto/README.md
+index 81d81c4..c408bbb 100644
+--- a/games/quarto/README.md
++++ b/games/quarto/README.md
+@@ -22,3 +22,7 @@
+ ## نمایش استاندارد مهره‌ها
+ 
+ هر مهره با چهار ویژگی واقعی بازی نمایش داده می‌شود: بلند یا کوتاه بودن با ارتفاع بدنه، گرد یا مربع بودن با مقطع مهره، تیره یا روشن بودن با رنگ پرکنتراست، و توپر یا توخالی بودن با سوراخ واضح روی سطح بالا. شکل‌ها در صفحه‌ی اصلی و فهرست انتخاب مهره یکسان هستند تا مقایسه‌ی مهره‌ها در اندازه‌های کوچک هم آسان بماند.
++
++## مسئولیت ماژول‌ها
++
++`presentation.gd` صفحه، فهرست مهره‌ها، هندسه و تبدیل لمس به خانه و رسم را مدیریت می‌کند. انتخاب مهره برای حریف، جای‌گذاری قانونی، تشخیص Quarto، پایان بازی، CPU و شبکه در `rules.gd` و `ai.gd` باقی می‌مانند. رسم شکل مهره از renderer موجود در `main.gd` استفاده می‌کند تا ویژگی‌های بصری قبلی حفظ شوند.
+diff --git a/games/quarto/presentation.gd b/games/quarto/presentation.gd
+new file mode 100644
+index 0000000..a5f1b8b
+--- /dev/null
++++ b/games/quarto/presentation.gd
+@@ -0,0 +1,81 @@
++extends RefCounted
++## Quarto layout, pointer-to-cell mapping, piece palette buttons and rendering.
++## Piece selection, legal placement, wins, turns, CPU and network actions stay in rules.gd.
++
++func board_origin(app) -> Vector2:
++	return Vector2((app.VIEW_W - (app.QUARTO_CELL * 4.0 + app.QUARTO_GAP * 3.0)) * 0.5, app.QUARTO_ORIGIN_Y)
++
++func piece_rect(app, piece: int) -> Rect2:
++	var col: int = piece % 4
++	var row: int = int(piece / 4)
++	return Rect2(24.0 + col * 124.0, 584.0 + row * 46.0, 116.0, 40.0)
++
++func handle_tap(app, game, point: Vector2) -> void:
++	var cell := Vector2i(-1, -1)
++	var origin: Vector2 = board_origin(app)
++	var cell_size: float = app.QUARTO_CELL
++	var gap: float = app.QUARTO_GAP
++	for y in range(4):
++		for x in range(4):
++			var rect := Rect2(origin.x + x * (cell_size + gap), origin.y + y * (cell_size + gap), cell_size, cell_size)
++			if rect.has_point(point):
++				cell = Vector2i(x, y)
++				break
++		if cell.x >= 0:
++			break
++	game._qto_handle_board_tap(cell)
++
++func build_buttons(app, game) -> void:
++	if game.qto_game_over or game.qto_phase != 0 or not game._qto_is_local_actor():
++		return
++	for raw_piece in game.qto_remaining:
++		var piece: int = int(raw_piece)
++		app._add_hit(piece_rect(app, piece), game._qto_pick_piece.bind(piece), "quarto_piece_%d" % piece, false, true)
++
++func render(app, game) -> void:
++	var c1: Color = Color(0.39, 0.67, 1.0)
++	var c2: Color = Color(1.0, 0.49, 0.48)
++	var pa: Dictionary = app._pl("بازیکن ۱", c1, "", game.qto_turn == 1 and not game.qto_game_over, app._seat_me(0), "انتخاب / جای‌گذاری")
++	var pb: Dictionary = app._pl("بازیکن ۲", c2, "", game.qto_turn == 2 and not game.qto_game_over, app._seat_me(1), "انتخاب / جای‌گذاری")
++	app._draw_hud("کوارتو · Quarto", pa, pb)
++	var mine_turn: bool = game._qto_is_local_actor()
++	var instruction: String = "یک مهره برای حریف انتخاب کنید" if game.qto_phase == 0 else "مهره‌ی انتخاب‌شده را روی صفحه بگذارید"
++	var status := Rect2(22, 151, app.VIEW_W - 44, 28)
++	app._panel(status, app.CARD, 14, Color(0.75, 0.62, 0.92, 0.42), 1.0)
++	app._txt_c(instruction if mine_turn else "حریف در حال تصمیم‌گیری…", status, 13, app.TEXT if mine_turn else app.TEXT_DIM, true)
++	if game.qto_phase == 1 and game.qto_piece_to_place >= 0:
++		app._draw_quarto_piece(Vector2(app.VIEW_W - 48, 165), game.qto_piece_to_place, 0.82, 1.0)
++	var origin: Vector2 = board_origin(app)
++	var cell: float = app.QUARTO_CELL
++	var gap: float = app.QUARTO_GAP
++	var board_size := Vector2(cell * 4.0 + gap * 3.0, cell * 4.0 + gap * 3.0)
++	var board_rect := Rect2(origin - Vector2(10, 10), board_size + Vector2(20, 20))
++	app._panel(board_rect, Color(0.12, 0.12, 0.23), 18, Color(0.75, 0.62, 0.92, 0.58), 1.3, 14, 6)
++	for y in range(4):
++		for x in range(4):
++			var rect := Rect2(origin.x + x * (cell + gap), origin.y + y * (cell + gap), cell, cell)
++			var col: Color = Color(0.18, 0.20, 0.34) if (x + y) % 2 == 0 else Color(0.14, 0.16, 0.28)
++			app._panel(rect, col, 9, app.LINE, 0.8)
++			if Vector2i(x, y) == game.qto_last_cell:
++				app._panel(rect.grow(-2), Color(0.24, 0.62, 0.45, 0.14), 8, Color(0.30, 0.92, 0.65, 0.8), 1.8)
++			var piece: int = int(game.qto_board[y][x])
++			if piece >= 0:
++				app._draw_quarto_piece(rect.get_center(), piece, 1.0, 1.0)
++			else:
++				app._txt_c(app._fa(y * 4 + x + 1), rect, 11, app.TEXT_FAINT, false)
++	app._hint("بلند/کوتاه · گرد/مربع · تیره/روشن · توپر/توخالی", 531, app.TEXT_DIM)
++	app._txt_r("مهره‌های قابل انتخاب", app.VIEW_W - 24, 559, 13, app.TEXT_DIM, true, 220)
++	for piece in range(16):
++		var rect: Rect2 = piece_rect(app, piece)
++		var available: bool = piece in game.qto_remaining
++		var can_pick: bool = available and game.qto_phase == 0 and mine_turn
++		app._panel(rect, app.CARD_H if can_pick else (app.CARD if available else Color(0.08, 0.09, 0.15, 0.78)), 9, app.ACCENT if can_pick else app.LINE, 1.1 if can_pick else 0.7)
++		app._draw_quarto_piece(Vector2(rect.position.x + 26, rect.get_center().y), piece, 0.80, 1.0 if available else 0.20)
++		app._txt_c(app._fa(piece + 1), Rect2(rect.position.x + 48, rect.position.y, rect.size.x - 50, rect.size.y), 12, app.TEXT if available else app.TEXT_FAINT, true)
++	if game.qto_game_over:
++		app._hint("بازی تمام شد · وضعیت نهایی حفظ شده است", 780, app.TEXT_DIM)
++	elif game.qto_phase == 0:
++		app._hint("مهره‌ی انتخابی به حریف داده می‌شود؛ ویژگی‌ها را بررسی کنید", 780, app.ACCENT if mine_turn else app.TEXT_DIM)
++	else:
++		app._hint("یک خانه‌ی خالی انتخاب کنید؛ چهار ویژگی مشترک یعنی برد", 780, app.ACCENT if mine_turn else app.TEXT_DIM)
++	app._draw_ai_difficulty_chip_at(game.qto_difficulty, 820.0)
+diff --git a/games/quarto/rules.gd b/games/quarto/rules.gd
+index 80beb00..e1a428b 100644
+--- a/games/quarto/rules.gd
++++ b/games/quarto/rules.gd
+@@ -3,6 +3,7 @@ extends "res://core/game_module.gd"
+ ## A player wins by placing a piece that completes a four-piece line sharing any attribute.
+ 
+ const QuartoAIScript = preload("res://games/quarto/ai.gd")
++const QuartoPresentationScript = preload("res://games/quarto/presentation.gd")
+ 
+ var qto_board: Array = []                 # 4x4, -1 empty, otherwise piece id 0..15
+ var qto_remaining: Array[int] = []        # Pieces not yet offered or placed
+@@ -14,6 +15,7 @@ var qto_game_over: bool = false
+ var qto_winner: int = -1                  # -1 ongoing, 0 draw, 1/2 winner
+ var qto_difficulty: int = 3
+ var _qto_ai = QuartoAIScript.new()
++var _qto_presentation = QuartoPresentationScript.new()
+ 
+ func reset_game() -> void:
+ 	_qto_reset()
+@@ -159,35 +161,30 @@ func _qto_is_local_actor() -> bool:
+ 	return app._is_my_turn()
+ 
+ func _qto_tap(p: Vector2) -> void:
++	_qto_presentation.handle_tap(app, self, p)
++
++func _qto_handle_board_tap(cell: Vector2i) -> void:
+ 	if qto_game_over or not _qto_is_local_actor() or qto_phase != 1:
+ 		return
+-	var origin: Vector2 = _qto_board_origin()
+-	var cell_size: float = app.QUARTO_CELL
+-	var gap: float = app.QUARTO_GAP
+-	for y in range(4):
+-		for x in range(4):
+-			var rect := Rect2(origin.x + x * (cell_size + gap), origin.y + y * (cell_size + gap), cell_size, cell_size)
+-			if not rect.has_point(p):
+-				continue
+-			if app._net_on():
+-				app._send_game_action("_rpc_quarto_place", [app.local_seat, x, y])
+-			elif not _qto_place(x, y, qto_turn):
+-				app._show_toast("این خانه در دسترس نیست.")
+-			return
+-	app._show_toast("یک خانه‌ی داخل صفحه را انتخاب کنید.")
++	if cell.x < 0 or cell.x >= 4 or cell.y < 0 or cell.y >= 4:
++		app._show_toast("یک خانه‌ی داخل صفحه را انتخاب کنید.")
++		return
++	if app._net_on():
++		app._send_game_action("_rpc_quarto_place", [app.local_seat, cell.x, cell.y])
++	elif not _qto_place(cell.x, cell.y, qto_turn):
++		app._show_toast("این خانه در دسترس نیست.")
+ 
+ func _qto_board_origin() -> Vector2:
+-	return Vector2((app.VIEW_W - (app.QUARTO_CELL * 4.0 + app.QUARTO_GAP * 3.0)) * 0.5, app.QUARTO_ORIGIN_Y)
++	return _qto_presentation.board_origin(app)
++
++func _qto_piece_rect(piece: int) -> Rect2:
++	return _qto_presentation.piece_rect(app, piece)
+ 
+ func _qto_me() -> int:
+ 	return 1 if app.vs_cpu else app.local_seat + 1
+ 
+ func _btns_quarto() -> void:
+-	if qto_game_over or qto_phase != 0 or not _qto_is_local_actor():
+-		return
+-	for piece in qto_remaining:
+-		var rect: Rect2 = app._quarto_piece_rect(int(piece))
+-		app._add_hit(rect, _qto_pick_piece.bind(int(piece)), "quarto_piece_%d" % int(piece), false, true)
++	_qto_presentation.build_buttons(app, self)
+ 
+ func _qto_cpu_step() -> void:
+ 	if qto_game_over or qto_turn != 2 or not app.vs_cpu:
+@@ -204,3 +201,7 @@ func _qto_cpu_step() -> void:
+ func _qto_difficulty_name() -> String:
+ 	var labels: Array[String] = ["خیلی آسان", "آسان", "متوسط", "سخت", "استاد", "استادتمام"]
+ 	return labels[clampi(qto_difficulty, 1, 6) - 1]
++
++
++func _draw_quarto() -> void:
++	_qto_presentation.render(app, self)
+diff --git a/games/quoridor/README.md b/games/quoridor/README.md
+index b491c8d..8b9696a 100644
+--- a/games/quoridor/README.md
++++ b/games/quoridor/README.md
+@@ -37,3 +37,7 @@
+ - از منوی حالت بازی، «چهارنفره · شما در برابر ۳ CPU» را انتخاب کنید.
+ - هر CPU مسیر رسیدن به ضلع هدف خودش را جداگانه ارزیابی می‌کند و حافظه‌ی تکرار حرکت مستقل دارد.
+ - درجه‌ی سختی انتخاب‌شده روی تصمیم هر سه CPU اثر می‌گذارد.
++
++## مسئولیت ماژول‌ها
++
++`presentation.gd` ترسیم صفحه و دیوارها، تشخیص محل شکاف دیوار، HUD و کنترل‌های حالت را مدیریت می‌کند. اعتبارسنجی مسیر/دیوار، حرکت مهره، نوبت، CPU و کنش‌های شبکه در `rules.gd` و `ai.gd` باقی می‌مانند.
+diff --git a/games/quoridor/presentation.gd b/games/quoridor/presentation.gd
+new file mode 100644
+index 0000000..7579bca
+--- /dev/null
++++ b/games/quoridor/presentation.gd
+@@ -0,0 +1,130 @@
++extends RefCounted
++## Quoridor presentation: wall geometry, mode controls, HUD and board rendering.
++## Wall legality, turn transitions, CPU decisions and network actions stay in rules.gd.
++
++func edge_at(app, p: Vector2) -> Dictionary:
++	var gx: int = int(floor((p.x - app.QUO_ORIGIN.x) / app.QUO_CELL))
++	var gy: int = int(floor((p.y - app.QUO_ORIGIN.y) / app.QUO_CELL))
++	if gx < 0 or gx > 8 or gy < 0 or gy > 8:
++		return {}
++	var fx: float = p.x - app.QUO_ORIGIN.x - gx * app.QUO_CELL
++	var fy: float = p.y - app.QUO_ORIGIN.y - gy * app.QUO_CELL
++	var cands: Array = [
++		{"d": app.QUO_CELL - fy, "x": gx, "y": gy, "v": false, "ok": gx <= 7 and gy <= 7},
++		{"d": fy, "x": gx, "y": gy - 1, "v": false, "ok": gx <= 7 and gy - 1 >= 0 and gy - 1 <= 7},
++		{"d": app.QUO_CELL - fx, "x": gx, "y": gy, "v": true, "ok": gx <= 7 and gy <= 7},
++		{"d": fx, "x": gx - 1, "y": gy, "v": true, "ok": gx - 1 >= 0 and gx - 1 <= 7 and gy <= 7},
++	]
++	cands.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a.d) < float(b.d))
++	for candidate in cands:
++		if bool(candidate.ok):
++			return candidate
++	return {}
++
++func build_buttons(app, game) -> void:
++	if game.quo_game_over:
++		return
++	var mine: bool = game._quo_my_turn()
++	var walls: int = int(game.quo_walls_left[game.quo_turn]) if mine else 0
++	app._add_btn(Rect2(app.VIEW_W - 16 - 240, 826, 240, 50), "حرکت مهره", game._set_quo_mode.bind(0), mine, app.BLUE, "seg_on" if game.quo_mode == 0 else "ghost", "", "qm_move")
++	app._add_btn(Rect2(16, 826, 240, 50), "دیوار (%s)" % app._fa(walls) if mine else "دیوار", game._set_quo_mode.bind(1), mine and walls > 0, app.ACCENT, "seg_on" if game.quo_mode == 1 else "ghost", "", "qm_wall")
++
++func player_color(_app, _game, player: int) -> Color:
++	match player:
++		0: return Color(0.35, 0.60, 1.0)
++		1: return Color(1.0, 0.45, 0.50)
++		2: return Color(0.34, 0.82, 0.58)
++		3: return Color(1.0, 0.78, 0.30)
++	return Color.WHITE
++
++func draw_four_player_hud(app, game) -> void:
++	app._draw_bar_top(72.0)
++	app._txt_c("کوریدور · چهار نفره", Rect2(70, 10, app.VIEW_W - 140, 48), 22, app.TEXT, true)
++	for player in range(4):
++		var rect := Rect2(16.0 + float(player % 2) * 254.0, 76.0 + floor(float(player) / 2.0) * 42.0, 246.0, 36.0)
++		var color: Color = player_color(app, game, player)
++		var active: bool = player == game.quo_turn and not game.quo_game_over
++		app._panel(rect, Color(0.14, 0.17, 0.32) if active else app.CARD, 11.0, Color(color.r, color.g, color.b, 0.95 if active else 0.35), 1.5 if active else 1.0)
++		app.draw_circle(Vector2(rect.position.x + 16.0, rect.get_center().y), 7.0, color)
++		var player_label: String = "شما" if app.vs_cpu and player == 0 else ("CPU %s" % app._fa(player) if app.vs_cpu else "بازیکن %s" % app._fa(player + 1))
++		app._txt_r(player_label, rect.end.x - 9.0, rect.position.y + 15.0, 13, app.TEXT, true, 100.0)
++		app._txt_r("دیوار: %s" % app._fa(game.quo_walls_left[player]), rect.end.x - 112.0, rect.position.y + 29.0, 10, app.ACCENT if active else app.TEXT_DIM, false, 100.0)
++		if active:
++			app._txt("نوبت", rect.position.x + 28.0, rect.position.y + 23.0, 10, app.ACCENT, HORIZONTAL_ALIGNMENT_LEFT, 48.0, true)
++
++func render(app, game) -> void:
++	if game.quo_player_count == 4:
++		draw_four_player_hud(app, game)
++	else:
++		var pa: Dictionary = app._pl("شما" if app.vs_cpu else "بازیکن ۱", player_color(app, game, 0), "", game.quo_turn == 0 and not game.quo_game_over, app._seat_me(0), "دیوار: " + app._fa(game.quo_walls_left[0]))
++		var pb: Dictionary = app._pl("CPU" if app.vs_cpu else "بازیکن ۲", player_color(app, game, 1), "", game.quo_turn == 1 and not game.quo_game_over, app._seat_me(1), "دیوار: " + app._fa(game.quo_walls_left[1]))
++		if game.quo_turn == 0 and not game.quo_game_over:
++			pa.sub = "نوبت شما" if app._seat_me(0) else "نوبت حریف"
++		if game.quo_turn == 1 and not game.quo_game_over:
++			pb.sub = "نوبت شما" if app._seat_me(1) else "نوبت حریف"
++		pa.score = app._fa(game.quo_walls_left[0])
++		pb.score = app._fa(game.quo_walls_left[1])
++		app._draw_hud("کوریدور", pa, pb)
++	var origin: Vector2 = app.QUO_ORIGIN
++	var cell: float = app.QUO_CELL
++	app._panel(Rect2(origin - Vector2(10, 10), Vector2(cell * 9 + 20, cell * 9 + 20)), Color(0.12, 0.10, 0.24), 22, Color(0.55, 0.40, 0.95, 0.4), 1.5, 22, 8)
++	for y in range(9):
++		for x in range(9):
++			var rect := Rect2(origin.x + x * cell + 3, origin.y + y * cell + 3, cell - 6, cell - 6)
++			var base := Color(0.22, 0.20, 0.40)
++			if game.quo_player_count == 2:
++				if y == 8:
++					base = base.lerp(player_color(app, game, 0), 0.22)
++				elif y == 0:
++					base = base.lerp(player_color(app, game, 1), 0.22)
++			else:
++				if y == 8: base = base.lerp(player_color(app, game, 0), 0.18)
++				if x == 0: base = base.lerp(player_color(app, game, 1), 0.18)
++				if y == 0: base = base.lerp(player_color(app, game, 2), 0.18)
++				if x == 8: base = base.lerp(player_color(app, game, 3), 0.18)
++			app._panel(rect, base, 8)
++	# Show every legal move, including jumps and diagonals.
++	var mine: bool = game._quo_my_turn() and not game.quo_game_over
++	if mine and game.quo_mode == 0:
++		var moves: Array[Vector2i] = game._quo_legal_moves(game.quo_turn)
++		for target in moves:
++			app._hint_dot(origin + Vector2(target.x * cell + cell * 0.5, target.y * cell + cell * 0.5), 6, app.ACCENT)
++	# Every wall spans two cell spaces, matching the rules engine.
++	for wall_key in game.quo_walls:
++		var parts: PackedStringArray = str(wall_key).split(",")
++		var orientation: String = parts[0]
++		var wx: int = int(orientation.substr(1))
++		var wy: int = int(parts[1])
++		var wall_rect: Rect2
++		if orientation.begins_with("h"):
++			wall_rect = Rect2(origin.x + wx * cell + 3, origin.y + (wy + 1) * cell - 4, cell * 2 - 6, 8)
++		else:
++			wall_rect = Rect2(origin.x + (wx + 1) * cell - 4, origin.y + wy * cell + 3, 8, cell * 2 - 6)
++		app._panel(wall_rect, Color(1.0, 0.78, 0.35), 4, Color(0.6, 0.4, 0.1, 0.8), 1.0, 5, 2)
++	# Placement preview also uses the full two-space wall length.
++	if mine and game.quo_mode == 1 and game.quo_walls_left[game.quo_turn] > 0:
++		var edge: Dictionary = edge_at(app, app._ptr)
++		if not edge.is_empty():
++			var ghost: Rect2
++			if not bool(edge.v):
++				ghost = Rect2(origin.x + int(edge.x) * cell + 3, origin.y + (int(edge.y) + 1) * cell - 4, cell * 2 - 6, 8)
++			else:
++				ghost = Rect2(origin.x + (int(edge.x) + 1) * cell - 4, origin.y + int(edge.y) * cell + 3, 8, cell * 2 - 6)
++			var key: String = ("v%d,%d" % [int(edge.x), int(edge.y)]) if bool(edge.v) else ("h%d,%d" % [int(edge.x), int(edge.y)])
++			var allowed: bool = game._quo_wall_placement_legal(int(edge.x), int(edge.y), bool(edge.v)) and not game.quo_walls.has(key)
++			app._panel(ghost, Color(0.35, 0.95, 0.70, 0.58) if allowed else Color(1.0, 0.30, 0.35, 0.5), 4)
++	# Pawns
++	for player in range(game.quo_player_count):
++		var pawn_center: Vector2 = origin + Vector2(game.quo_pawns[player].x * cell + cell * 0.5, game.quo_pawns[player].y * cell + cell * 0.5)
++		var pawn_color: Color = player_color(app, game, player)
++		app._draw_marble(pawn_center, 16.5, pawn_color)
++		app._txt_c(app._fa(player + 1), Rect2(pawn_center.x - 16, pawn_center.y - 16, 32, 32), 15, app._lum_text(pawn_color), true)
++	if not game.quo_game_over:
++		if game.quo_mode == 1 and mine:
++			app._hint("دیوار را روی شکاف بگذارید؛ هر دیوار دو خانه طول دارد", 668, app.ACCENT)
++		elif mine and game._quo_legal_moves(game.quo_turn).is_empty():
++			app._hint("حرکت مهره بسته است؛ یک دیوار قرار دهید", 668, app.ACCENT)
++		elif mine:
++			app._hint("مهره را به یکی از خانه‌های نقطه‌دار ببرید؛ پرش و حرکت مورب مجاز است", 668, app.TEXT_DIM)
++		else:
++			app._hint("حریف در حال حرکت…", 668, app.TEXT_DIM)
+diff --git a/games/quoridor/rules.gd b/games/quoridor/rules.gd
+index ce9ce32..4f0abb9 100644
+--- a/games/quoridor/rules.gd
++++ b/games/quoridor/rules.gd
+@@ -2,8 +2,10 @@ extends "res://core/game_module.gd"
+ ## Quoridor rules: two-edge walls, legal jumping/diagonal pawn moves and 2/4-player modes.
+ 
+ const QuoridorAIScript = preload("res://games/quoridor/ai.gd")
++const QuoridorPresentationScript = preload("res://games/quoridor/presentation.gd")
+ const QUO_DIRS: Array[Vector2i] = [Vector2i(0, -1), Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1)]
+ var quo_ai = QuoridorAIScript.new()
++var _quo_presentation = QuoridorPresentationScript.new()
+ var quo_difficulty: int = 3 # 1 very easy .. 5 expert .. 6 master grandmaster
+ var quo_player_count: int = 2
+ var quo_local_multiplayer: bool = false
+@@ -277,23 +279,7 @@ func _quo_my_turn() -> bool:
+ 	return true if app.vs_cpu and quo_turn == 0 else (not app.vs_cpu and quo_turn == app.local_seat)
+ 
+ func _quo_edge_at(p: Vector2) -> Dictionary:
+-	var gx: int = int(floor((p.x - app.QUO_ORIGIN.x) / app.QUO_CELL))
+-	var gy: int = int(floor((p.y - app.QUO_ORIGIN.y) / app.QUO_CELL))
+-	if gx < 0 or gx > 8 or gy < 0 or gy > 8:
+-		return {}
+-	var fx: float = p.x - app.QUO_ORIGIN.x - gx * app.QUO_CELL
+-	var fy: float = p.y - app.QUO_ORIGIN.y - gy * app.QUO_CELL
+-	var cands: Array = [
+-		{"d": app.QUO_CELL - fy, "x": gx, "y": gy, "v": false, "ok": gx <= 7 and gy <= 7},
+-		{"d": fy, "x": gx, "y": gy - 1, "v": false, "ok": gx <= 7 and gy - 1 >= 0 and gy - 1 <= 7},
+-		{"d": app.QUO_CELL - fx, "x": gx, "y": gy, "v": true, "ok": gx <= 7 and gy <= 7},
+-		{"d": fx, "x": gx - 1, "y": gy, "v": true, "ok": gx - 1 >= 0 and gx - 1 <= 7 and gy <= 7},
+-	]
+-	cands.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a.d) < float(b.d))
+-	for candidate in cands:
+-		if bool(candidate.ok):
+-			return candidate
+-	return {}
++	return _quo_presentation.edge_at(app, p)
+ 
+ func _quo_net_apply(kind: int, x: int, y: int, vertical: bool) -> void:
+ 	if quo_game_over:
+@@ -345,112 +331,16 @@ func _quo_tap(p: Vector2) -> void:
+ 			app._show_toast("دیوار غیرمجاز است: هم‌پوشانی، تقاطع یا بستن مسیر بازیکن.")
+ 
+ func _btns_quoridor() -> void:
+-	if quo_game_over:
+-		return
+-	var mine: bool = _quo_my_turn()
+-	var walls: int = int(quo_walls_left[quo_turn]) if mine else 0
+-	app._add_btn(Rect2(app.VIEW_W - 16 - 240, 826, 240, 50), "حرکت مهره", _set_quo_mode.bind(0), mine, app.BLUE, "seg_on" if quo_mode == 0 else "ghost", "", "qm_move")
+-	app._add_btn(Rect2(16, 826, 240, 50), "دیوار (%s)" % app._fa(walls) if mine else "دیوار", _set_quo_mode.bind(1), mine and walls > 0, app.ACCENT, "seg_on" if quo_mode == 1 else "ghost", "", "qm_wall")
++	_quo_presentation.build_buttons(app, self)
+ 
+ func _set_quo_mode(mode: int) -> void:
+ 	quo_mode = mode
+ 
+ func _quo_color(player: int) -> Color:
+-	match player:
+-		0: return Color(0.35, 0.60, 1.0)
+-		1: return Color(1.0, 0.45, 0.50)
+-		2: return Color(0.34, 0.82, 0.58)
+-		3: return Color(1.0, 0.78, 0.30)
+-	return Color.WHITE
++	return _quo_presentation.player_color(app, self, player)
+ 
+ func _draw_four_player_hud() -> void:
+-	app._draw_bar_top(72.0)
+-	app._txt_c("کوریدور · چهار نفره", Rect2(70, 10, app.VIEW_W - 140, 48), 22, app.TEXT, true)
+-	for player in range(4):
+-		var rect := Rect2(16.0 + float(player % 2) * 254.0, 76.0 + floor(float(player) / 2.0) * 42.0, 246.0, 36.0)
+-		var color: Color = _quo_color(player)
+-		var active: bool = player == quo_turn and not quo_game_over
+-		app._panel(rect, Color(0.14, 0.17, 0.32) if active else app.CARD, 11.0, Color(color.r, color.g, color.b, 0.95 if active else 0.35), 1.5 if active else 1.0)
+-		app.draw_circle(Vector2(rect.position.x + 16.0, rect.get_center().y), 7.0, color)
+-		var player_label: String = "شما" if app.vs_cpu and player == 0 else ("CPU %s" % app._fa(player) if app.vs_cpu else "بازیکن %s" % app._fa(player + 1))
+-		app._txt_r(player_label, rect.end.x - 9.0, rect.position.y + 15.0, 13, app.TEXT, true, 100.0)
+-		app._txt_r("دیوار: %s" % app._fa(quo_walls_left[player]), rect.end.x - 112.0, rect.position.y + 29.0, 10, app.ACCENT if active else app.TEXT_DIM, false, 100.0)
+-		if active:
+-			app._txt("نوبت", rect.position.x + 28.0, rect.position.y + 23.0, 10, app.ACCENT, HORIZONTAL_ALIGNMENT_LEFT, 48.0, true)
++	_quo_presentation.draw_four_player_hud(app, self)
+ 
+ func _draw_quoridor() -> void:
+-	if quo_player_count == 4:
+-		_draw_four_player_hud()
+-	else:
+-		var pa: Dictionary = app._pl("شما" if app.vs_cpu else "بازیکن ۱", _quo_color(0), "", quo_turn == 0 and not quo_game_over, app._seat_me(0), "دیوار: " + app._fa(quo_walls_left[0]))
+-		var pb: Dictionary = app._pl("CPU" if app.vs_cpu else "بازیکن ۲", _quo_color(1), "", quo_turn == 1 and not quo_game_over, app._seat_me(1), "دیوار: " + app._fa(quo_walls_left[1]))
+-		if quo_turn == 0 and not quo_game_over:
+-			pa.sub = "نوبت شما" if app._seat_me(0) else "نوبت حریف"
+-		if quo_turn == 1 and not quo_game_over:
+-			pb.sub = "نوبت شما" if app._seat_me(1) else "نوبت حریف"
+-		pa.score = app._fa(quo_walls_left[0])
+-		pb.score = app._fa(quo_walls_left[1])
+-		app._draw_hud("کوریدور", pa, pb)
+-	var origin: Vector2 = app.QUO_ORIGIN
+-	var cell: float = app.QUO_CELL
+-	app._panel(Rect2(origin - Vector2(10, 10), Vector2(cell * 9 + 20, cell * 9 + 20)), Color(0.12, 0.10, 0.24), 22, Color(0.55, 0.40, 0.95, 0.4), 1.5, 22, 8)
+-	for y in range(9):
+-		for x in range(9):
+-			var rect := Rect2(origin.x + x * cell + 3, origin.y + y * cell + 3, cell - 6, cell - 6)
+-			var base := Color(0.22, 0.20, 0.40)
+-			if quo_player_count == 2:
+-				if y == 8:
+-					base = base.lerp(_quo_color(0), 0.22)
+-				elif y == 0:
+-					base = base.lerp(_quo_color(1), 0.22)
+-			else:
+-				if y == 8: base = base.lerp(_quo_color(0), 0.18)
+-				if x == 0: base = base.lerp(_quo_color(1), 0.18)
+-				if y == 0: base = base.lerp(_quo_color(2), 0.18)
+-				if x == 8: base = base.lerp(_quo_color(3), 0.18)
+-			app._panel(rect, base, 8)
+-	# Show every legal move, including jumps and diagonals.
+-	var mine: bool = _quo_my_turn() and not quo_game_over
+-	if mine and quo_mode == 0:
+-		var moves: Array[Vector2i] = _quo_legal_moves(quo_turn)
+-		for target in moves:
+-			app._hint_dot(origin + Vector2(target.x * cell + cell * 0.5, target.y * cell + cell * 0.5), 6, app.ACCENT)
+-	# Every wall spans two cell spaces, matching the rules engine.
+-	for wall_key in quo_walls:
+-		var parts: PackedStringArray = str(wall_key).split(",")
+-		var orientation: String = parts[0]
+-		var wx: int = int(orientation.substr(1))
+-		var wy: int = int(parts[1])
+-		var wall_rect: Rect2
+-		if orientation.begins_with("h"):
+-			wall_rect = Rect2(origin.x + wx * cell + 3, origin.y + (wy + 1) * cell - 4, cell * 2 - 6, 8)
+-		else:
+-			wall_rect = Rect2(origin.x + (wx + 1) * cell - 4, origin.y + wy * cell + 3, 8, cell * 2 - 6)
+-		app._panel(wall_rect, Color(1.0, 0.78, 0.35), 4, Color(0.6, 0.4, 0.1, 0.8), 1.0, 5, 2)
+-	# Placement preview also uses the full two-space wall length.
+-	if mine and quo_mode == 1 and quo_walls_left[quo_turn] > 0:
+-		var edge: Dictionary = _quo_edge_at(app._ptr)
+-		if not edge.is_empty():
+-			var ghost: Rect2
+-			if not bool(edge.v):
+-				ghost = Rect2(origin.x + int(edge.x) * cell + 3, origin.y + (int(edge.y) + 1) * cell - 4, cell * 2 - 6, 8)
+-			else:
+-				ghost = Rect2(origin.x + (int(edge.x) + 1) * cell - 4, origin.y + int(edge.y) * cell + 3, 8, cell * 2 - 6)
+-			var key: String = ("v%d,%d" % [int(edge.x), int(edge.y)]) if bool(edge.v) else ("h%d,%d" % [int(edge.x), int(edge.y)])
+-			var allowed: bool = _quo_wall_placement_legal(int(edge.x), int(edge.y), bool(edge.v)) and not quo_walls.has(key)
+-			app._panel(ghost, Color(0.35, 0.95, 0.70, 0.58) if allowed else Color(1.0, 0.30, 0.35, 0.5), 4)
+-	# Pawns
+-	for player in range(quo_player_count):
+-		var pawn_center: Vector2 = origin + Vector2(quo_pawns[player].x * cell + cell * 0.5, quo_pawns[player].y * cell + cell * 0.5)
+-		var pawn_color: Color = _quo_color(player)
+-		app._draw_marble(pawn_center, 16.5, pawn_color)
+-		app._txt_c(app._fa(player + 1), Rect2(pawn_center.x - 16, pawn_center.y - 16, 32, 32), 15, app._lum_text(pawn_color), true)
+-	if not quo_game_over:
+-		if quo_mode == 1 and mine:
+-			app._hint("دیوار را روی شکاف بگذارید؛ هر دیوار دو خانه طول دارد", 668, app.ACCENT)
+-		elif mine and _quo_legal_moves(quo_turn).is_empty():
+-			app._hint("حرکت مهره بسته است؛ یک دیوار قرار دهید", 668, app.ACCENT)
+-		elif mine:
+-			app._hint("مهره را به یکی از خانه‌های نقطه‌دار ببرید؛ پرش و حرکت مورب مجاز است", 668, app.TEXT_DIM)
+-		else:
+-			app._hint("حریف در حال حرکت…", 668, app.TEXT_DIM)
++	_quo_presentation.render(app, self)
+diff --git a/main.gd b/main.gd
+index 6c540cf..fe9d1fe 100644
+--- a/main.gd
++++ b/main.gd
+@@ -4058,9 +4058,7 @@ func _btns_quarto() -> void:
+ 	_game_modules["quarto"]._btns_quarto()
+ 
+ func _quarto_piece_rect(piece: int) -> Rect2:
+-	var col: int = piece % 4
+-	var row: int = int(piece / 4)
+-	return Rect2(24.0 + col * 124.0, 584.0 + row * 46.0, 116.0, 40.0)
++	return _game_modules["quarto"]._qto_piece_rect(piece)
+ 
+ func _draw_quarto_piece(center: Vector2, piece: int, scale: float = 1.0, opacity: float = 1.0) -> void:
+ 	# Standard Quarto visual language: four independent, clearly legible features.
+@@ -4127,53 +4125,7 @@ func _draw_quarto_piece(center: Vector2, piece: int, scale: float = 1.0, opacity
+ 			draw_circle(Vector2(center.x - width * 0.15, top_y + 2.2 * scale), 1.0 * scale, Color(1, 1, 1, 0.55 * opacity))
+ 
+ func _draw_quarto() -> void:
+-	var mod = _game_modules["quarto"]
+-	var c1: Color = Color(0.39, 0.67, 1.0)
+-	var c2: Color = Color(1.0, 0.49, 0.48)
+-	var pa: Dictionary = _pl("بازیکن ۱", c1, "", qto_turn == 1 and not qto_game_over, _seat_me(0), "انتخاب / جای‌گذاری")
+-	var pb: Dictionary = _pl("بازیکن ۲", c2, "", qto_turn == 2 and not qto_game_over, _seat_me(1), "انتخاب / جای‌گذاری")
+-	_draw_hud("کوارتو · Quarto", pa, pb)
+-	var mine_turn: bool = mod._qto_is_local_actor()
+-	var instruction: String = "یک مهره برای حریف انتخاب کنید" if qto_phase == 0 else "مهره‌ی انتخاب‌شده را روی صفحه بگذارید"
+-	var status := Rect2(22, 151, VIEW_W - 44, 28)
+-	_panel(status, CARD, 14, Color(0.75, 0.62, 0.92, 0.42), 1.0)
+-	_txt_c(instruction if mine_turn else "حریف در حال تصمیم‌گیری…", status, 13, TEXT if mine_turn else TEXT_DIM, true)
+-	if qto_phase == 1 and qto_piece_to_place >= 0:
+-		_draw_quarto_piece(Vector2(VIEW_W - 48, 165), qto_piece_to_place, 0.82, 1.0)
+-	var origin: Vector2 = mod._qto_board_origin()
+-	var cell: float = QUARTO_CELL
+-	var gap: float = QUARTO_GAP
+-	var board_size := Vector2(cell * 4.0 + gap * 3.0, cell * 4.0 + gap * 3.0)
+-	var board_rect := Rect2(origin - Vector2(10, 10), board_size + Vector2(20, 20))
+-	_panel(board_rect, Color(0.12, 0.12, 0.23), 18, Color(0.75, 0.62, 0.92, 0.58), 1.3, 14, 6)
+-	for y in range(4):
+-		for x in range(4):
+-			var r := Rect2(origin.x + x * (cell + gap), origin.y + y * (cell + gap), cell, cell)
+-			var col: Color = Color(0.18, 0.20, 0.34) if (x + y) % 2 == 0 else Color(0.14, 0.16, 0.28)
+-			_panel(r, col, 9, LINE, 0.8)
+-			if Vector2i(x, y) == qto_last_cell:
+-				_panel(r.grow(-2), Color(0.24, 0.62, 0.45, 0.14), 8, Color(0.30, 0.92, 0.65, 0.8), 1.8)
+-			var piece: int = int(qto_board[y][x])
+-			if piece >= 0:
+-				_draw_quarto_piece(r.get_center(), piece, 1.0, 1.0)
+-			else:
+-				_txt_c(_fa(y * 4 + x + 1), r, 11, TEXT_FAINT, false)
+-	_hint("بلند/کوتاه · گرد/مربع · تیره/روشن · توپر/توخالی", 531, TEXT_DIM)
+-	_txt_r("مهره‌های قابل انتخاب", VIEW_W - 24, 559, 13, TEXT_DIM, true, 220)
+-	for piece in range(16):
+-		var pr: Rect2 = _quarto_piece_rect(piece)
+-		var available: bool = piece in qto_remaining
+-		var can_pick: bool = available and qto_phase == 0 and mine_turn
+-		_panel(pr, CARD_H if can_pick else (CARD if available else Color(0.08, 0.09, 0.15, 0.78)), 9, ACCENT if can_pick else LINE, 1.1 if can_pick else 0.7)
+-		_draw_quarto_piece(Vector2(pr.position.x + 26, pr.get_center().y), piece, 0.80, 1.0 if available else 0.20)
+-		_txt_c(_fa(piece + 1), Rect2(pr.position.x + 48, pr.position.y, pr.size.x - 50, pr.size.y), 12, TEXT if available else TEXT_FAINT, true)
+-	if qto_game_over:
+-		_hint("بازی تمام شد · وضعیت نهایی حفظ شده است", 780, TEXT_DIM)
+-	elif qto_phase == 0:
+-		_hint("مهره‌ی انتخابی به حریف داده می‌شود؛ ویژگی‌ها را بررسی کنید", 780, ACCENT if mine_turn else TEXT_DIM)
+-	else:
+-		_hint("یک خانه‌ی خالی انتخاب کنید؛ چهار ویژگی مشترک یعنی برد", 780, ACCENT if mine_turn else TEXT_DIM)
+-	_draw_ai_difficulty_chip_at(qto_difficulty, 820.0)
++	_game_modules["quarto"]._draw_quarto()
+ 
+ # ======================================================================
+ #  LOGIC REPLACEMENTS
+diff --git a/tests/godot/test_pentago_rules.gd b/tests/godot/test_pentago_rules.gd
+new file mode 100644
+index 0000000..6ac922f
+--- /dev/null
++++ b/tests/godot/test_pentago_rules.gd
+@@ -0,0 +1,125 @@
++extends SceneTree
++## Headless regression tests for Pentago placement, rotation, turns and win handling.
++
++const PentagoRulesScript = preload("res://games/pentago/rules.gd")
++
++class MockApp extends Node2D:
++	var vs_cpu: bool = false
++	var local_seat: int = 0
++	var rotate_buttons_requested: int = 0
++	var playing_buttons_requested: int = 0
++	var result_requested: bool = false
++	var sent_actions: Array = []
++
++	func _net_on() -> bool:
++		return false
++
++	func _is_my_turn() -> bool:
++		return true
++
++	func _build_pent_rotate_buttons() -> void:
++		rotate_buttons_requested += 1
++
++	func _build_playing_buttons() -> void:
++		playing_buttons_requested += 1
++
++	func _go_result(_won: bool = false) -> void:
++		result_requested = true
++
++	func _send_game_action(action: String, args: Array) -> void:
++		sent_actions.append({"action": action, "args": args.duplicate()})
++
++var _failures: int = 0
++var _checks: int = 0
++var _hosts: Array[Node] = []
++
++func _initialize() -> void:
++	call_deferred("_run_tests")
++
++func _expect(condition: bool, label: String) -> void:
++	_checks += 1
++	if condition:
++		print("PASS: ", label)
++	else:
++		_failures += 1
++		push_error("FAIL: " + label)
++
++func _new_game() -> Dictionary:
++	var host := MockApp.new()
++	root.add_child(host)
++	_hosts.append(host)
++	var game = PentagoRulesScript.new()
++	game.bind(host, "pentago")
++	game.reset_game()
++	return {"game": game, "host": host}
++
++func _run_tests() -> void:
++	_test_initial_board_and_placement_phase()
++	_test_clockwise_and_counterclockwise_rotation()
++	_test_rotation_advances_turn()
++	_test_five_in_a_row_ends_game()
++	_test_invalid_cell_input_is_ignored()
++	print("PENTAGO_RULES_TESTS: checks=%d, failures=%d" % [_checks, _failures])
++	for host in _hosts:
++		if is_instance_valid(host):
++			host.free()
++	quit(1 if _failures > 0 else 0)
++
++func _test_initial_board_and_placement_phase() -> void:
++	var fixture: Dictionary = _new_game()
++	var game = fixture["game"]
++	var host = fixture["host"]
++	_expect(game.pent_board.size() == 6, "board starts with six rows")
++	var empty_cells: int = 0
++	for row in game.pent_board:
++		_expect(row.size() == 6, "each row has six cells")
++		for cell in row:
++			if int(cell) == 0:
++				empty_cells += 1
++	_expect(empty_cells == 36, "all 36 cells start empty")
++	_expect(game._pent_place(Vector2i(0, 0)), "first legal placement is accepted")
++	_expect(int(game.pent_board[0][0]) == 1, "placed piece is owned by current player")
++	_expect(game.pent_phase == 1, "placement moves game to rotation phase")
++	_expect(host.rotate_buttons_requested == 1, "placement asks host to expose rotation controls")
++
++func _test_clockwise_and_counterclockwise_rotation() -> void:
++	var fixture: Dictionary = _new_game()
++	var game = fixture["game"]
++	game.pent_board[0][0] = 1
++	game._pent_rotate(0, true)
++	_expect(int(game.pent_board[0][2]) == 1, "clockwise rotation moves top-left piece to top-right of quadrant")
++	game._reset_pentago()
++	game.pent_board[0][0] = 2
++	game._pent_rotate(0, false)
++	_expect(int(game.pent_board[2][0]) == 2, "counterclockwise rotation moves top-left piece to bottom-left of quadrant")
++
++func _test_rotation_advances_turn() -> void:
++	var fixture: Dictionary = _new_game()
++	var game = fixture["game"]
++	var host = fixture["host"]
++	_expect(game._pent_place(Vector2i(1, 1)), "placement before a rotation is accepted")
++	game._pent_do_rotate(0, true)
++	_expect(game.pent_phase == 0, "rotation returns to placement phase")
++	_expect(game.pent_turn == 2, "completed turn passes to opponent")
++	_expect(host.playing_buttons_requested == 1, "completed rotation rebuilds play controls")
++
++func _test_five_in_a_row_ends_game() -> void:
++	var fixture: Dictionary = _new_game()
++	var game = fixture["game"]
++	var host = fixture["host"]
++	for x in range(4):
++		game.pent_board[0][x] = 1
++	_expect(game._pent_place(Vector2i(4, 0)), "winning fifth piece is accepted")
++	_expect(game.pent_game_over, "five in a row ends game")
++	_expect(game.pent_winner == 1, "winner is the player who completed five")
++	_expect(host.result_requested, "winning placement opens result flow")
++
++func _test_invalid_cell_input_is_ignored() -> void:
++	var fixture: Dictionary = _new_game()
++	var game = fixture["game"]
++	var host = fixture["host"]
++	game._pent_handle_cell_tap(Vector2i(-1, 0))
++	game._pent_handle_cell_tap(Vector2i(6, 0))
++	_expect(game.pent_board[0][0] == 0, "out-of-bounds cell input does not mutate board")
++	_expect(game.pent_phase == 0, "out-of-bounds cell input does not change phase")
++	_expect(host.sent_actions.is_empty(), "out-of-bounds cell input does not send a network action")
+diff --git a/tests/godot/test_quarto_rules.gd b/tests/godot/test_quarto_rules.gd
+new file mode 100644
+index 0000000..a8e357b
+--- /dev/null
++++ b/tests/godot/test_quarto_rules.gd
+@@ -0,0 +1,118 @@
++extends SceneTree
++## Quarto rule regressions: offered pieces, legal placement, shared-attribute victory and guards.
++
++const QuartoRulesScript = preload("res://games/quarto/rules.gd")
++
++class MockApp extends Node2D:
++	var vs_cpu: bool = false
++	var local_seat: int = 0
++	var rebuild_calls: int = 0
++	var result_calls: int = 0
++	var toasts: Array[String] = []
++	var sent_actions: Array = []
++
++	func _net_on() -> bool:
++		return false
++
++	func _is_my_turn() -> bool:
++		return true
++
++	func _rebuild_buttons() -> void:
++		rebuild_calls += 1
++
++	func _go_result(_won: bool = false) -> void:
++		result_calls += 1
++
++	func _show_toast(message: String) -> void:
++		toasts.append(message)
++
++	func _send_game_action(action: String, args: Array) -> void:
++		sent_actions.append({"action": action, "args": args.duplicate()})
++
++var _checks: int = 0
++var _failures: int = 0
++var _hosts: Array[Node] = []
++
++func _initialize() -> void:
++	call_deferred("_run_tests")
++
++func _expect(condition: bool, label: String) -> void:
++	_checks += 1
++	if condition:
++		print("PASS: ", label)
++	else:
++		_failures += 1
++		push_error("FAIL: " + label)
++
++func _new_game() -> Dictionary:
++	var host := MockApp.new()
++	root.add_child(host)
++	_hosts.append(host)
++	var game = QuartoRulesScript.new()
++	game.bind(host, "quarto")
++	game.reset_game()
++	return {"game": game, "host": host}
++
++func _run_tests() -> void:
++	_test_reset_and_piece_count()
++	_test_piece_offer_and_legal_placement()
++	_test_shared_attribute_win()
++	_test_invalid_actions_are_rejected()
++	print("QUARTO_RULES_TESTS: checks=%d, failures=%d" % [_checks, _failures])
++	for host in _hosts:
++		if is_instance_valid(host):
++			host.free()
++	quit(1 if _failures > 0 else 0)
++
++func _test_reset_and_piece_count() -> void:
++	var fixture: Dictionary = _new_game()
++	var game = fixture["game"]
++	var empty_count: int = 0
++	for row in game.qto_board:
++		_expect(row.size() == 4, "board row has four cells")
++		for piece in row:
++			if int(piece) == -1:
++				empty_count += 1
++	_expect(game.qto_board.size() == 4 and empty_count == 16, "reset creates a 4x4 empty board")
++	_expect(game.qto_remaining.size() == 16, "all sixteen pieces start available")
++	_expect(game.qto_turn == 1 and game.qto_phase == 0, "first actor chooses a piece for the opponent")
++
++func _test_piece_offer_and_legal_placement() -> void:
++	var fixture: Dictionary = _new_game()
++	var game = fixture["game"]
++	var host = fixture["host"]
++	_expect(game._qto_choose_piece(6, 1), "current actor can offer an available piece")
++	_expect(game.qto_phase == 1 and game.qto_turn == 2, "offering a piece transfers placement to opponent")
++	_expect(6 not in game.qto_remaining and game.qto_piece_to_place == 6, "offered piece is removed from available set")
++	_expect(game._qto_place(0, 0, 2), "opponent can place offered piece into an empty cell")
++	_expect(int(game.qto_board[0][0]) == 6, "placed piece is stored in the selected cell")
++	_expect(game.qto_phase == 0 and game.qto_turn == 2, "placer chooses the next piece after a safe placement")
++	_expect(host.rebuild_calls >= 2, "state transitions refresh controls")
++
++func _test_shared_attribute_win() -> void:
++	var fixture: Dictionary = _new_game()
++	var game = fixture["game"]
++	var host = fixture["host"]
++	game.qto_board[0][0] = 0
++	game.qto_board[0][1] = 2
++	game.qto_board[0][2] = 4
++	game.qto_phase = 1
++	game.qto_turn = 2
++	game.qto_piece_to_place = 6
++	_expect(game._qto_place(3, 0, 2), "completing a shared-attribute line is a legal placement")
++	_expect(game.qto_game_over and game.qto_winner == 2, "placing the fourth matching piece wins Quarto")
++	_expect(host.result_calls == 1, "win requests the result screen")
++
++func _test_invalid_actions_are_rejected() -> void:
++	var fixture: Dictionary = _new_game()
++	var game = fixture["game"]
++	var host = fixture["host"]
++	_expect(not game._qto_choose_piece(-1, 1), "invalid piece id is rejected")
++	_expect(not game._qto_choose_piece(0, 2), "non-current actor cannot offer a piece")
++	game.qto_phase = 1
++	game.qto_turn = 1
++	game.qto_piece_to_place = 0
++	_expect(not game._qto_place(-1, 0, 1), "out-of-bounds placement is rejected")
++	_expect(int(game.qto_board[0][0]) == -1, "invalid placement does not alter board")
++	game._qto_handle_board_tap(Vector2i(-1, 0))
++	_expect(not host.toasts.is_empty(), "invalid screen cell gives feedback")
+diff --git a/tests/test_architecture.py b/tests/test_architecture.py
+index 6d97aa3..702d2dd 100644
+--- a/tests/test_architecture.py
++++ b/tests/test_architecture.py
+@@ -49,7 +49,8 @@ def test_quoridor_uses_two_edge_walls_and_supports_four_player_hotseat() -> None
+     catalog = (project_root / "core" / "game_catalog.gd").read_text(encoding="utf-8")
+     assert "quo_pawns = [Vector2i(4, 0), Vector2i(8, 4), Vector2i(4, 8), Vector2i(0, 4)]" in rules
+     assert "quo_walls_left = [5, 5, 5, 5]" in rules
+-    assert "cell * 2 - 6" in rules
++    presentation = (project_root / "games" / "quoridor" / "presentation.gd").read_text(encoding="utf-8")
++    assert "cell * 2 - 6" in presentation
+     assert 'quo_walls.has("v%d,%d" % [boundary_x, from.y - 1])' in rules
+     assert 'quo_walls.has("h%d,%d" % [from.x - 1, boundary_y])' in rules
+     assert "func _quo_wall_geometry_clear(" in rules
+@@ -167,10 +168,11 @@ def test_pentago_and_domino_difficulty_selectors_reach_their_ai_and_hud() -> Non
+     assert "if dom_difficulty <= 1" in domino
+ 
+     # In-game labels make the effective selected profile visible to the player.
+-    # Domino rendering was moved to its presentation adapter, so the HUD reference belongs there.
++    # Game HUD drawing is delegated to presentation adapters.
++    pentago_presentation = (project_root / "games" / "pentago" / "presentation.gd").read_text(encoding="utf-8")
+     domino_presentation = (project_root / "games" / "domino" / "presentation.gd").read_text(encoding="utf-8")
+     assert "func _draw_ai_difficulty_chip(level: int) -> void:" in main
+-    assert "app._draw_ai_difficulty_chip(pent_difficulty)" in pentago
++    assert "app._draw_ai_difficulty_chip(game.pent_difficulty)" in pentago_presentation
+     assert "app._draw_ai_difficulty_chip(game.dom_difficulty)" in domino_presentation
+ 
+ 
+@@ -179,6 +181,8 @@ def test_pasoor_and_hokm_difficulty_profiles_reach_ai_and_hud() -> None:
+     main = (project_root / "main.gd").read_text(encoding="utf-8")
+     pasoor = (project_root / "games" / "pasoor" / "rules.gd").read_text(encoding="utf-8")
+     hokm = (project_root / "games" / "hokm" / "rules.gd").read_text(encoding="utf-8")
++    pasoor_presentation = (project_root / "games" / "pasoor" / "presentation.gd").read_text(encoding="utf-8")
++    hokm_presentation = (project_root / "games" / "hokm" / "presentation.gd").read_text(encoding="utf-8")
+ 
+     for game_id, setter, profile_var in (("pasoor", "_set_pasoor_difficulty", "pas_difficulty"),
+                                          ("hokm", "_set_hokm_difficulty", "hokm_difficulty")):
+@@ -186,7 +190,7 @@ def test_pasoor_and_hokm_difficulty_profiles_reach_ai_and_hud() -> None:
+         assert f'"{game_id}_difficulty_%d"' in MODE_SCREEN_PATH.read_text(encoding="utf-8")
+         assert f"host.{setter}.bind(i + 1)" in MODE_SCREEN_PATH.read_text(encoding="utf-8")
+         assert f'_game_modules["{game_id}"].{profile_var} = clampi(level, 1, 6)' in main
+-        assert f"app._draw_ai_difficulty_chip({profile_var})" in (pasoor if game_id == "pasoor" else hokm)
++        assert f"app._draw_ai_difficulty_chip(game.{profile_var})" in (pasoor_presentation if game_id == "pasoor" else hokm_presentation)
+ 
+     # Four Cards evaluates captures, card points, sweeps, and exposed table risk.
+     assert "func _pas_exposure_cost(card: Dictionary) -> float:" in pasoor
+@@ -213,10 +217,11 @@ def test_gobblet_has_four_piece_sizes_in_rules_and_ui() -> None:
+     assert "gob_hand = [[3, 3, 3, 3], [3, 3, 3, 3]]" in gobblet
+     assert "for size in [4, 3, 2, 1]:" in gobblet
+     assert "func _gob_hand_rect(index: int) -> Rect2:" in gobblet
+-    assert gobblet.count("for s in range(4):") >= 3
+-    assert '["کوچک", "متوسط", "بزرگ", "خیلی بزرگ"]' in gobblet
++    gobblet_presentation = (project_root / "games" / "gobblet" / "presentation.gd").read_text(encoding="utf-8")
++    assert gobblet_presentation.count("for s in range(4):") >= 2
++    assert '["کوچک", "متوسط", "بزرگ", "خیلی بزرگ"]' in gobblet_presentation
+     assert "size < 1 or size > 4" in gobblet
+-    assert "خیلی بزرگ" in gobblet
++    assert "خیلی بزرگ" in gobblet_presentation
+ 
+ 
+ 
+@@ -275,7 +280,8 @@ def test_gobblet_and_abalone_have_six_ai_difficulty_levels():
+         assert f"host.{setter}.bind(i + 1)" in MODE_SCREEN_PATH.read_text(encoding="utf-8")
+         assert f'_game_modules["{game_id}"].{field} = clampi(level, 1, 6)' in main
+         assert f"var {field}: int = 3" in rules
+-        assert (f"app._draw_ai_difficulty_chip({field})" in rules) or (f"app._draw_ai_difficulty_chip_at({field}" in rules)
++        presentation = (project_root / "games" / game_id / "presentation.gd").read_text(encoding="utf-8")
++        assert (f"app._draw_ai_difficulty_chip(game.{field})" in presentation) or (f"app._draw_ai_difficulty_chip_at(game.{field}" in presentation)
+ 
+     assert "func _gob_generate_actions(player: int) -> Array:" in gobblet
+     assert "if level == 1:" in gobblet and "if level >= 5:" in gobblet
+@@ -330,4 +336,5 @@ def test_quarto_piece_renderer_distinguishes_all_four_standard_attributes() -> N
+         assert token in fn
+     assert "(30.0 if tall else 17.0)" in fn
+     assert "if round_piece:" in fn and "if hollow_piece:" in fn
+-    assert "_draw_quarto_piece(Vector2(pr.position.x + 26, pr.get_center().y), piece, 0.80" in main
++    quarto_presentation = (project_root / "games" / "quarto" / "presentation.gd").read_text(encoding="utf-8")
++    assert "app._draw_quarto_piece(Vector2(rect.position.x + 26, rect.get_center().y), piece, 0.80" in quarto_presentation
+diff --git a/tests/test_other_game_presentations.py b/tests/test_other_game_presentations.py
+new file mode 100644
+index 0000000..406ecf7
+--- /dev/null
++++ b/tests/test_other_game_presentations.py
+@@ -0,0 +1,91 @@
++"""Structural regression tests for presentation/rules boundaries in legacy game modules."""
++from pathlib import Path
++import re
++
++PROJECT_ROOT = Path(__file__).resolve().parents[1]
++
++
++def _read(game: str, filename: str) -> str:
++    return (PROJECT_ROOT / "games" / game / filename).read_text(encoding="utf-8")
++
++
++def test_remaining_game_presenters_are_loaded_and_rules_remain_authoritative() -> None:
++    cases = {
++        "quoridor": {
++            "class": "QuoridorPresentationScript",
++            "instance": "_quo_presentation",
++            "prefix": "quo_",
++            "render_wrapper": "_quo_presentation.render(app, self)",
++            "tap_wrapper": None,
++            "critical": ("_quo_legal_moves", "_quo_wall_placement_legal", "_quo_place_wall", "_quo_advance_turn"),
++            "presenter_methods": ("edge_at", "build_buttons", "player_color", "draw_four_player_hud", "render"),
++        },
++        "gobblet": {
++            "class": "GobbletPresentationScript",
++            "instance": "_gob_presentation",
++            "prefix": "gob_",
++            "render_wrapper": "_gob_presentation.render(app, self)",
++            "tap_wrapper": "_gob_presentation.handle_tap(app, self, p)",
++            "critical": ("_gob_can_place", "_gob_can_move", "_gob_place", "_gob_move", "_gob_cpu"),
++            "presenter_methods": ("hand_rect", "handle_tap", "build_buttons", "render"),
++        },
++        "pasoor": {
++            "class": "PasoorPresentationScript",
++            "instance": "_pas_presentation",
++            "prefix": "pas_",
++            "render_wrapper": "_pas_presentation.render(app, self)",
++            "tap_wrapper": "_pas_presentation.handle_tap(app, self, p)",
++            "critical": ("_pas_find_captures", "_pas_best_capture", "_pas_play", "_pas_cpu_move"),
++            "presenter_methods": ("hand_rects", "table_rects", "handle_tap", "build_buttons", "render"),
++        },
++        "hokm": {
++            "class": "HokmPresentationScript",
++            "instance": "_hokm_presentation",
++            "prefix": "hokm_",
++            "render_wrapper": "_hokm_presentation.render(app, self)",
++            "tap_wrapper": "_hokm_presentation.handle_tap(app, self, p)",
++            "critical": ("_hokm_legal", "_hokm_play", "_hokm_cpu", "_hokm_card_beats"),
++            "presenter_methods": ("hand_rects", "handle_tap", "render"),
++        },
++        "abalone": {
++            "class": "AbalonePresentationScript",
++            "instance": "_aba_presentation",
++            "prefix": "aba_",
++            "render_wrapper": "_aba_presentation.render(app, self)",
++            "tap_wrapper": "_aba_presentation.handle_tap(app, self, p)",
++            "critical": ("_aba_valid_cell", "_aba_moves_for_selection", "_aba_apply_group_move", "_aba_generate_all_moves"),
++            "presenter_methods": ("cell_center", "hit_cell", "handle_tap", "render"),
++        },
++    }
++    for game_id, case in cases.items():
++        rules = _read(game_id, "rules.gd")
++        presenter = _read(game_id, "presentation.gd")
++        assert f'preload("res://games/{game_id}/presentation.gd")' in rules
++        assert f"var {case['instance']} = {case['class']}.new()" in rules
++        assert case["render_wrapper"] in rules
++        for method in case["presenter_methods"]:
++            assert re.search(rf"^func\s+{method}\(", presenter, re.M), (game_id, method)
++        if case["tap_wrapper"]:
++            assert case["tap_wrapper"] in rules
++        for method in case["critical"]:
++            assert re.search(rf"^func\s+{method}\(", rules, re.M), (game_id, method)
++        assert not re.search(rf"^\s*game\.{case['prefix']}[A-Za-z0-9_]*\s*=(?!=)", presenter, re.M), game_id
++
++
++def test_pasoor_and_hokm_presenters_do_not_call_back_into_layout_wrappers() -> None:
++    pasoor = _read("pasoor", "presentation.gd")
++    hokm = _read("hokm", "presentation.gd")
++    assert "game._pas_hand_rects()" not in pasoor
++    assert "game._pas_table_rects()" not in pasoor
++    assert "game._hokm_rects()" not in hokm
++    assert "game._pas_me()" in pasoor
++    assert "game._hokm_me()" in hokm
++
++
++def test_presenters_call_only_host_methods_defined_in_main() -> None:
++    main = (PROJECT_ROOT / "main.gd").read_text(encoding="utf-8")
++    main_methods = set(re.findall(r"^func\s+(\w+)\s*\(", main, re.M))
++    for game_id in ("quoridor", "gobblet", "pasoor", "hokm", "abalone"):
++        presenter = _read(game_id, "presentation.gd")
++        app_calls = {name for name in re.findall(r"\bapp\.(\w+)\s*\(", presenter) if name.startswith("_")}
++        assert app_calls <= main_methods, (game_id, sorted(app_calls - main_methods))
+diff --git a/tests/test_pentago_presentation.py b/tests/test_pentago_presentation.py
+new file mode 100644
+index 0000000..b55c51e
+--- /dev/null
++++ b/tests/test_pentago_presentation.py
+@@ -0,0 +1,53 @@
++from pathlib import Path
++import re
++
++
++def test_pentago_presentation_is_separate_and_rules_remain_authoritative() -> None:
++    root = Path(__file__).resolve().parents[1]
++    rules = (root / "games" / "pentago" / "rules.gd").read_text(encoding="utf-8")
++    presentation = (root / "games" / "pentago" / "presentation.gd").read_text(encoding="utf-8")
++    main = (root / "main.gd").read_text(encoding="utf-8")
++
++    assert 'preload("res://games/pentago/presentation.gd")' in rules
++    assert "var _pent_presentation = PentagoPresentationScript.new()" in rules
++
++    for method in ("board_origin", "cell_pos", "quad_rect", "handle_tap", "build_buttons", "render"):
++        assert re.search(rf"^func\s+{method}\(", presentation, re.M), method
++
++    for wrapper in (
++        "return _pent_presentation.board_origin(app)",
++        "return _pent_presentation.cell_pos(app, x, y)",
++        "_pent_presentation.handle_tap(app, self, p)",
++        "return _pent_presentation.quad_rect(app, q)",
++        "_pent_presentation.build_buttons(app, self)",
++        "_pent_presentation.render(app, self)",
++    ):
++        assert wrapper in rules, wrapper
++
++    # Pointer geometry is presented separately; rule validity and network dispatch stay authoritative.
++    assert "game._pent_handle_cell_tap(Vector2i(x, y))" in presentation
++    assert "func _pent_handle_cell_tap(c: Vector2i) -> void:" in rules
++    assert "if pent_game_over or pent_phase != 0 or not _pent_my_turn():" in rules
++    assert 'app._send_game_action("_rpc_pent_place", [c.x, c.y])' in rules
++    assert "game._pent_rot.bind(q, false)" in presentation
++    assert "game._pent_rot.bind(q, true)" in presentation
++
++    # Rendering must be read-only with respect to state owned by the rules module.
++    assert not re.search(r"^\s*game\.pent_[A-Za-z0-9_]+\s*=(?!=)", presentation, re.M)
++    for method in ("_pent_check_win", "_pent_rotate", "_pent_place", "_pent_do_rotate", "_pent_cpu_move", "_pent_choose_cpu_plan", "_pent_evaluate_board"):
++        assert re.search(rf"^func\s+{method}\(", rules, re.M), method
++
++    assert '"pentago": _btns_pentago()' in main
++    assert '"pentago": _draw_pentago()' in main
++    assert "func _pent_tap(p: Vector2) -> void:" in main
++
++
++def test_pentago_presenter_uses_only_existing_app_drawing_helpers() -> None:
++    root = Path(__file__).resolve().parents[1]
++    presentation = (root / "games" / "pentago" / "presentation.gd").read_text(encoding="utf-8")
++    main = (root / "main.gd").read_text(encoding="utf-8")
++    app_functions = set(re.findall(r"^func\s+(\w+)\s*\(", main, re.M))
++    app_calls = {name for name in re.findall(r"\bapp\.(\w+)\s*\(", presentation) if name.startswith("_")}
++    assert not (app_calls - app_functions), sorted(app_calls - app_functions)
++    for helper in ("_track_board", "_draw_hud", "_panel", "_draw_disc", "_ring", "_hint", "_txt_c"):
++        assert f"app.{helper}(" in presentation
+diff --git a/tests/test_quarto_presentation.py b/tests/test_quarto_presentation.py
+new file mode 100644
+index 0000000..f83adaf
+--- /dev/null
++++ b/tests/test_quarto_presentation.py
+@@ -0,0 +1,33 @@
++"""Quarto UI layout and authoritative state boundary checks."""
++from pathlib import Path
++import re
++
++PROJECT_ROOT = Path(__file__).resolve().parents[1]
++
++
++def test_quarto_presentation_mapping_rendering_and_wrappers() -> None:
++    rules = (PROJECT_ROOT / "games" / "quarto" / "rules.gd").read_text(encoding="utf-8")
++    presenter = (PROJECT_ROOT / "games" / "quarto" / "presentation.gd").read_text(encoding="utf-8")
++    main = (PROJECT_ROOT / "main.gd").read_text(encoding="utf-8")
++    for method in ("board_origin", "piece_rect", "handle_tap", "build_buttons", "render"):
++        assert re.search(rf"^func\s+{method}\(", presenter, re.M)
++    assert 'preload("res://games/quarto/presentation.gd")' in rules
++    assert "_qto_presentation.handle_tap(app, self, p)" in rules
++    assert "_qto_presentation.build_buttons(app, self)" in rules
++    assert "_qto_presentation.render(app, self)" in rules
++    assert 'func _draw_quarto() -> void:\n\t_game_modules[\"quarto\"]._draw_quarto()' in main
++    assert 'return _game_modules["quarto"]._qto_piece_rect(piece)' in main
++    assert "game._qto_handle_board_tap(cell)" in presenter
++    assert "game._draw_quarto_piece" not in presenter
++    assert "app._draw_quarto_piece(" in presenter
++    assert not re.search(r"^\s*game\.qto_[A-Za-z0-9_]*\s*=(?!=)", presenter, re.M)
++    for method in ("_qto_has_quarto", "_qto_choose_piece", "_qto_place", "_qto_cpu_step"):
++        assert re.search(rf"^func\s+{method}\(", rules, re.M)
++
++
++def test_quarto_main_draw_and_piece_geometry_are_wrappers() -> None:
++    main = (PROJECT_ROOT / "main.gd").read_text(encoding="utf-8")
++    qto_rect = main[main.index("func _quarto_piece_rect("):main.index("func _draw_quarto_piece(")]
++    draw = main[main.index("func _draw_quarto() -> void:"):main.index("# ======================================================================\n#  LOGIC REPLACEMENTS")]
++    assert 'return _game_modules["quarto"]._qto_piece_rect(piece)' in qto_rect
++    assert '_game_modules["quarto"]._draw_quarto()' in draw
+diff --git a/tools/verify_structure.py b/tools/verify_structure.py
+index 7759e3c..6fe1e1a 100644
+--- a/tools/verify_structure.py
++++ b/tools/verify_structure.py
+@@ -622,6 +622,132 @@ else:
+     if missing_blockace_app_calls:
+         errors.append(f"Blockace presentation calls missing app methods: {missing_blockace_app_calls}")
+ 
++
++# Pentago presentation separates drawing/layout and pointer mapping from authoritative rules.
++pentago_rules_path = ROOT / "games" / "pentago" / "rules.gd"
++pentago_presentation_path = ROOT / "games" / "pentago" / "presentation.gd"
++if not pentago_presentation_path.is_file():
++    errors.append("missing Pentago presentation module: games/pentago/presentation.gd")
++else:
++    pentago_rules = pentago_rules_path.read_text(encoding="utf-8")
++    pentago_presentation = pentago_presentation_path.read_text(encoding="utf-8")
++    if 'preload("res://games/pentago/presentation.gd")' not in pentago_rules:
++        errors.append("Pentago rules module does not preload its presentation module")
++    if "var _pent_presentation = PentagoPresentationScript.new()" not in pentago_rules:
++        errors.append("Pentago rules module does not instantiate its presenter")
++    for method in ("board_origin", "cell_pos", "quad_rect", "handle_tap", "build_buttons", "render"):
++        if not re.search(rf"^func\s+{method}\(", pentago_presentation, re.M):
++            errors.append(f"PentagoPresentation is missing {method}()")
++    for wrapper in (
++        "return _pent_presentation.board_origin(app)",
++        "return _pent_presentation.cell_pos(app, x, y)",
++        "_pent_presentation.handle_tap(app, self, p)",
++        "return _pent_presentation.quad_rect(app, q)",
++        "_pent_presentation.build_buttons(app, self)",
++        "_pent_presentation.render(app, self)",
++    ):
++        if wrapper not in pentago_rules:
++            errors.append(f"Pentago compatibility wrapper missing: {wrapper}")
++    if "game._pent_handle_cell_tap(Vector2i(x, y))" not in pentago_presentation:
++        errors.append("Pentago pointer mapping must delegate the cell to the rules module")
++    if re.search(r"^\s*game\.pent_[A-Za-z0-9_]+\s*=(?!=)", pentago_presentation, re.M):
++        errors.append("Pentago presentation must not mutate authoritative game state")
++    for method in ("_pent_check_win", "_pent_rotate", "_pent_place", "_pent_do_rotate", "_pent_cpu_move", "_pent_choose_cpu_plan", "_pent_evaluate_board"):
++        if not re.search(rf"^func\s+{method}\(", pentago_rules, re.M):
++            errors.append(f"Pentago rules module lost authoritative method {method}()")
++    pentago_app_calls = {name for name in re.findall(r"\bapp\.(\w+)\s*\(", pentago_presentation) if name.startswith("_")}
++    missing_pentago_app_calls = sorted(pentago_app_calls - main_funcs)
++    if missing_pentago_app_calls:
++        errors.append(f"Pentago presentation calls missing app methods: {missing_pentago_app_calls}")
++    for workflow_path in (ROOT / ".github" / "workflows" / "build-web.yml", ROOT / ".github" / "workflows" / "deploy-web.yml"):
++        workflow_text = workflow_path.read_text(encoding="utf-8")
++        if "Run Pentago rules regression tests" not in workflow_text or "res://tests/godot/test_pentago_rules.gd" not in workflow_text:
++            errors.append(f"{workflow_path.relative_to(ROOT)} does not run Pentago regression tests")
++
++# Presentation adapters for the remaining rules modules are read-only views.
++remaining_presentations = {
++    "quoridor": {
++        "instance": "_quo_presentation",
++        "class": "QuoridorPresentationScript",
++        "state_prefix": "quo_",
++        "methods": ("edge_at", "build_buttons", "player_color", "draw_four_player_hud", "render"),
++        "critical": ("_quo_legal_moves", "_quo_wall_placement_legal", "_quo_place_wall", "_quo_advance_turn"),
++    },
++    "gobblet": {
++        "instance": "_gob_presentation",
++        "class": "GobbletPresentationScript",
++        "state_prefix": "gob_",
++        "methods": ("hand_rect", "handle_tap", "build_buttons", "render"),
++        "critical": ("_gob_can_place", "_gob_can_move", "_gob_place", "_gob_move", "_gob_cpu"),
++    },
++    "pasoor": {
++        "instance": "_pas_presentation",
++        "class": "PasoorPresentationScript",
++        "state_prefix": "pas_",
++        "methods": ("hand_rects", "table_rects", "handle_tap", "build_buttons", "render"),
++        "critical": ("_pas_find_captures", "_pas_best_capture", "_pas_play", "_pas_cpu_move"),
++    },
++    "hokm": {
++        "instance": "_hokm_presentation",
++        "class": "HokmPresentationScript",
++        "state_prefix": "hokm_",
++        "methods": ("hand_rects", "handle_tap", "render"),
++        "critical": ("_hokm_legal", "_hokm_play", "_hokm_cpu", "_hokm_card_beats"),
++    },
++    "abalone": {
++        "instance": "_aba_presentation",
++        "class": "AbalonePresentationScript",
++        "state_prefix": "aba_",
++        "methods": ("cell_center", "hit_cell", "handle_tap", "render"),
++        "critical": ("_aba_valid_cell", "_aba_moves_for_selection", "_aba_apply_group_move", "_aba_generate_all_moves"),
++    },
++    "quarto": {
++        "instance": "_qto_presentation",
++        "class": "QuartoPresentationScript",
++        "state_prefix": "qto_",
++        "methods": ("board_origin", "piece_rect", "handle_tap", "build_buttons", "render"),
++        "critical": ("_qto_has_quarto", "_qto_choose_piece", "_qto_place", "_qto_cpu_step"),
++    },
++}
++for game_id, spec in remaining_presentations.items():
++    rules_path = ROOT / "games" / game_id / "rules.gd"
++    presentation_path = ROOT / "games" / game_id / "presentation.gd"
++    if not presentation_path.is_file():
++        errors.append(f"missing {game_id.title()} presentation module: games/{game_id}/presentation.gd")
++        continue
++    rules = rules_path.read_text(encoding="utf-8")
++    presentation = presentation_path.read_text(encoding="utf-8")
++    if f'preload("res://games/{game_id}/presentation.gd")' not in rules:
++        errors.append(f"{game_id.title()} rules module does not preload its presentation module")
++    if f"var {spec['instance']} = {spec['class']}.new()" not in rules:
++        errors.append(f"{game_id.title()} rules module does not instantiate its presenter")
++    for method in spec["methods"]:
++        if not re.search(rf"^func\s+{method}\(", presentation, re.M):
++            errors.append(f"{game_id.title()} presentation is missing {method}()")
++    for method in spec["critical"]:
++        if not re.search(rf"^func\s+{method}\(", rules, re.M):
++            errors.append(f"{game_id.title()} rules module lost authoritative {method}()")
++    if re.search(rf"^\s*game\.{spec['state_prefix']}[A-Za-z0-9_]*\s*=(?!=)", presentation, re.M):
++        errors.append(f"{game_id.title()} presentation must not mutate authoritative game state")
++    app_calls = {name for name in re.findall(r"\bapp\.(\w+)\s*\(", presentation) if name.startswith("_")}
++    missing_calls = sorted(app_calls - main_funcs)
++    if missing_calls:
++        errors.append(f"{game_id.title()} presentation calls missing app methods: {missing_calls}")
++
++# Quarto main entry points remain wrappers, and CI runs its rule regression suite.
++quarto_rules = (ROOT / "games" / "quarto" / "rules.gd").read_text(encoding="utf-8")
++quarto_presentation = (ROOT / "games" / "quarto" / "presentation.gd").read_text(encoding="utf-8")
++if "_qto_presentation.render(app, self)" not in quarto_rules:
++    errors.append("Quarto render entry point does not delegate to the presentation module")
++if 'return _game_modules["quarto"]._qto_piece_rect(piece)' not in (ROOT / "main.gd").read_text(encoding="utf-8"):
++    errors.append("Quarto piece layout entry point is not a compatibility wrapper")
++if "game._qto_handle_board_tap(cell)" not in quarto_presentation:
++    errors.append("Quarto pointer mapping must delegate to authoritative rules")
++for workflow_path in (ROOT / ".github" / "workflows" / "build-web.yml", ROOT / ".github" / "workflows" / "deploy-web.yml"):
++    workflow_text = workflow_path.read_text(encoding="utf-8")
++    if "Run Quarto rules regression tests" not in workflow_text or "res://tests/godot/test_quarto_rules.gd" not in workflow_text:
++        errors.append(f"{workflow_path.relative_to(ROOT)} does not run Quarto rules regression tests")
++
+ if errors:
+     print("STRUCTURE CHECK FAILED")
+     for error in errors:
+@@ -634,7 +760,7 @@ print(f"- {module_method_count} app-facing module calls checked for compatibilit
+ print(f"- {state_count} module-owned state fields checked")
+ print("- scoring, ranking, and game catalog services found")
+ print("- menu, dashboard, rankings, mode, online/lobby, pause, rules, dialogs and result presentation delegated to UI modules")
+-print("- Othello, Chess, Backgammon, Domino and Blockace presentation/input mapping delegated to game presentation modules")
++print("- Othello, Chess, Pentago, Quoridor, Domino, Backgammon, Gobblet, Pasoor, Hokm, Abalone, Quarto and Blockace presentation/input mapping delegated to game presentation modules")
+ print("- UNO drawing and action-button layout delegated to its presentation module; Wild Draw Four challenges and draw/pass guards checked")
+ print("- Chess legality, complete Undo history and bounded AI search checked")
+ print("- Mastermind state/secret and online race remain in rules; Blockace placement/CPU/network rules remain authoritative; UI delegated to presentation modules")

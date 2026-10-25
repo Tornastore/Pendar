@@ -72,7 +72,7 @@ class MultiplayerCapacityAndResultsTests(unittest.TestCase):
         self.assertIn('func _go_result(_won: bool = false) -> void:', MAIN)
         self.assertIn('_result_popup_open = true', MAIN)
         result_screen = (ROOT / 'ui' / 'screens' / 'result_screen.gd').read_text(encoding='utf-8')
-        self.assertIn('var panel := Rect2(28, 218, float(theme["VIEW_W"]) - 56, 508)', result_screen)
+        self.assertIn('var panel := Rect2(24, 96, float(theme["VIEW_W"]) - 48, 760)', result_screen)
         self.assertIn('_result_screen.render_popup(self, _ui_screen_theme)', MAIN)
         for module in (ROOT / 'games').glob('*/rules.gd'):
             text = module.read_text(encoding='utf-8')

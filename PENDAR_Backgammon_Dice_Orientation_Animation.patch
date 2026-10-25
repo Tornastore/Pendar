@@ -1,0 +1,936 @@
+diff --git a/games/backgammon/README.md b/games/backgammon/README.md
+index 3de5412..cd4d7c8 100644
+--- a/games/backgammon/README.md
++++ b/games/backgammon/README.md
+@@ -1,7 +1,7 @@
+ # تخته‌نرد
+ 
+ - شناسه ماژول: `backgammon`؛ بازی از وضعیت آزمایشی خارج شده است.
+-- شروع با قرعه‌ی دو تاس غیرمساوی؛ بازیکن دارای تاس بزرگ‌تر شروع می‌کند و هر دو مقدار را در نوبت اول مصرف می‌کند.
++- شروع با دکمهٔ «ریختن تاس آغازین»؛ پس از انیمیشن چرخش، بازیکن دارای تاس بزرگ‌تر شروع می‌کند و هر دو مقدار را در نوبت اول مصرف می‌کند. نتیجه پیش از فشردن دکمه نمایش داده نمی‌شود.
+ - قوانین پیاده‌سازی‌شده شامل ۱۵ مهره برای هر بازیکن، حرکت اجباری از بار، زدن تک‌مهره و انتقال آن به بار، خانه‌های بسته، استفاده‌ی بیشینه از تاس‌ها، قانون تاس بزرگ‌تر در حالتی که فقط یک تاس قابل استفاده است، و خارج‌کردن مهره پس از ورود همه‌ی مهره‌ها به خانه‌ی خودی است.
+ - بازی با CPU از شش درجه‌ی سختی پشتیبانی می‌کند. درجه انتخابی در `bg_difficulty` ذخیره و مستقیماً به `BackgammonAI.choose_turn()` داده می‌شود.
+ - سطح ۱ انتخاب تصادفی از میان شاخه‌های قانونی با رعایت بیشینه‌ی تعداد تاس قابل استفاده دارد؛ سطح ۲ از امتیازدهی حریصانه با کمی تنوع استفاده می‌کند؛ سطح‌های ۳ تا ۶ پیشروی مهره‌ها، زدن مهره‌ی حریف، تک‌مهره‌های در معرض خطر، ساخت خانه‌های بسته، pip race و در سطوح قوی‌تر ساختن prime را بیشتر لحاظ می‌کنند.
+@@ -12,6 +12,8 @@
+ ## Separation and regression coverage
+ 
+ - `rules.gd` remains the authoritative owner of checker state, dice consumption, legal-turn sequencing, bar entry, hits and bearing off.
+-- `presentation.gd` owns board rendering and pointer-to-point mapping. Point hit-testing matches the visible top (`y=178..332`) and bottom (`y=508..662`) point bands; only the central bar channel maps to `-1`.
++- `presentation.gd` owns board rendering and pointer-to-point mapping. Seat 0 moves toward the bottom-right home board (point 24 appears top-right and point 1 bottom-right); top (`y=178..332`) and bottom (`y=508..662`) taps match the visible numbered points, and only the central bar channel maps to `-1`.
++- Roll faces rotate and change during a timed roll animation for the human and CPU. Checker moves use an animated checker plus a persistent source-to-target trace; the latest move is also labelled with actor, source, destination and die.
++- Legal single-die destinations are marked green and annotated with the available die. Purple overlays preview only valid two-step routes using the sum of both dice; the user must still perform each legal step separately. Doubles are explicitly labelled as four moves rather than one combined move.
+ - AI position evaluation discounts on-board hit threats while the relevant player still has checkers forced to enter from the bar, and rewards made points that block an opponent's bar entry. The rules engine still controls the legal move set and mandatory dice-use rule.
+ - `tests/godot/test_backgammon_rules.gd` covers initial checker counts, forced bar entry, blocked points, hits, bearing off, doubles, mandatory dice usage, screen hit-testing, end-turn guarding and AI state safety. It runs as part of both web build and deploy workflows.
+diff --git a/games/backgammon/presentation.gd b/games/backgammon/presentation.gd
+index e9af681..13f275f 100644
+--- a/games/backgammon/presentation.gd
++++ b/games/backgammon/presentation.gd
+@@ -1,6 +1,6 @@
+ extends RefCounted
+ ## Backgammon board rendering and pointer hit-testing.
+-## Dice rules, checker state, turn sequencing and CPU/network actions stay in rules.gd.
++## Rules/state, roll lifecycle, legal move sequencing and CPU actions stay in rules.gd.
+ 
+ const BOARD_LEFT: float = 25.0
+ const BOARD_TOP: float = 170.0
+@@ -19,13 +19,33 @@ func point_x(col: int) -> float:
+ 	return 40.0 + col * 36.0 + (24.0 if col >= 6 else 0.0)
+ 
+ 
++func point_column(point: int) -> int:
++	# Seat 0 moves toward the bottom-right home board; seat 1 moves toward top-right.
++	return 11 - point if point < 12 else point - 12
++
++
++func point_center(point: int, stack_index: int = 0) -> Vector2:
++	if point < 0 or point >= 24:
++		return Vector2(268.0, 400.0)
++	var col: int = point_column(point)
++	var x: float = point_x(col) + 17.0
++	var stack: int = clampi(stack_index, 0, 4)
++	if point < 12:
++		return Vector2(x, 198.0 + float(stack) * 27.0)
++	return Vector2(x, 642.0 - float(stack) * 27.0)
++
++
++func point_tip_center(point: int) -> Vector2:
++	if point < 0 or point >= 24:
++		return Vector2(268.0, 400.0)
++	var col: int = point_column(point)
++	return Vector2(point_x(col) + 17.0, 322.0 if point < 12 else 518.0)
++
++
+ func point_from_tap(p: Vector2) -> int:
+ 	# The bar is the central vertical channel. Only its active checker area selects it.
+ 	if p.x >= BAR_MIN_X and p.x <= BAR_MAX_X and p.y >= BAR_MIN_Y and p.y <= BAR_MAX_Y:
+ 		return -1
+-	# Point triangles are actually drawn in the top and bottom bands. The old
+-	# mapping accepted only the blank middle band, causing clicks on visible
+-	# checkers to be ignored or routed to the opposite side.
+ 	var top_row: bool = p.y >= TOP_POINTS_MIN_Y and p.y <= TOP_POINTS_MAX_Y
+ 	var bottom_row: bool = p.y >= BOTTOM_POINTS_MIN_Y and p.y <= BOTTOM_POINTS_MAX_Y
+ 	if not top_row and not bottom_row:
+@@ -33,10 +53,74 @@ func point_from_tap(p: Vector2) -> int:
+ 	for candidate in range(12):
+ 		var x0: float = point_x(candidate) - 2.0
+ 		if p.x >= x0 and p.x <= x0 + 36.0:
+-			return candidate if top_row else 23 - candidate
++			# Mirrored horizontal mapping: point 0 is top-right and point 23 bottom-right.
++			return 11 - candidate if top_row else 12 + candidate
+ 	return -2
+ 
+ 
++func _draw_arrow(app, start: Vector2, finish: Vector2, color: Color, width: float = 3.0) -> void:
++	app.draw_line(start, finish, color, width, true)
++	var delta: Vector2 = finish - start
++	if delta.length() < 12.0:
++		return
++	var direction: Vector2 = delta.normalized()
++	var normal: Vector2 = Vector2(-direction.y, direction.x)
++	var tip: Vector2 = finish - direction * 3.0
++	var base: Vector2 = finish - direction * 15.0
++	app.draw_colored_polygon(PackedVector2Array([tip, base + normal * 6.0, base - normal * 6.0]), color)
++
++
++func _move_end(game, point: int, is_start: bool, player: int) -> Vector2:
++	if point == -1:
++		return Vector2(268.0, 380.0 if player == 0 else 420.0)
++	if point == -2:
++		return Vector2(500.0, 685.0 if player == 0 else 154.0)
++	if point < 0 or point >= 24:
++		return Vector2(268.0, 400.0)
++	var stack: int = absi(int(game.bg_points[point]))
++	if not is_start:
++		stack += 1
++	return point_center(point, mini(maxi(stack - 1, 0), 4))
++
++
++func _draw_move_trace(app, game, move: Dictionary, animated: bool) -> void:
++	if move.is_empty():
++		return
++	var player: int = int(move.get("player", 0))
++	var source: int = int(move.get("source", -2))
++	var target: int = int(move.get("target", -2))
++	var color: Color = Color(0.25, 0.95, 0.93, 0.9) if player == 0 else Color(1.0, 0.54, 0.28, 0.95)
++	var start: Vector2 = _move_end(game, source, true, player)
++	var finish: Vector2 = _move_end(game, target, false, player)
++	if source >= 0:
++		var source_count: int = absi(int(game.bg_points[source]))
++		var source_stack: int = mini(maxi(source_count - 1 if animated else source_count, 0), 4)
++		start = point_center(source, source_stack)
++	if target == -1:
++		finish = Vector2(500.0, 685.0 if player == 0 else 154.0)
++	elif target >= 0:
++		var target_count: int = absi(int(game.bg_points[target]))
++		var target_stack: int = mini(maxi(target_count if animated else target_count - 1, 0), 4)
++		finish = point_center(target, target_stack)
++	if not animated:
++		color.a = 0.52
++		app._ring(start, 17.0, color, 2.5)
++		app._ring(finish, 17.0, color, 2.5)
++	_draw_arrow(app, start, finish, color, 3.0 if animated else 2.0)
++	if animated:
++		var elapsed: float = maxf(0.0, float(Time.get_ticks_msec()) / 1000.0 - float(game._bg_move_anim_started_at))
++		var t: float = clampf(elapsed / game.MOVE_ANIM_SECONDS, 0.0, 1.0)
++		var pos: Vector2 = start.lerp(finish, t) + Vector2(0, -sin(t * PI) * 52.0)
++		app._draw_disc(pos, 15.0, player == 0)
++		app._ring(pos, 17.0, app.ACCENT, 2.5)
++
++
++func _draw_badge(app, center: Vector2, label: String, fill: Color, width: float = 25.0) -> void:
++	var rect := Rect2(center.x - width * 0.5, center.y - 10.0, width, 20.0)
++	app._panel(rect, fill, 7.0, Color(1, 1, 1, 0.85), 1.0)
++	app._txt_c(label, rect, 10, Color(1, 1, 1), true)
++
++
+ func render(app, game) -> void:
+ 	var me: int = game._bg_me()
+ 	var pa: Dictionary = app._pl("شما", Color(0.96, 0.93, 0.84) if me == 0 else Color(0.12, 0.13, 0.18), app._fa(game.bg_off[me]), game.bg_turn == me and not game.bg_game_over, true, "خارج‌شده", 1 if me == 0 else 0)
+@@ -53,14 +137,21 @@ func render(app, game) -> void:
+ 	app._panel(board, Color(0.30, 0.18, 0.10), 22, Color(0.8, 0.55, 0.3, 0.5), 2.0, 20, 8)
+ 	app._panel(board.grow(-8), Color(0.12, 0.30, 0.24), 16)
+ 	app._panel(Rect2(point_x(5) + 36, 178, 24, 484), Color(0.30, 0.18, 0.10), 6)
+-	var selected_targets: Dictionary = {}
+-	if game.bg_sel != -2:
++
++	var target_moves: Dictionary = {}
++	var available_sources: Dictionary = {}
++	if not game._bg_needs_roll and not game._bg_roll_animating and not game.bg_game_over:
+ 		for move in game._bg_turn_legal_moves(game.bg_turn):
+-			if int(move.source) == game.bg_sel and int(move.target) >= 0:
+-				selected_targets[int(move.target)] = true
++			var source: int = int(move.source)
++			var target: int = int(move.target)
++			available_sources[source] = true
++			if source == game.bg_sel and target >= 0:
++				if not target_moves.has(target):
++					target_moves[target] = []
++				target_moves[target].append(move)
+ 	for i in range(24):
+ 		var top: bool = i < 12
+-		var col_i: int = i if top else 23 - i
++		var col_i: int = point_column(i)
+ 		var x: float = point_x(col_i)
+ 		var y0: float = 180.0 if top else 660.0
+ 		var tipy: float = y0 + (150.0 if top else -150.0)
+@@ -68,7 +159,10 @@ func render(app, game) -> void:
+ 		app.draw_colored_polygon(PackedVector2Array([Vector2(x, y0), Vector2(x + 34, y0), Vector2(x + 17, tipy)]), tcol)
+ 		var n: int = int(game.bg_points[i])
+ 		var cnt: int = absi(n)
+-		for k in range(mini(cnt, 5)):
++		var draw_count: int = cnt
++		if game._bg_animating_move and int(game._bg_anim_move.get("source", -99)) == i:
++			draw_count = maxi(0, draw_count - 1)
++		for k in range(mini(draw_count, 5)):
+ 			var cy: float = (y0 + 18.0 + k * 27.0) if top else (y0 - 18.0 - k * 27.0)
+ 			app._draw_disc(Vector2(x + 17, cy), 13.5, n > 0)
+ 		if cnt > 5:
+@@ -77,29 +171,97 @@ func render(app, game) -> void:
+ 		var triangle_center: Vector2 = Vector2(x + 17.0, tipy - 8.0 if top else tipy + 8.0)
+ 		if i == game.bg_sel:
+ 			app._ring(triangle_center, 15.0, app.ACCENT, 2.5)
+-		if selected_targets.has(i):
+-			app.draw_circle(triangle_center, 7.0, Color(app.GREEN.r, app.GREEN.g, app.GREEN.b, 0.78))
+-			app._ring(triangle_center, 11.0, app.GREEN, 1.7)
+-	# Bar checkers. Click the central channel to select a checker there when required.
++		if game.bg_sel == -2 and available_sources.has(i):
++			app._ring(triangle_center, 13.0, Color(0.25, 0.78, 0.95, 0.8), 1.8)
++		if target_moves.has(i):
++			app.draw_circle(triangle_center, 7.0, Color(app.GREEN.r, app.GREEN.g, app.GREEN.b, 0.9))
++			app._ring(triangle_center, 11.0, app.GREEN, 2.0)
++			var die_labels: PackedStringArray = PackedStringArray()
++			for move in target_moves[i]:
++				var die_label: String = app._fa(int(move.die))
++				if die_label not in die_labels:
++					die_labels.append(die_label)
++			var chip_y: float = triangle_center.y - 18.0 if top else triangle_center.y + 18.0
++			_draw_badge(app, Vector2(x + 17, chip_y), "/".join(die_labels), Color(0.10, 0.45, 0.29, 0.95), maxf(24.0, 18.0 + die_labels.size() * 8.0))
++		# Familiar point labels make the mirrored orientation explicit: 24 at point 0, 1 at point 23.
++		var point_number: String = app._fa(24 - i)
++		var number_y: float = y0 + 2.0 if top else y0 - 4.0
++		app._txt_c(point_number, Rect2(x + 2, number_y, 30, 14), 9, Color(1, 1, 1, 0.72), false)
++
++	# Draw possible two-die routes in a separate purple style; each step still has to be played legally.
++	if game.bg_sel != -2 and not game._bg_needs_roll and not game._bg_roll_animating:
++		var combined_hints: Array[Dictionary] = game._bg_combined_move_hints(game.bg_sel)
++		for combo_index in range(combined_hints.size()):
++			var combo: Dictionary = combined_hints[combo_index]
++			var start_point: int = int(combo.get("source", game.bg_sel))
++			var via_point: int = int(combo.get("via", -1))
++			var end_point: int = int(combo.get("target", -1))
++			if via_point >= 0:
++				var p0: Vector2 = point_tip_center(start_point) if start_point >= 0 else Vector2(268, 400)
++				var p1: Vector2 = point_tip_center(via_point)
++				var p2: Vector2 = point_tip_center(end_point) if end_point >= 0 else Vector2(500.0, 685.0 if game.bg_turn == 0 else 154.0)
++				app.draw_line(p0, p1, Color(0.72, 0.45, 1.0, 0.65), 2.0, true)
++				app.draw_line(p1, p2, Color(0.72, 0.45, 1.0, 0.65), 2.0, true)
++				app._ring(p2, 15.0, Color(0.77, 0.53, 1.0), 2.0)
++				var label: String = app._fa(int(combo.get("first_die", 0))) + "+" + app._fa(int(combo.get("second_die", 0)))
++				var vertical_offset: float = -20.0 if end_point < 12 else 20.0
++				vertical_offset += float(combo_index % 3) * 13.0
++				_draw_badge(app, p2 + Vector2(0, vertical_offset), label, Color(0.40, 0.22, 0.60, 0.98), 42.0)
++
++	# Bar checkers and selection state.
+ 	for player in range(2):
+ 		for k in range(mini(int(game.bg_bar[player]), 5)):
+-			var center := Vector2(point_x(5) + 48.0, 400.0 + (float(player) * 2.0 - 1.0) * (20.0 + float(k) * 20.0))
++			var center := Vector2(268.0, 400.0 + (float(player) * 2.0 - 1.0) * (20.0 + float(k) * 20.0))
+ 			app._draw_disc(center, 11.0, player == 0)
+-		if game.bg_sel == -1 and int(game.bg_bar[game.bg_turn]) > 0:
+-			app._ring(Vector2(point_x(5) + 48.0, 400.0 + (float(game.bg_turn) * 2.0 - 1.0) * 20.0), 15.0, app.ACCENT, 2.0)
+-	# Dice and remaining playable values.
++		if game.bg_sel == -1 and int(game.bg_bar[game.bg_turn]) > 0 and player == game.bg_turn:
++			app._ring(Vector2(268.0, 380.0 if player == 0 else 420.0), 15.0, app.ACCENT, 2.0)
++		if game.bg_sel == -2 and available_sources.has(-1) and int(game.bg_bar[player]) > 0 and player == game.bg_turn:
++			app._ring(Vector2(268.0, 380.0 if player == 0 else 420.0), 13.0, Color(0.25, 0.78, 0.95, 0.8), 1.8)
++
++	# Dice are hidden until the player presses Roll; the rolling faces change, rotate and then settle on the result.
+ 	for i in range(2):
+-		var dr := Rect2(point_x(6) + 20 + i * 54 - 28, 396, 44, 44)
+-		var used: bool = game.bg_moves_left.is_empty()
+-		app._draw_dice_face(dr, int(game.bg_dice[i]), used)
+-	var rem: String = "—"
+-	if not game.bg_moves_left.is_empty():
++		var dr := Rect2(238.0 + i * 58.0, 390.0, 46.0, 46.0)
++		if game._bg_roll_animating:
++			var elapsed: float = maxf(0.0, float(Time.get_ticks_msec()) / 1000.0 - float(game._bg_roll_started_at))
++			var fake_value: int = int(floor(elapsed * 19.0 + float(i) * 2.8)) % 6 + 1
++			var spin: float = elapsed * 24.0 + float(i) * 1.7
++			app.draw_set_transform(dr.get_center(), spin, Vector2.ONE)
++			app._draw_dice_face(Rect2(-23.0, -23.0, 46.0, 46.0), fake_value, false)
++			app.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
++		elif not game._bg_needs_roll and int(game.bg_dice[i]) > 0:
++			app._draw_dice_face(dr, int(game.bg_dice[i]), false)
++		else:
++			app._draw_dice_face(dr, 0, true)
++	if game._bg_roll_animating:
++		app._txt_c("تاس‌ها در حال چرخش‌اند…", Rect2(150, 444, 240, 24), 12, app.ACCENT, true)
++	elif game._bg_needs_roll:
++		app._txt_c("برای دیدن نتیجه، دکمهٔ ریختن تاس را بزنید", Rect2(116, 444, 308, 26), 11, app.TEXT_DIM, false)
++	elif int(game.bg_dice[0]) == int(game.bg_dice[1]):
++		app._txt_c("جفت " + app._fa(int(game.bg_dice[0])) + " · چهار حرکت", Rect2(150, 444, 240, 24), 12, app.ACCENT, true)
++	else:
++		var sum_value: int = int(game.bg_dice[0]) + int(game.bg_dice[1])
++		app._txt_c("جمع دو تاس: " + app._fa(int(game.bg_dice[0])) + " + " + app._fa(int(game.bg_dice[1])) + " = " + app._fa(sum_value), Rect2(116, 444, 308, 26), 12, app.ACCENT, true)
++
++	var remaining_text: String = "تاس باقی نمانده"
++	if game._bg_needs_roll and int(game._bg_roll_result[0]) > 0:
++		var roller: String = "شما" if int(game._bg_roll_player) == 0 else ("CPU" if app.vs_cpu else "حریف")
++		remaining_text = "تاس نوبت قبل " + roller + ": " + app._fa(int(game._bg_roll_result[0])) + " + " + app._fa(int(game._bg_roll_result[1])) + " = " + app._fa(int(game._bg_roll_result[0]) + int(game._bg_roll_result[1]))
++	elif not game.bg_moves_left.is_empty():
+ 		var parts: PackedStringArray = []
+ 		for value in game.bg_moves_left:
+ 			parts.append(app._fa(int(value)))
+-		rem = " ، ".join(parts)
+-	app._txt_c("تاس‌های باقی: " + rem, Rect2(0, 678, app.VIEW_W, 26), 14, app.TEXT_DIM, true)
+-	var help: String = "مهره‌ی خود را انتخاب کنید، سپس مقصد را بزنید" if game.bg_sel == -2 else "خانه‌های سبز مقصدهای مجازند"
+-	if int(game.bg_bar[game.bg_turn]) > 0 and not (app.vs_cpu and game.bg_turn == 1):
+-		help = "ابتدا مهره‌ی روی بار را وارد کنید"
+-	app._txt_c(help, Rect2(16, 682, app.VIEW_W - 32, 24), 11, app.ACCENT if game.bg_sel != -2 else app.TEXT_DIM, false)
++		remaining_text = "تاس‌های قابل استفاده: " + " ، ".join(parts)
++	app._txt_c(remaining_text, Rect2(24, 676, app.VIEW_W - 48, 20), 11, app.TEXT_DIM, false)
++	if not game._bg_last_move.is_empty():
++		var last: Dictionary = game._bg_last_move
++		var owner: String = "شما" if int(last.get("player", 0)) == 0 else ("CPU" if app.vs_cpu else "حریف")
++		var from_label: String = "بار" if int(last.source) == -1 else app._fa(24 - int(last.source))
++		var to_label: String = "خارج" if int(last.target) == -1 else app._fa(24 - int(last.target))
++		var history_text: String = "آخرین حرکت " + owner + ": " + from_label + " ← " + to_label + " · تاس " + app._fa(int(last.die))
++		app._txt_c(history_text, Rect2(20, 697, app.VIEW_W - 40, 20), 11, Color(0.98, 0.75, 0.38), true)
++	else:
++		app._txt_c("مهرهٔ خود را انتخاب کنید؛ خانه‌های سبز مقصد یک تاس و بنفش مسیر دو تاس‌اند", Rect2(16, 697, app.VIEW_W - 32, 20), 10, app.TEXT_DIM, false)
++	if game._bg_animating_move:
++		_draw_move_trace(app, game, game._bg_anim_move, true)
++	elif not game._bg_last_move.is_empty():
++		_draw_move_trace(app, game, game._bg_last_move, false)
+diff --git a/games/backgammon/rules.gd b/games/backgammon/rules.gd
+index b50da70..1ddcbf3 100644
+--- a/games/backgammon/rules.gd
++++ b/games/backgammon/rules.gd
+@@ -20,12 +20,32 @@ var bg_winner: int = -1
+ var bg_legal_cache_key: String = ""
+ var bg_legal_cache: Array[Dictionary] = []
+ 
++# Turn UX state. Dice stay concealed until a roll is requested; both dice and
++# checker movements animate before their results are committed to the board.
++const ROLL_ANIM_SECONDS: float = 0.95
++const MOVE_ANIM_SECONDS: float = 0.46
++var _bg_needs_roll: bool = true
++var _bg_opening_roll: bool = true
++var _bg_roll_animating: bool = false
++var _bg_roll_started_at: float = 0.0
++var _bg_roll_result: Array = [0, 0]
++var _bg_roll_player: int = -1
++var _bg_roll_serial: int = 0
++var _bg_cpu_busy: bool = false
++var _bg_animating_move: bool = false
++var _bg_move_anim_started_at: float = 0.0
++var _bg_anim_move: Dictionary = {}
++var _bg_last_move: Dictionary = {}
++var _bg_move_choice_pending: Array[Dictionary] = []
++var _bg_combined_hint_cache_key: String = ""
++var _bg_combined_hint_cache: Array[Dictionary] = []
++
+ func reset_game() -> void:
+ 	_reset_backgammon()
+ 
+ func _reset_backgammon() -> void:
+-	# Standard 15-checker start. Positive checkers are player 0 and move toward point 23;
+-	# negative checkers are player 1 and move toward point 0.
++	# Standard 15-checker start. The view maps this route so seat 0's home board
++	# is at bottom-right and its increasing point indices move toward that corner.
+ 	bg_points = []
+ 	for i in range(24):
+ 		bg_points.append(0)
+@@ -39,18 +59,83 @@ func _reset_backgammon() -> void:
+ 	bg_points[5] = -5
+ 	bg_bar = [0, 0]
+ 	bg_off = [0, 0]
+-	# Standard opening roll: each player rolls one die; the higher die starts
+-	# and both opening values are used as the first turn's dice. Ties reroll.
+-	var opening_dice: Array[int] = [randi_range(1, 6), randi_range(1, 6)]
+-	while opening_dice[0] == opening_dice[1]:
+-		opening_dice = [randi_range(1, 6), randi_range(1, 6)]
+-	bg_turn = 0 if opening_dice[0] > opening_dice[1] else 1
+-	bg_dice = [opening_dice[0], opening_dice[1]]
+-	bg_moves_left = _bg_expand_dice(bg_dice)
++	# Opening roll is player-triggered. The winner of the unequal dice starts,
++	# and those two values are also the first turn's dice.
++	bg_turn = 0
++	bg_dice = [0, 0]
++	bg_moves_left = []
+ 	bg_sel = -2
+ 	bg_game_over = false
+ 	bg_winner = -1
++	_bg_needs_roll = true
++	_bg_opening_roll = true
++	_bg_roll_animating = false
++	_bg_roll_started_at = 0.0
++	_bg_roll_result = [0, 0]
++	_bg_roll_player = -1
++	_bg_roll_serial += 1
++	_bg_cpu_busy = false
++	_bg_animating_move = false
++	_bg_move_anim_started_at = 0.0
++	_bg_anim_move = {}
++	_bg_last_move = {}
++	_bg_move_choice_pending.clear()
++	_bg_invalidate_legal_cache()
++
++func _bg_roll() -> void:
++	# Compatibility entry point: a roll is now animated and user-visible.
++	_bg_roll_button()
++
++func _bg_roll_button() -> void:
++	if bg_game_over or _bg_roll_animating or _bg_animating_move or not _bg_needs_roll:
++		return
++	if app.vs_cpu and bg_turn == 1:
++		return
++	if app._net_on() and not _bg_opening_roll and bg_turn != _bg_me():
++		return
++	var dice: Array = [randi_range(1, 6), randi_range(1, 6)]
++	if _bg_opening_roll:
++		while int(dice[0]) == int(dice[1]):
++			dice = [randi_range(1, 6), randi_range(1, 6)]
++	_bg_play_roll_animation(int(dice[0]), int(dice[1]), _bg_opening_roll)
++
++func _bg_play_roll_animation(d1: int, d2: int, opening: bool) -> void:
++	if bg_game_over or _bg_roll_animating:
++		return
++	_bg_roll_serial += 1
++	var serial: int = _bg_roll_serial
++	var game_epoch: int = int(app._game_epoch)
++	_bg_roll_animating = true
++	_bg_roll_started_at = float(Time.get_ticks_msec()) / 1000.0
++	_bg_roll_result = [d1, d2]
++	_bg_roll_player = bg_turn
++	_bg_needs_roll = true
++	bg_dice = [0, 0]
++	bg_moves_left = []
++	bg_sel = -2
++	_bg_move_choice_pending.clear()
++	_bg_invalidate_legal_cache()
++	app._rebuild_buttons()
++	await app.get_tree().create_timer(ROLL_ANIM_SECONDS).timeout
++	if serial != _bg_roll_serial or game_epoch != int(app._game_epoch) or str(app.selected_game) != "backgammon" or bg_game_over:
++		return
++	_bg_roll_animating = false
++	bg_dice = [d1, d2]
++	if opening:
++		bg_turn = 0 if d1 > d2 else 1
++		_bg_opening_roll = false
++	_bg_roll_player = bg_turn
++	bg_moves_left = _bg_expand_dice(bg_dice)
++	_bg_needs_roll = false
++	bg_sel = -2
+ 	_bg_invalidate_legal_cache()
++	app._rebuild_buttons()
++	# A human can review a blocked roll and explicitly pass. CPU passes after its
++	# short visible result pause so the turn does not stall.
++	if app.vs_cpu and bg_turn == 1 and _bg_turn_legal_moves(bg_turn).is_empty():
++		await app.get_tree().create_timer(0.55).timeout
++		if not bg_game_over and bg_turn == 1 and not _bg_needs_roll:
++			_bg_request_end_turn()
+ 
+ func _bg_expand_dice(dice: Array) -> Array:
+ 	var expanded: Array = [int(dice[0]), int(dice[1])]
+@@ -58,15 +143,11 @@ func _bg_expand_dice(dice: Array) -> Array:
+ 		expanded = [int(dice[0]), int(dice[0]), int(dice[0]), int(dice[0])]
+ 	return expanded
+ 
+-func _bg_roll() -> void:
+-	bg_dice = [randi() % 6 + 1, randi() % 6 + 1]
+-	bg_moves_left = _bg_expand_dice(bg_dice)
+-	bg_sel = -2
+-	_bg_invalidate_legal_cache()
+-
+ func _bg_invalidate_legal_cache() -> void:
+ 	bg_legal_cache_key = ""
+ 	bg_legal_cache.clear()
++	_bg_combined_hint_cache_key = ""
++	_bg_combined_hint_cache.clear()
+ 
+ func _bg_save_board() -> Dictionary:
+ 	return {"points": bg_points.duplicate(), "bar": bg_bar.duplicate(), "off": bg_off.duplicate()}
+@@ -213,18 +294,18 @@ func _bg_move_exists(player: int, source: int, target: int, die: int) -> bool:
+ 	return false
+ 
+ func _bg_cpu() -> void:
+-	if bg_game_over or not app.vs_cpu or bg_turn != 1:
++	if bg_game_over or not app.vs_cpu or bg_turn != 1 or _bg_cpu_busy or _bg_roll_animating or _bg_animating_move:
++		return
++	_bg_cpu_busy = true
++	if _bg_needs_roll:
++		var cpu_dice: Array = [randi_range(1, 6), randi_range(1, 6)]
++		await _bg_play_roll_animation(int(cpu_dice[0]), int(cpu_dice[1]), false)
++	if bg_game_over or bg_turn != 1:
++		_bg_cpu_busy = false
+ 		return
+-	# The human turn clears the dice when it hands control to the CPU. Roll only
+-	# in that case so a prepared CPU roll is never silently replaced.
+-	if bg_moves_left.is_empty():
+-		_bg_roll()
+ 	var ai = BackgammonAIScript.new()
+ 	var applied_count: int = 0
+ 	while not bg_moves_left.is_empty() and applied_count < 4 and not bg_game_over:
+-		# The rules engine computes the exact set of first moves that preserves
+-		# maximum dice usage and the high-die rule. Never let a pruned AI branch
+-		# violate mandatory rules; evaluate only inside this legal set.
+ 		var legal_turn_moves: Array[Dictionary] = _bg_turn_legal_moves(1)
+ 		if legal_turn_moves.is_empty():
+ 			break
+@@ -241,24 +322,27 @@ func _bg_cpu() -> void:
+ 		if chosen.is_empty():
+ 			break
+ 		var die: int = int(chosen.get("die", -1))
+-		var die_index: int = bg_moves_left.find(die)
+-		if die_index < 0:
++		if die not in bg_moves_left:
+ 			break
+-		_bg_apply_board_move(1, chosen)
+-		bg_moves_left.remove_at(die_index)
+-		_bg_invalidate_legal_cache()
++		await _bg_commit_human_move(chosen, false)
+ 		applied_count += 1
+ 		if int(bg_off[1]) >= 15:
+ 			bg_game_over = true
+ 			bg_winner = 1
+ 			bg_sel = -2
++			_bg_cpu_busy = false
+ 			app._go_result()
+ 			return
++	# Handoff to the human. The old CPU dice remain in last-move history but the
++	# current dice faces are blank until the next explicit roll.
+ 	bg_moves_left.clear()
+ 	bg_turn = 0
++	_bg_needs_roll = true
+ 	bg_sel = -2
+-	_bg_roll()
++	_bg_move_choice_pending.clear()
++	_bg_cpu_busy = false
+ 	_bg_invalidate_legal_cache()
++	app._rebuild_buttons()
+ 
+ func _bg_cpu_apply_source(source: int, die: int) -> void:
+ 	# Kept as a compatibility wrapper for older callers; new plans include targets.
+@@ -275,31 +359,33 @@ func _bg_me() -> int:
+ 	return app._my_seat()
+ 
+ func _bg_request_end_turn() -> void:
+-	if bg_game_over:
++	if bg_game_over or _bg_roll_animating or _bg_animating_move:
+ 		return
+ 	var seat: int = bg_turn
+ 	if not _bg_turn_legal_moves(seat).is_empty():
+ 		app._show_toast("هنوز حرکت قانونی با تاس‌های باقی‌مانده دارید.")
+ 		return
+ 	bg_sel = -2
++	_bg_move_choice_pending.clear()
+ 	if app.vs_cpu and not app._net_on():
+ 		bg_moves_left.clear()
+-		if seat == 0:
+-			bg_turn = 1
+-		else:
+-			bg_turn = 0
+-			_bg_roll()
++		bg_turn = 1 - seat
++		_bg_needs_roll = true
+ 		_bg_invalidate_legal_cache()
++		app._rebuild_buttons()
+ 		return
+ 	if app._net_on():
++		# Legacy network turn packet carries the next player's result. The receiver
++		# plays it through the same visible roll animation before allowing moves.
+ 		var d1: int = randi_range(1, 6)
+ 		var d2: int = randi_range(1, 6)
+ 		app._send_game_action("_rpc_bg_end_turn", [seat, d1, d2])
+ 		return
+ 	bg_moves_left.clear()
+ 	bg_turn = 1 - seat
+-	_bg_roll()
++	_bg_needs_roll = true
+ 	_bg_invalidate_legal_cache()
++	app._rebuild_buttons()
+ 
+ func _bg_end_turn_apply(seat: int, d1: int, d2: int) -> bool:
+ 	if bg_game_over or seat != bg_turn or d1 < 1 or d1 > 6 or d2 < 1 or d2 > 6:
+@@ -307,31 +393,60 @@ func _bg_end_turn_apply(seat: int, d1: int, d2: int) -> bool:
+ 	if not _bg_turn_legal_moves(seat).is_empty():
+ 		return false
+ 	bg_turn = 1 - seat
+-	bg_dice = [d1, d2]
+-	bg_moves_left = _bg_expand_dice(bg_dice)
++	bg_dice = [0, 0]
++	bg_moves_left.clear()
++	_bg_needs_roll = true
+ 	bg_sel = -2
+ 	_bg_invalidate_legal_cache()
++	_bg_play_roll_animation(d1, d2, false)
+ 	return true
+ 
+-func _bg_commit_human_move(move: Dictionary) -> void:
+-	if bg_game_over or int(move.get("die", -1)) not in bg_moves_left:
++func _bg_commit_human_move(move: Dictionary, allow_turn_handoff: bool = true) -> void:
++	if bg_game_over or _bg_needs_roll or _bg_roll_animating or _bg_animating_move or int(move.get("die", -1)) not in bg_moves_left:
++		return
++	var player: int = bg_turn
++	var authorized: bool = false
++	for legal in _bg_turn_legal_moves(player):
++		if int(legal.source) == int(move.get("source", -99)) and int(legal.target) == int(move.get("target", -99)) and int(legal.die) == int(move.get("die", -1)):
++			authorized = true
++			break
++	if not authorized:
+ 		return
+-	_bg_apply_board_move(bg_turn, move)
+-	bg_moves_left.remove_at(bg_moves_left.find(int(move.die)))
++	_bg_animating_move = true
++	_bg_move_anim_started_at = float(Time.get_ticks_msec()) / 1000.0
++	var game_epoch: int = int(app._game_epoch)
++	_bg_anim_move = move.duplicate(true)
++	_bg_anim_move["player"] = player
++	_bg_move_choice_pending.clear()
++	app._rebuild_buttons()
++	await app.get_tree().create_timer(MOVE_ANIM_SECONDS).timeout
++	if game_epoch != int(app._game_epoch) or str(app.selected_game) != "backgammon" or bg_game_over or bg_turn != player:
++		_bg_animating_move = false
++		_bg_anim_move = {}
++		return
++	_bg_animating_move = false
++	_bg_anim_move = {}
++	_bg_last_move = move.duplicate(true)
++	_bg_last_move["player"] = player
++	_bg_apply_board_move(player, move)
++	var die_index: int = bg_moves_left.find(int(move.die))
++	if die_index >= 0:
++		bg_moves_left.remove_at(die_index)
+ 	bg_sel = -2
+-	if int(bg_off[bg_turn]) >= 15:
++	_bg_invalidate_legal_cache()
++	if int(bg_off[player]) >= 15:
+ 		bg_game_over = true
+-		bg_winner = bg_turn
++		bg_winner = player
+ 		app._go_result()
+ 		return
+-	_bg_invalidate_legal_cache()
+-	if bg_moves_left.is_empty() or _bg_turn_legal_moves(bg_turn).is_empty():
++	app._rebuild_buttons()
++	if allow_turn_handoff and (bg_moves_left.is_empty() or _bg_turn_legal_moves(bg_turn).is_empty()):
+ 		# Only the host finishes an online turn. Clients wait for the authoritative roll.
+ 		if not app._net_on() or app.is_host:
+ 			_bg_request_end_turn()
+ 
+ func _bg_apply_net_move(seat: int, source: int, target: int, die: int) -> void:
+-	if bg_game_over or seat != bg_turn or die not in bg_moves_left:
++	if bg_game_over or _bg_animating_move or _bg_roll_animating or _bg_needs_roll or seat != bg_turn or die not in bg_moves_left:
+ 		return
+ 	var valid: bool = false
+ 	for move in _bg_turn_legal_moves(seat):
+@@ -357,7 +472,7 @@ func _bg_point_from_tap(p: Vector2) -> int:
+ 	return _presentation.point_from_tap(p)
+ 
+ func _bg_tap(p: Vector2) -> void:
+-	if bg_game_over or app._ov_active() or (app.vs_cpu and bg_turn == 1):
++	if bg_game_over or app._ov_active() or _bg_needs_roll or _bg_roll_animating or _bg_animating_move or not _bg_move_choice_pending.is_empty() or (app.vs_cpu and bg_turn == 1):
+ 		return
+ 	if app._net_on() and bg_turn != _bg_me():
+ 		return
+@@ -366,6 +481,7 @@ func _bg_tap(p: Vector2) -> void:
+ 	if clicked == -1:
+ 		if int(bg_bar[bg_turn]) > 0 and not _bg_turn_legal_moves(bg_turn).is_empty():
+ 			bg_sel = -1
++			_bg_move_choice_pending.clear()
+ 			app._rebuild_buttons()
+ 		return
+ 	if clicked < 0:
+@@ -377,11 +493,18 @@ func _bg_tap(p: Vector2) -> void:
+ 			if int(move.source) == bg_sel and int(move.target) == clicked:
+ 				destinations.append(move)
+ 		if not destinations.is_empty():
+-			# Same source/destination can occur only during bearing off; normal destinations uniquely imply a die.
+-			var chosen: Dictionary = destinations[0]
++			var unique: Array[Dictionary] = []
++			var seen_options: Dictionary = {}
+ 			for option in destinations:
+-				if int(option.die) > int(chosen.die):
+-					chosen = option
++				var option_key: String = "%d:%d:%d" % [int(option.source), int(option.target), int(option.die)]
++				if not seen_options.has(option_key):
++					seen_options[option_key] = true
++					unique.append(option.duplicate(true))
++			if unique.size() > 1:
++				_bg_move_choice_pending = unique
++				app._rebuild_buttons()
++				return
++			var chosen: Dictionary = unique[0]
+ 			if app._net_on():
+ 				app._send_game_action("_rpc_bg_move", [bg_turn, int(chosen.source), int(chosen.target), int(chosen.die)])
+ 			else:
+@@ -394,12 +517,13 @@ func _bg_tap(p: Vector2) -> void:
+ 		return
+ 	if (bg_turn == 0 and point_value > 0) or (bg_turn == 1 and point_value < 0):
+ 		bg_sel = -2 if bg_sel == clicked else clicked
++		_bg_move_choice_pending.clear()
+ 		app._rebuild_buttons()
+ 	else:
+ 		app._show_toast("ابتدا مهره‌ی خود را انتخاب کنید، سپس خانه‌ی مقصد را بزنید.")
+ 
+ func _bg_bear_off_selected() -> void:
+-	if bg_sel < -1 or bg_sel >= 24 or bg_game_over or (app.vs_cpu and bg_turn == 1):
++	if bg_sel < -1 or bg_sel >= 24 or bg_game_over or _bg_needs_roll or _bg_roll_animating or _bg_animating_move or (app.vs_cpu and bg_turn == 1):
+ 		return
+ 	var choices: Array[Dictionary] = []
+ 	for move in _bg_turn_legal_moves(bg_turn):
+@@ -408,20 +532,59 @@ func _bg_bear_off_selected() -> void:
+ 	if choices.is_empty():
+ 		app._show_toast("این مهره هنوز نمی‌تواند از صفحه خارج شود.")
+ 		return
++	if choices.size() > 1:
++		_bg_move_choice_pending = choices.duplicate(true)
++		app._rebuild_buttons()
++		return
+ 	var chosen: Dictionary = choices[0]
+-	for option in choices:
+-		if int(option.die) > int(chosen.die):
+-			chosen = option
+ 	if app._net_on():
+ 		app._send_game_action("_rpc_bg_move", [bg_turn, int(chosen.source), -1, int(chosen.die)])
+ 	else:
+ 		_bg_commit_human_move(chosen)
+ 	app._rebuild_buttons()
+ 
++func _bg_choose_pending_move(index: int) -> void:
++	if index < 0 or index >= _bg_move_choice_pending.size() or bg_game_over or _bg_roll_animating or _bg_animating_move:
++		return
++	var chosen: Dictionary = _bg_move_choice_pending[index].duplicate(true)
++	_bg_move_choice_pending.clear()
++	if app._net_on():
++		app._send_game_action("_rpc_bg_move", [bg_turn, int(chosen.source), int(chosen.target), int(chosen.die)])
++	else:
++		_bg_commit_human_move(chosen)
++	app._rebuild_buttons()
++
++func _bg_cancel_pending_move() -> void:
++	_bg_move_choice_pending.clear()
++	app._rebuild_buttons()
++
+ func _btns_backgammon() -> void:
+ 	if bg_game_over:
+ 		return
+ 	var mine: bool = bg_turn == _bg_me() and not (app.vs_cpu and bg_turn == 1)
++	if _bg_animating_move:
++		app._add_btn(Rect2(70, 714, app.VIEW_W - 140, 58), "مهره در حال حرکت است…", _bg_step, false, app.ACCENT, "solid", "loader", "bg_move_animating")
++		return
++	if not _bg_move_choice_pending.is_empty():
++		app._add_btn(Rect2(18, 714, 362, 58), "لغو انتخاب تاس", _bg_cancel_pending_move, mine, app.TEXT_DIM, "ghost", "x", "bg_cancel_move_choice")
++		for i in range(_bg_move_choice_pending.size()):
++			var move: Dictionary = _bg_move_choice_pending[i]
++			var from_label: String = "بار" if int(move.source) == -1 else str(24 - int(move.source))
++			var to_label: String = "خارج" if int(move.target) == -1 else str(24 - int(move.target))
++			var label: String = "تاس " + app._fa(int(move.die)) + " · " + to_label + " ← " + from_label
++			app._add_btn(Rect2(18 + i * 128, 780, 122, 48), label, _bg_choose_pending_move.bind(i), mine, app.ACCENT, "solid", "dice", "bg_move_choice_%d" % i)
++		return
++	if _bg_roll_animating:
++		app._add_btn(Rect2(70, 714, app.VIEW_W - 140, 58), "تاس‌ها در حال چرخش‌اند…", _bg_roll_button, false, app.ACCENT, "solid", "dice", "_bg_roll_animating")
++		return
++	if _bg_needs_roll:
++		var label: String = "ریختن تاس آغازین" if _bg_opening_roll else "ریختن تاس"
++		if app.vs_cpu and bg_turn == 1:
++			label = "نوبت CPU · ریختن تاس…"
++		elif not mine:
++			label = "منتظر نوبت حریف…"
++		app._add_btn(Rect2(70, 714, app.VIEW_W - 140, 58), label, _bg_roll_button, mine, app.ACCENT, "solid", "dice", "bg_roll_button")
++		return
+ 	var legal: Array[Dictionary] = _bg_turn_legal_moves(bg_turn)
+ 	var can_bear: bool = false
+ 	if bg_sel != -2:
+@@ -435,6 +598,46 @@ func _btns_backgammon() -> void:
+ 		var label: String = "پایان نوبت" if legal.is_empty() else "انتخاب مهره و مقصد"
+ 		app._add_btn(Rect2(110, 714, app.VIEW_W - 220, 58), label, _bg_step, mine and legal.is_empty(), app.GREEN if legal.is_empty() else app.TEXT_DIM, "solid" if legal.is_empty() else "ghost", "check" if legal.is_empty() else "mouse-pointer", "bg_step")
+ 
++func _bg_combined_move_hints(source: int) -> Array[Dictionary]:
++	# Return only real two-step sequences for the same checker. The purple result
++	# is a preview, not a direct move: each die must still be played separately.
++	var hints: Array[Dictionary] = []
++	if source < -1 or source >= 24 or _bg_needs_roll or _bg_roll_animating or bg_moves_left.size() < 2:
++		return hints
++	var hint_key: String = "%d|%d|%s|%s|%s|%s" % [source, bg_turn, str(bg_points), str(bg_bar), str(bg_off), str(bg_moves_left)]
++	if hint_key == _bg_combined_hint_cache_key:
++		return _bg_combined_hint_cache.duplicate(true)
++	var first_moves: Array[Dictionary] = _bg_turn_legal_moves(bg_turn)
++	var snapshot_key: String = bg_legal_cache_key
++	var snapshot_cache: Array[Dictionary] = bg_legal_cache.duplicate(true)
++	var seen: Dictionary = {}
++	for first in first_moves:
++		if int(first.source) != source or int(first.target) < 0:
++			continue
++		var remaining: Array = bg_moves_left.duplicate()
++		var first_die_index: int = remaining.find(int(first.die))
++		if first_die_index < 0:
++			continue
++		remaining.remove_at(first_die_index)
++		var board_snapshot: Dictionary = _bg_save_board()
++		_bg_apply_board_move(bg_turn, first)
++		var tail: Dictionary = _bg_search_best_prefix(bg_turn, remaining)
++		for second in tail.get("moves", []):
++			if int(second.source) != int(first.target):
++				continue
++			var hint_key: String = "%d:%d:%d:%d" % [int(first.target), int(second.target), int(first.die), int(second.die)]
++			if seen.has(hint_key):
++				continue
++			seen[hint_key] = true
++			hints.append({"source": source, "via": int(first.target), "target": int(second.target), "first_die": int(first.die), "second_die": int(second.die)})
++		_bg_restore_board(board_snapshot)
++	# Search helpers invalidate their cache while simulating; restore the live-turn cache.
++	bg_legal_cache_key = snapshot_key
++	bg_legal_cache = snapshot_cache
++	_bg_combined_hint_cache_key = hint_key
++	_bg_combined_hint_cache = hints.duplicate(true)
++	return hints
++
+ func _draw_backgammon() -> void:
+ 	# Keep main.gd's existing dispatch stable; rendering lives in presentation.gd.
+ 	_presentation.render(app, self)
+diff --git a/tests/godot/test_backgammon_rules.gd b/tests/godot/test_backgammon_rules.gd
+index 8799031..65415da 100644
+--- a/tests/godot/test_backgammon_rules.gd
++++ b/tests/godot/test_backgammon_rules.gd
+@@ -73,6 +73,9 @@ func _set_position(game, points: Array, bar: Array, off: Array, turn: int, dice:
+ 	game.bg_game_over = false
+ 	game.bg_winner = -1
+ 	game.bg_sel = -2
++	game._bg_needs_roll = false
++	game._bg_opening_roll = false
++	game._bg_roll_animating = false
+ 	game._bg_invalidate_legal_cache()
+ 
+ func _run_tests() -> void:
+@@ -81,6 +84,7 @@ func _run_tests() -> void:
+ 	_test_hits_and_bearing_off()
+ 	_test_mandatory_dice_and_doubles()
+ 	_test_input_hit_testing()
++	_test_combined_move_hints()
+ 	_test_end_turn_guard()
+ 	_test_ai_legality_and_state_safety()
+ 	_test_ai_bar_and_home_board_heuristics()
+@@ -101,8 +105,9 @@ func _test_standard_setup() -> void:
+ 		elif int(value) < 0:
+ 			player1 += -int(value)
+ 	_expect(player0 == 15 and player1 == 15, "standard setup has fifteen checkers per player")
+-	_expect(game.bg_moves_left.size() == 2, "opening roll supplies both non-equal dice")
+-	_expect(game.bg_dice[0] != game.bg_dice[1], "opening dice are rerolled on ties")
++	_expect(game.bg_moves_left.is_empty(), "board waits for the player to roll before showing dice")
++	_expect(game._bg_needs_roll and game._bg_opening_roll, "opening roll starts in a player-triggered state")
++	_expect(game.bg_dice == [0, 0], "dice result stays hidden until the roll button is pressed")
+ 
+ func _test_bar_entry_and_blocked_points() -> void:
+ 	var game = _new_game().game
+@@ -176,14 +181,32 @@ func _test_mandatory_dice_and_doubles() -> void:
+ 
+ func _test_input_hit_testing() -> void:
+ 	var game = _new_game().game
+-	_expect(game._bg_point_from_tap(Vector2(57, 250)) == 0, "top-left visible point maps to point zero")
+-	_expect(game._bg_point_from_tap(Vector2(477, 250)) == 11, "top-right visible point maps to point eleven")
+-	_expect(game._bg_point_from_tap(Vector2(57, 580)) == 23, "bottom-left visible point maps to point twenty-three")
+-	_expect(game._bg_point_from_tap(Vector2(477, 580)) == 12, "bottom-right visible point maps to point twelve")
++	_expect(game._bg_point_from_tap(Vector2(57, 250)) == 11, "top-left visible point maps to point eleven")
++	_expect(game._bg_point_from_tap(Vector2(477, 250)) == 0, "top-right visible point maps to point zero")
++	_expect(game._bg_point_from_tap(Vector2(57, 580)) == 12, "bottom-left visible point maps to point twelve")
++	_expect(game._bg_point_from_tap(Vector2(477, 580)) == 23, "bottom-right visible point maps to point twenty-three")
+ 	_expect(game._bg_point_from_tap(Vector2(268, 400)) == -1, "central bar channel maps to bar selection")
+ 	_expect(game._bg_point_from_tap(Vector2(100, 400)) == -2, "blank middle board does not map to a point")
+ 	_expect(game._bg_point_from_tap(Vector2(100, 480)) == -2, "non-point lower channel does not map to a point")
+ 
++
++func _test_combined_move_hints() -> void:
++	var game = _new_game().game
++	var points: Array = _empty_points()
++	points[0] = 1
++	_set_position(game, points, [0, 0], [0, 0], 0, [1, 2])
++	var before_points: Array = game.bg_points.duplicate()
++	var hints: Array[Dictionary] = game._bg_combined_move_hints(0)
++	var route_one_two: bool = false
++	var route_two_one: bool = false
++	for hint in hints:
++		if int(hint.via) == 1 and int(hint.target) == 3 and int(hint.first_die) == 1 and int(hint.second_die) == 2:
++			route_one_two = true
++		if int(hint.via) == 2 and int(hint.target) == 3 and int(hint.first_die) == 2 and int(hint.second_die) == 1:
++			route_two_one = true
++	_expect(route_one_two and route_two_one, "sum previews only show legal two-step routes with each die order")
++	_expect(game.bg_points == before_points, "combined-route preview does not mutate the authoritative board")
++
+ func _test_end_turn_guard() -> void:
+ 	var ctx: Dictionary = _new_game()
+ 	var game = ctx.game
+diff --git a/tests/test_ai_strength.py b/tests/test_ai_strength.py
+index 4c59e2d..7215c03 100644
+--- a/tests/test_ai_strength.py
++++ b/tests/test_ai_strength.py
+@@ -125,7 +125,7 @@ def test_backgammon_six_levels_are_wired_to_cpu_turn_and_catalog_is_not_beta():
+     mode_screen = read("ui/screens/mode_screen.gd")
+     catalog = read("core/game_catalog.gd")
+     assert "ai.choose_turn(self, bg_difficulty)" in rules
+-    assert "if bg_moves_left.is_empty():" in rules
++    assert "if _bg_needs_roll:" in rules
+     assert '"backgammon":' in main
+     assert "_schedule_cpu(0.45, _bg_cpu)" in main
+     assert "host._set_backgammon_difficulty.bind(i + 1)" in mode_screen
+@@ -133,8 +133,8 @@ def test_backgammon_six_levels_are_wired_to_cpu_turn_and_catalog_is_not_beta():
+     assert "var branch_limits: Array[int] = [0, 4, 5, 6, 7, 8, 10]" in ai
+     assert "if level == 1:" in ai and "if level == 2:" in ai
+     assert "if level >= 5:" in ai and "if level >= 6:" in ai
+-    assert "while opening_dice[0] == opening_dice[1]:" in rules
+-    assert "bg_turn = 0 if opening_dice[0] > opening_dice[1] else 1" in rules
++    assert "if _bg_opening_roll:" in rules and "while int(dice[0]) == int(dice[1]):" in rules
++    assert "bg_turn = 0 if d1 > d2 else 1" in rules
+     assert 'opponent_name: String = "CPU" if app.vs_cpu else "حریف"' in presentation
+ 
+ 
+diff --git a/tests/test_backgammon_presentation.py b/tests/test_backgammon_presentation.py
+index a89e25f..b1d2a2a 100644
+--- a/tests/test_backgammon_presentation.py
++++ b/tests/test_backgammon_presentation.py
+@@ -29,7 +29,7 @@ def test_backgammon_hit_testing_tracks_visible_top_bottom_rows_and_bar():
+     assert "TOP_POINTS_MAX_Y: float = 332.0" in presentation
+     assert "BOTTOM_POINTS_MIN_Y: float = 508.0" in presentation
+     assert "BOTTOM_POINTS_MAX_Y: float = 662.0" in presentation
+-    assert "return candidate if top_row else 23 - candidate" in presentation
++    assert "return 11 - candidate if top_row else 12 + candidate" in presentation
+     assert "return -1" in presentation and "return -2" in presentation
+ 
+ 
+@@ -57,3 +57,20 @@ def test_backgammon_godot_regression_suite_is_wired_into_both_web_workflows():
+         workflow = (ROOT / ".github" / "workflows" / workflow_name).read_text(encoding="utf-8")
+         assert "Run backgammon rules and presentation regression tests" in workflow
+         assert "BACKGAMMON_RULES_TESTS: checks=" in workflow
++
++
++def test_backgammon_has_player_relative_orientation_and_explicit_animated_roll():
++    rules = read("games/backgammon/rules.gd")
++    presentation = read("games/backgammon/presentation.gd")
++    assert "_bg_needs_roll: bool = true" in rules
++    assert "func _bg_roll_button()" in rules
++    assert "await app.get_tree().create_timer(ROLL_ANIM_SECONDS).timeout" in rules
++    assert "await app.get_tree().create_timer(MOVE_ANIM_SECONDS).timeout" in rules
++    assert "func _bg_combined_move_hints(source: int)" in rules
++    assert "func point_column(point: int) -> int:" in presentation
++    assert "جمع دو تاس:" in presentation
++    assert "آخرین حرکت " in presentation
++    assert "_bg_combined_move_hints(game.bg_sel)" in presentation
++    godot_tests = read("tests/godot/test_backgammon_rules.gd")
++    assert "_test_combined_move_hints()" in godot_tests
++    assert "app._fa(24 - i)" in presentation  # Point labels follow the mirrored route.
+diff --git a/tools/verify_structure.py b/tools/verify_structure.py
+index 278a7d7..7759e3c 100644
+--- a/tools/verify_structure.py
++++ b/tools/verify_structure.py
+@@ -125,7 +125,9 @@ for game_id in sorted(expected_modules):
+     missing_wrappers = sorted(app_calls - main_funcs)
+     if missing_wrappers:
+         errors.append(f"{game_id}: app-facing methods missing from main: {missing_wrappers}")
+-    state_vars = set(re.findall(r"^var\s+(\w+)(?::[^\n]+)?$", rules, re.M))
++    # Leading-underscore fields are module-private implementation/animation state;
++    # only public game state must be exposed to compatibility aliases in main.gd.
++    state_vars = {name for name in re.findall(r"^var\s+(\w+)(?::[^\n]+)?$", rules, re.M) if not name.startswith("_")}
+     # State used by legacy UI is proxied; newer code may access a module-owned
+     # field explicitly through _game_modules[game_id] instead. Both are valid.
+     state_proxies = set(re.findall(r"^var\s+(\w+)(?::[^\n]+)?:\s*$", main, re.M))

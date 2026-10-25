@@ -1,4 +1,5 @@
 extends RefCounted
+const TextWrapScript = preload("res://ui/text_wrap.gd")
 ## Online and lobby screen presenter.
 ## It reads connection/lobby state from the controller and builds views only.
 ## Matchmaking, transport, seat assignment and state transitions remain in main.gd.
@@ -63,9 +64,10 @@ func render_online(host, theme: Dictionary) -> void:
 	elif host._online_server_url().is_empty():
 		status_text = "برای فعال‌شدن صف آنلاین، سرور WebSocket را میزبانی و network/matchmaking_url را تنظیم کنید."
 	elif status_text.is_empty():
-		status_text = "بازیکنان بر اساس بازی انتخاب‌شده جفت می‌شوند؛ نام کاربری و ایموجی‌ها به حریف نمایش داده می‌شود."
-	host._wrap(status_text, note.position.x + 18, note.position.y + 32, note.size.x - 36, 14, theme["TEXT"], HORIZONTAL_ALIGNMENT_RIGHT)
-	host._wrap("اتصال مستقیم IP در APK حفظ شده است؛ نسخه‌ی وب برای بازی آنلاین از WSS استفاده می‌کند.", note.position.x + 18, note.position.y + 86, note.size.x - 36, 13, theme["TEXT_DIM"], HORIZONTAL_ALIGNMENT_RIGHT)
+		var og: String = str(host.online_game)
+		status_text = "حریف هم‌سطح بر اساس رتبه‌ی مهارتی تو در این بازی (%s) پیدا می‌شود. لیگ فعلی در این بازی: %s." % [host._fa(host.scoring_service.match_rating(og)), str(host.scoring_service.game_tier(og)["label"])]
+	host._wrap(TextWrapScript.wrap(host, status_text, note.size.x - 96.0, 14, false, 2), note.position.x + 18, note.position.y + 32, note.size.x - 76, 14, theme["TEXT"], HORIZONTAL_ALIGNMENT_RIGHT)
+	host._wrap(TextWrapScript.wrap(host, "اتصال مستقیم IP در APK حفظ شده است؛ نسخه‌ی وب برای بازی آنلاین از WSS استفاده می‌کند.", note.size.x - 40.0, 13, false, 2), note.position.x + 18, note.position.y + 86, note.size.x - 36, 13, theme["TEXT_DIM"], HORIZONTAL_ALIGNMENT_RIGHT)
 	host._draw_bottom_nav()
 
 # ---------------- LOBBY ----------------

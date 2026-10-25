@@ -14,9 +14,14 @@ const {
   evaluateMastermindGuess,
   rankMastermindPlayers
 } = require('./lib/protocol');
+const {
+  clampRating, clampLeague, searchWindow, findBestPair, pickGroup, averageRating
+} = require('./lib/matchmaking');
 
 const PORT = Number(process.env.PORT || 3000);
 const MAX_PAYLOAD = 16 * 1024;
+const MATCH_TICK_MS = 2000;
+const QUEUE_NOTICE_MS = 5000;
 const QUEUE_WAIT_MS = Math.max(3000, Number(process.env.QUEUE_WAIT_MS || 12000));
 const ORIGIN_ALLOWLIST = new Set(
   (process.env.ALLOWED_ORIGINS || 'https://tornastore.github.io,http://localhost:8060,http://127.0.0.1:8060')
@@ -161,7 +166,10 @@ function createRoom(sockets, game) {
   const players = connected.map((entry, seat) => ({
     socket: entry.socket,
     seat,
-    username: entry.state.username
+    username: entry.state.username,
+    rating: entry.state.rating,
+    globalRating: entry.state.globalRating,
+    league: entry.state.league
   }));
   const room = {
     id: roomId,
@@ -185,12 +193,16 @@ function createRoom(sockets, game) {
     client.game = game;
     client.queueKey = null;
   }
-  const roster = players.map(p => ({ seat: p.seat, username: p.username }));
+  const roster = players.map(p => ({ seat: p.seat, username: p.username, rating: p.rating, league: p.league }));
   for (const player of players) {
-    const others = players.filter(p => p.seat !== player.seat).map(p => p.username);
+    const otherPlayers = players.filter(p => p.seat !== player.seat);
+    const others = otherPlayers.map(p => p.username);
     send(player.socket, {
       type: 'match_found', game, room_id: roomId, seat: player.seat,
       opponent_username: others.join('، '), players: roster,
+      opponent_rating: averageRating(otherPlayers.map(p => p.rating)),
+      opponent_global_rating: averageRating(otherPlayers.map(p => p.globalRating)),
+      opponent_league: Math.round(otherPlayers.reduce((sum, p) => sum + p.league, 0) / otherPlayers.length),
       player_count: players.length, seed,
       mastermind_difficulty: room.mastermindDifficulty,
       blockace_difficulty: room.blockaceDifficulty,
@@ -206,7 +218,44 @@ function socketClosed(socket) {
   return !socket || socket.readyState !== WebSocket.OPEN;
 }
 
-function tryFormRooms(key, force = false) {
+function queueEntries(queue) {
+  return queue.map(socket => {
+    const state = clients.get(socket);
+    return { rating: state.rating, joinedAt: state.joinedAt };
+  });
+}
+
+function removeIndexes(queue, indexes) {
+  const sockets = indexes.map(index => queue[index]);
+  indexes.slice().sort((a, b) => b - a).forEach(index => queue.splice(index, 1));
+  return sockets;
+}
+
+function requeue(queue, sockets) {
+  for (const socket of sockets.slice().reverse()) {
+    const state = clients.get(socket);
+    if (state && socket.readyState === WebSocket.OPEN && state.state === 'queued') queue.unshift(socket);
+  }
+}
+
+function notifyQueue(key, queue, capacity, force = false) {
+  const now = Date.now();
+  queue.forEach((socket, index) => {
+    const state = clients.get(socket);
+    if (!state) return;
+    if (!force && now - state.lastQueuedAt < QUEUE_NOTICE_MS) return;
+    state.lastQueuedAt = now;
+    const range = searchWindow(now - state.joinedAt);
+    send(socket, {
+      type: 'queued', game: state.game, position: index + 1,
+      players_needed: Math.max(0, capacity - queue.length),
+      search_range: Number.isFinite(range) ? range : null,
+      waited_ms: now - state.joinedAt
+    });
+  });
+}
+
+function tryFormRooms(key, force = false, announce = true) {
   const queue = cleanQueue(key);
   if (!queue.length) {
     cancelQueueTimer(key);
@@ -216,47 +265,46 @@ function tryFormRooms(key, force = false) {
   if (!firstClient) return;
   const game = firstClient.game;
   const capacity = playerCapacityForGame(game);
-  if (game !== 'mastermind' && game !== 'quoridor' && game !== 'uno') {
+  const now = Date.now();
+  const multi = game === 'mastermind' || game === 'quoridor' || game === 'uno';
+  if (!multi) {
+    // 1v1: closest ratings first, widening the accepted gap with waiting time.
     while (queue.length >= 2) {
-      const sockets = queue.splice(0, 2);
+      const pair = findBestPair(queueEntries(queue), now);
+      if (!pair) break;
+      const sockets = removeIndexes(queue, pair);
       if (!createRoom(sockets, game)) {
-        for (const socket of sockets) {
-          const state = clients.get(socket);
-          if (state && socket.readyState === WebSocket.OPEN && state.state === 'queued') queue.unshift(socket);
-        }
+        requeue(queue, sockets);
         break;
       }
     }
   } else {
     while (queue.length >= capacity) {
-      const sockets = queue.splice(0, capacity);
+      const group = pickGroup(queueEntries(queue), capacity, now, false);
+      if (!group) break;
+      const sockets = removeIndexes(queue, group);
       if (!createRoom(sockets, game)) {
-        for (const socket of sockets.reverse()) {
-          const state = clients.get(socket);
-          if (state && socket.readyState === WebSocket.OPEN && state.state === 'queued') queue.unshift(socket);
-        }
+        requeue(queue, sockets);
         break;
       }
     }
     if (force && queue.length >= 2) {
       const groupSize = fallbackRoomSizeForQueue(game, queue.length);
       if (groupSize >= 2) {
-        const sockets = queue.splice(0, groupSize);
-        if (!createRoom(sockets, game)) {
-          for (const socket of sockets.reverse()) {
-            const state = clients.get(socket);
-            if (state && socket.readyState === WebSocket.OPEN && state.state === 'queued') queue.unshift(socket);
-          }
+        const group = pickGroup(queueEntries(queue), groupSize, now, true);
+        if (group) {
+          const sockets = removeIndexes(queue, group);
+          if (!createRoom(sockets, game)) requeue(queue, sockets);
         }
       }
     }
   }
   if (queue.length === 0) {
     cancelQueueTimer(key);
-  } else if (queue.length >= 1 && (game === 'mastermind' || game === 'quoridor' || game === 'uno')) {
+  } else if (multi) {
     scheduleQueueFlush(key);
   }
-  queue.forEach((socket, index) => send(socket, { type: 'queued', game, position: index + 1, players_needed: Math.max(0, capacity - queue.length) }));
+  if (announce) notifyQueue(key, queue, multi ? capacity : 2, announce === 'force');
 }
 
 function scheduleQueueFlush(key) {
@@ -286,12 +334,19 @@ function joinQueue(socket, payload) {
   client.username = cleanUsername(payload.username);
   client.mastermindDifficulty = clampLevel(payload.mastermind_difficulty);
   client.blockaceDifficulty = clampLevel(payload.blockace_difficulty);
+  // Ratings are reported by the client (there are no server accounts yet): they only steer pairing, so a dishonest
+  // client can at most pick its own opponents. They are clamped and never trusted for anything else.
+  client.rating = clampRating(payload.rating);
+  client.globalRating = clampRating(payload.global_rating ?? payload.rating);
+  client.league = clampLeague(payload.league);
+  client.joinedAt = Date.now();
+  client.lastQueuedAt = 0;
   const key = mastermindQueueKey(game, client.mastermindDifficulty);
   client.queueKey = key;
   client.state = 'queued';
   const queue = queueFor(key);
   if (!queue.includes(socket)) queue.push(socket);
-  tryFormRooms(key, false);
+  tryFormRooms(key, false, 'force');
   if (game === 'mastermind' || game === 'quoridor' || game === 'uno') scheduleQueueFlush(key);
 }
 
@@ -464,7 +519,8 @@ httpServer.on('upgrade', (request, socket, head) => {
 wss.on('connection', socket => {
   clients.set(socket, {
     socket, state: 'idle', username: 'بازیکن', game: null, queueKey: null,
-    seat: -1, room: null, mastermindDifficulty: 3, blockaceDifficulty: 3, lastEmojiAt: 0
+    seat: -1, room: null, mastermindDifficulty: 3, blockaceDifficulty: 3, lastEmojiAt: 0,
+    rating: 1000, globalRating: 1000, league: 0, joinedAt: 0, lastQueuedAt: 0
   });
   send(socket, { type: 'hello', protocol: 2, service: 'pendar-matchmaker' });
   socket.on('message', raw => handleMessage(socket, raw));
@@ -477,6 +533,14 @@ wss.on('connection', socket => {
     clients.delete(socket);
   });
 });
+
+// Re-evaluate every waiting queue regularly so the accepted rating gap can widen even when nobody new joins.
+const matchTick = setInterval(() => {
+  for (const key of [...queues.keys()]) {
+    if (queueFor(key).length) tryFormRooms(key, false, true);
+  }
+}, MATCH_TICK_MS);
+matchTick.unref?.();
 
 const heartbeat = setInterval(() => {
   for (const socket of wss.clients) {
@@ -495,6 +559,7 @@ httpServer.listen(PORT, '0.0.0.0', () => process.stdout.write(`Pendar Matchmaker
 
 function shutdown() {
   clearInterval(heartbeat);
+  clearInterval(matchTick);
   for (const timer of queueTimers.values()) clearTimeout(timer);
   queueTimers.clear();
   for (const socket of wss.clients) socket.close(1001, 'server shutdown');
