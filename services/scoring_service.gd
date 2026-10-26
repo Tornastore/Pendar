@@ -61,6 +61,11 @@ const FIRST_WIN_OF_DAY_MULTIPLIER := 1.5
 const COMEBACK_LOSS_STREAK := 2         # third straight loss onward costs half
 const COMEBACK_MULTIPLIER := 0.5
 const FORFEIT_WIN_MULTIPLIER := 0.6
+const STREAK_MIN_CPU_LEVEL := 3         # wins vs CPU level 1-2 neither extend nor break a win streak
+const PRACTICE_HINT_MIN_WINS := 3       # wins at one CPU level needed before it says something about your skill
+## Beating the CPU in a game nudges the *first* online matches of that game toward stronger opponents (it never changes MMR).
+const PRACTICE_RATING_HINT := {3: 1040, 4: 1100, 5: 1180, 6: 1250}
+const PRACTICE_HINT_FADE_MATCHES := 8
 const ONBOARDING_MATCHES := 12          # first matches ever earn double positive LP so the first promotion happens in session one
 const ONBOARDING_MULTIPLIER := 2.0
 const REPEAT_OPPONENT_FACTORS: Array[float] = [1.0, 1.0, 1.0, 0.6, 0.4, 0.2]
@@ -183,6 +188,7 @@ func _empty_game_stats() -> Dictionary:
 		"cpu_wins": 0, "cpu_draws": 0, "cpu_losses": 0,
 		"human_wins": 0, "human_draws": 0, "human_losses": 0,
 		"xp": 0, "best_streak": 0,
+		"cpu_wins_by_level": [0, 0, 0, 0, 0, 0],
 		"history": [],
 	}
 
@@ -195,6 +201,8 @@ func _normalize_stats(raw: Variant) -> Dictionary:
 	if typeof(stats.get("history", [])) != TYPE_ARRAY:
 		stats["history"] = []
 	stats["season_points"] = maxi(0, int(stats.get("season_points", 0)))
+	if typeof(stats.get("cpu_wins_by_level", [])) != TYPE_ARRAY or (stats["cpu_wins_by_level"] as Array).size() != 6:
+		stats["cpu_wins_by_level"] = [0, 0, 0, 0, 0, 0]
 	return stats
 
 func ensure_game_stats(game_ids: Array) -> void:
@@ -244,7 +252,20 @@ func match_rating(game_id: String) -> int:
 	var stats: Dictionary = game_stats.get(game_id, {})
 	var n: int = int(stats.get("rated_matches", 0))
 	var w: float = clampf(float(n) / 8.0, 0.35, 1.0)
-	return roundi(w * float(int(stats.get("rating", INITIAL_RATING))) + (1.0 - w) * float(global_rating))
+	var base: int = roundi(w * float(int(stats.get("rating", INITIAL_RATING))) + (1.0 - w) * float(global_rating))
+	var hint: int = practice_hint(game_id)
+	if hint > base and n < PRACTICE_HINT_FADE_MATCHES:
+		base += roundi(float(hint - base) * 0.6 * (1.0 - float(n) / float(PRACTICE_HINT_FADE_MATCHES)))
+	return base
+
+## Skill hint from CPU practice in this game: the strongest CPU level you have beaten at least 3 times (0 = none yet).
+func practice_hint(game_id: String) -> int:
+	var by_level: Array = game_stats.get(game_id, {}).get("cpu_wins_by_level", [])
+	var best := 0
+	for i in range(mini(by_level.size(), 6)):
+		if int(by_level[i]) >= PRACTICE_HINT_MIN_WINS:
+			best = i + 1
+	return int(PRACTICE_RATING_HINT.get(best, 0))
 
 ## Suggested CPU level for the player's current strength in this game (1..6).
 func recommended_cpu_level(game_id: String) -> int:
@@ -321,6 +342,15 @@ func _roll_clock_if_needed() -> void:
 		quest_week_id = week_now
 		quests_weekly = QuestScript.weekly_for(week_now)
 		_season_dirty = true
+
+## Call regularly while the app stays open (web tabs live for days). Returns true when the day, week or season changed.
+func refresh_clock() -> bool:
+	var before: String = "%s|%s|%s" % [current_season_id, str(daily.get("day", "")), quest_week_id]
+	_roll_clock_if_needed()
+	var after: String = "%s|%s|%s" % [current_season_id, str(daily.get("day", "")), quest_week_id]
+	if before != after:
+		save_scores()
+	return before != after
 
 func _rollover_season(new_id: String) -> void:
 	var final_tier: Dictionary = LeagueScript.tier_for_points(global_season_points)
@@ -455,8 +485,8 @@ static func ladder_apply(current: int, delta: int, scale: float, practice_ceilin
 			target = maxi(cur, gate_cap)
 			reason = "gate"
 	elif delta < 0:
-		if practice and cur > practice_ceiling:
-			target = cur
+		if practice and cur >= practice_ceiling:
+			target = cur # practice never costs points once you are at the top of what practice can give
 			reason = "practice_safe"
 		else:
 			var floor_pts: int = LeagueScript.scaled_start(LeagueScript.league_index_for_points(cur, scale), scale)
@@ -555,11 +585,17 @@ func record_result(game_id: String, outcome: String, opponent_kind: String, diff
 	# ----- counters, streaks -----
 	var first_win_of_game: bool = outcome == "win" and int(stats["wins"]) == 0
 	var comeback: bool = outcome == "win" and loss_streak >= 3
+	var counts_for_streak: bool = human or diff >= STREAK_MIN_CPU_LEVEL
 	match outcome:
 		"win":
 			stats["wins"] = int(stats["wins"]) + 1
-			win_streak += 1
+			if counts_for_streak:
+				win_streak += 1
 			loss_streak = 0
+			if kind == "cpu":
+				var by_level: Array = (stats["cpu_wins_by_level"] as Array).duplicate()
+				by_level[diff - 1] = int(by_level[diff - 1]) + 1
+				stats["cpu_wins_by_level"] = by_level
 		"draw":
 			stats["draws"] = int(stats["draws"]) + 1
 			loss_streak = 0

@@ -64,7 +64,7 @@ func render(host, theme: Dictionary) -> void:
 	var pill := Rect2(68, 26, 138, 36)
 	host._panel(pill, Color(1, 1, 1, 0.06), 18, Color(tier_color.r, tier_color.g, tier_color.b, 0.5), 1.0)
 	host.draw_circle(Vector2(pill.end.x - 18, pill.get_center().y), 7, tier_color)
-	var pill_text: String = "%s · %s" % [tier[0], host._fa(host.scoring_service.global_season_points)]
+	var pill_text: String = "%s · %s" % [str(host.scoring_service.global_tier()["title"]), tier[0]]
 	host._txt_c(pill_text, Rect2(pill.position.x + 4, pill.position.y, pill.size.x - 36, pill.size.y), host._fit_size(pill_text, pill.size.x - 40.0, 14, true), theme["TEXT"], true)
 	if games.is_empty():
 		host._txt_c("بازی‌ای پیدا نشد", Rect2(0, 400, float(theme["VIEW_W"]), 40), 18, theme["TEXT_DIM"])
@@ -73,6 +73,21 @@ func render(host, theme: Dictionary) -> void:
 		host._draw_icon("back", Vector2(float(theme["VIEW_W"]) * 0.5, 858), 14, Color(1, 1, 1, alpha * 0.7), 2.0)
 	host._draw_bottom_nav()
 
+
+# Each game has its own league: show it on the card (or "new" for games never played) so players see where to climb.
+func _draw_league_chip(host, game_id: String, art: Rect2, theme: Dictionary) -> void:
+	var stats: Dictionary = host.scoring_service.game_stats.get(game_id, {})
+	var played: int = int(stats.get("wins", 0)) + int(stats.get("draws", 0)) + int(stats.get("losses", 0))
+	var label: String = "جدید"
+	var col: Color = theme["BLUE"]
+	if played > 0:
+		var gt: Dictionary = host.scoring_service.game_tier(game_id)
+		label = str(gt["label"])
+		col = gt["col"]
+	var w: float = host._txt_w(label, 12, true) + 20.0
+	var chip := Rect2(art.position.x + 8, art.end.y - 30, w, 22)
+	host._panel(chip, Color(0, 0, 0, 0.5), 11, Color(col.r, col.g, col.b, 0.85), 1.0)
+	host._txt_c(label, chip, 12, col.lightened(0.3), true)
 
 func render_game_tile(host, game: Dictionary, rect: Rect2, pressed: bool, theme: Dictionary) -> void:
 	var color: Color = game.icon_col
@@ -96,5 +111,6 @@ func render_game_tile(host, game: Dictionary, rect: Rect2, pressed: bool, theme:
 		host._txt_c("آزمایشی", beta_chip, 12, Color(1.0, 0.82, 0.45), true)
 	var text_width: float = rect.size.x - 28.0
 	var name: String = str(game.name)
+	_draw_league_chip(host, str(game.id), art, theme)
 	host._txt_r(name, rect.end.x - 14, art.end.y + 30, host._fit_size(name, text_width, 19, true), theme["TEXT"], true, text_width)
 	host._txt_r(str(game.short), rect.end.x - 14, art.end.y + 52, 13, theme["TEXT_DIM"], false, text_width)

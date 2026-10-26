@@ -128,7 +128,12 @@ func _init() -> void:
 	ok(sp.global_tier()["name"] == "طلا", "CPU-only player tops out in Gold")
 	var before_loss: int = sp.global_season_points
 	sp.record_result("chess", "loss", "cpu", 6, GAMES, -1, -1, 900.0)
-	ok(sp.global_season_points < before_loss and sp.global_season_points >= before_loss - 20, "CPU loss still costs points at the ceiling")
+	ok(sp.global_season_points == before_loss, "at the practice ceiling a CPU loss costs nothing (no all-downside practice)")
+	sp.global_season_points = LeagueScript.PRACTICE_CEILING_GLOBAL - 12
+	sp.game_stats["chess"]["season_points"] = 100
+	var below: int = sp.global_season_points
+	sp.record_result("chess", "loss", "cpu", 6, GAMES, -1, -1, 900.0)
+	ok(sp.global_season_points < below, "just below the ceiling a CPU loss still costs points")
 
 	# ---- skill gate: LP stops one point under Platinum until MMR >= 1000 ----
 	var sg = fresh()
@@ -292,6 +297,70 @@ func _init() -> void:
 	ok(bool(rold["recorded"]) and sold.season_counts["matches"] == 1, "old save with empty counters records a result")
 	ok(sold.global_season_points >= 120 and sold.game_stats["chess"]["wins"] == 4, "old save keeps its points and wins")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(legacy_path))
+
+	# ---- win streak only counts meaningful wins ----
+	var sk = fresh()
+	for i in range(4):
+		sk.record_result("chess", "win", "cpu", 1, GAMES, -1, -1, 300.0)
+	ok(sk.win_streak == 0, "wins against CPU level 1 do not build a streak")
+	for i in range(3):
+		sk.record_result("chess", "win", "cpu", 3, GAMES, -1, -1, 300.0)
+	ok(sk.win_streak == 3, "wins against CPU level 3+ build a streak")
+	sk.record_result("chess", "win", "cpu", 1, GAMES, -1, -1, 300.0)
+	ok(sk.win_streak == 3, "an easy-CPU win neither extends nor breaks the streak")
+	sk.record_result("chess", "loss", "cpu", 1, GAMES, -1, -1, 300.0)
+	ok(sk.win_streak == 0, "any loss breaks the streak")
+
+	# ---- practice vs CPU gives first online matches a fairer starting rating ----
+	var sh2 = fresh()
+	var base_mr: int = sh2.match_rating("chess")
+	for i in range(3):
+		sh2.record_result("chess", "win", "cpu", 6, GAMES, -1, -1, 300.0)
+	ok(sh2.practice_hint("chess") == 1250, "three wins vs CPU level 6 produce a skill hint")
+	ok(sh2.match_rating("chess") > base_mr, "the hint raises the matchmaking rating (%d -> %d)" % [base_mr, sh2.match_rating("chess")])
+	ok(sh2.game_rating("chess") == 1000 and sh2.global_rating == 1000, "the hint never changes real MMR")
+	ok(sh2.match_rating("othello") == base_mr, "the hint is per game")
+	sh2.game_stats["chess"]["rated_matches"] = 8
+	ok(sh2.match_rating("chess") == 1000, "after calibration only the real rating is used")
+	var easy = fresh()
+	for i in range(5):
+		easy.record_result("chess", "win", "cpu", 2, GAMES, -1, -1, 300.0)
+	ok(easy.practice_hint("chess") == 0, "easy CPU wins say nothing about skill")
+
+	# ---- long-running app: day / week / season rollover while open ----
+	var sc2 = fresh([1405, 8, 29])
+	ok(not sc2.refresh_clock(), "nothing changes within the same day")
+	sc2.record_result("chess", "win", "cpu", 3, GAMES, -1, -1, 300.0)
+	var day1_first: bool = sc2.daily["first_win"]
+	sc2.clock_override = at([1405, 8, 30])
+	ok(sc2.refresh_clock() and not sc2.daily["first_win"] and day1_first, "a new day resets daily state and quests")
+	sc2.clock_override = at([1405, 9, 1])
+	ok(sc2.refresh_clock() and sc2.current_season_id == "1405-09", "a new season is detected while the app stays open")
+
+	# ---- rivals list stays bounded ----
+	var sr = fresh()
+	for i in range(ScoringScript.MAX_RIVALS + 12):
+		sr.clock_override = at([1405, 8, 3]) + i * 10.0
+		sr.record_result("chess", "win", "human_online", 3, GAMES, 1000, 1000, 600.0, {"opponent_name": "rival%d" % i})
+	ok(sr.rivals.size() == ScoringScript.MAX_RIVALS, "rival records are capped at %d" % ScoringScript.MAX_RIVALS)
+	ok(sr.rivals.has("rival%d" % (ScoringScript.MAX_RIVALS + 11)) and not sr.rivals.has("rival0"), "oldest rivals are dropped first")
+
+	# ---- every quest type can progress and complete ----
+	var qs: Array = []
+	for def in QuestScript.DAILY_POOL + QuestScript.WEEKLY_POOL:
+		qs.append(QuestScript._make_instance(def))
+	var done: Array = []
+	for i in range(30):
+		qs = QuestScript.apply_event(qs, {"outcome": "win", "kind": "human_online" if i % 2 == 0 else "cpu", "difficulty": 5, "game_id": GAMES[i % GAMES.size()], "win_streak": i + 1}, done)
+	var all_done := true
+	for q in qs:
+		if not q["done"]:
+			all_done = false
+			print("   quest not completed: ", q["id"], " ", q["progress"], "/", q["target"])
+	ok(all_done and done.size() == qs.size(), "all %d quest types are completable" % qs.size())
+	var once: Array = []
+	QuestScript.apply_event(qs, {"outcome": "win", "kind": "cpu", "difficulty": 3, "game_id": "chess", "win_streak": 1}, once)
+	ok(once.is_empty(), "a finished quest does not complete twice")
 
 	print("SCORING_LEAGUE_TESTS: checks=%d, failures=%d" % [checks, failures])
 	quit(1 if failures > 0 else 0)

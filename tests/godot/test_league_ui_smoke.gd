@@ -44,6 +44,34 @@ func _init() -> void:
 		_check(bool(r.get("recorded", false)), "recorded %s %s" % [item[0], item[1]])
 	main.ws_match_active = false
 
+	# Opponent kind detection: offline / same-device games must never score (Godot always has an offline peer object).
+	main.vs_cpu = false
+	main.ws_match_active = false
+	main.selected_game = "chess"
+	_check(main._opponent_kind() == "local_friendly", "offline game is unranked")
+	main.selected_game = "mastermind"
+	main.mm_local_two_player = true
+	_check(main._opponent_kind() == "local_friendly", "same-device Mastermind is unranked")
+	main.mm_local_two_player = false
+	main.selected_game = "quoridor"
+	main._game_modules["quoridor"].quo_local_multiplayer = true
+	_check(main._opponent_kind() == "local_friendly", "same-device Quoridor is unranked")
+	main._game_modules["quoridor"].quo_local_multiplayer = false
+	var lan_peer := ENetMultiplayerPeer.new()
+	if lan_peer.create_server(47123, 1) == OK:
+		main.multiplayer.multiplayer_peer = lan_peer
+		main.selected_game = "chess"
+		_check(main._opponent_kind() == "human_lan", "a real LAN/IP peer is a friendly network game")
+		var lan_res: Dictionary = main._record_match_result("win", -1, -1, {"opponent_name": "دوست"})
+		_check(bool(lan_res.get("recorded", false)) and int(lan_res.get("rating_delta", 0)) == 0, "LAN result scores LP but never MMR")
+		main.multiplayer.multiplayer_peer = null
+	main.ws_match_active = true
+	_check(main._opponent_kind() == "human_online", "matchmaker games are ranked")
+	main.ws_match_active = false
+	main.vs_cpu = true
+	_check(main._opponent_kind() == "cpu", "CPU games are CPU kind")
+	main.vs_cpu = false
+
 	# Mode screen for each game (reward preview, star, recommended level)
 	for gid in ids:
 		main._select_game(gid)

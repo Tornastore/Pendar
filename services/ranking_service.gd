@@ -62,6 +62,8 @@ static func progress_hint(tier: Dictionary, points_per_win: int) -> String:
 		return "در بالاترین لیگ هستی؛ امتیازت را بالاتر ببر"
 	var need: int = int(tier.get("to_next", 0))
 	var wins: int = int(ceil(float(need) / float(maxi(1, points_per_win))))
+	if wins <= 1:
+		return "فقط یک برد تا %s!" % str(tier.get("next_label", ""))
 	return "%s امتیاز تا %s · حدود %s برد" % [_fa(need), str(tier.get("next_label", "")), _fa(wins)]
 
 ## Signed number that keeps its sign on the left of the digits inside right-to-left text (e.g. "+۵۷", "−۱۲").

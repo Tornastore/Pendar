@@ -257,6 +257,22 @@ jobs:
             exit 1
           fi
 
+      - name: Run online league flow tests
+        shell: bash
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          LOG_FILE="/tmp/pendar-online-league.log"
+          godot --headless --path . --script res://tests/godot/test_online_league_flow.gd 2>&1 | tee "$LOG_FILE"
+          if grep -E 'SCRIPT ERROR|Parse Error|Parser Error|ONLINE_LEAGUE_TESTS: .*failures=[1-9][0-9]*|^FAIL' "$LOG_FILE"; then
+            echo "ERROR: Online league flow tests reported failures or script errors." >&2
+            exit 1
+          fi
+          if ! grep -E 'ONLINE_LEAGUE_TESTS: checks=[0-9]+, failures=0' "$LOG_FILE"; then
+            echo "ERROR: Online league flow test summary is missing or non-zero." >&2
+            exit 1
+          fi
+
       - name: Set up Node.js for matchmaking tests
         uses: actions/setup-node@v4
         with:
