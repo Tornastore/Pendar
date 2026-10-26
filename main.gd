@@ -67,6 +67,7 @@ var _opp_match_rating: int = -1
 var _opp_global_rating: int = -1
 var _opp_league: int = -1
 var _queue_hint_shown: bool = false
+var _clock_check_t: float = 0.0
 var rank_game_filter: String = "all"
 var online_room_code: String = ""
 var online_searching: bool = false
@@ -865,7 +866,15 @@ func _opponent_kind() -> String:
 		return "cpu"
 	if ws_match_active:
 		return "human_online" # matchmaker queue: the only ranked human mode (changes MMR)
-	if multiplayer.multiplayer_peer != null:
+	# Same-device modes never score (one person could play both sides).
+	if selected_game == "mastermind" and bool(_game_modules["mastermind"].mm_local_two_player):
+		return "local_friendly"
+	if selected_game == "quoridor" and bool(_game_modules["quoridor"].quo_local_multiplayer):
+		return "local_friendly"
+	# Godot 4 always has a peer object: an OfflineMultiplayerPeer when no network game is running, so a plain
+	# "!= null" check would wrongly treat every offline game as a network game.
+	var peer: MultiplayerPeer = multiplayer.multiplayer_peer
+	if peer != null and not (peer is OfflineMultiplayerPeer):
 		return "human_lan" # direct Wi-Fi/IP game: friendly, reduced league points, no MMR
 	return "local_friendly"
 
@@ -2213,6 +2222,9 @@ func _select_game(id: String) -> void:
 func _back_to_menu() -> void:
 	_settle_unfinished_online_match("loss", {"abandoned": true})
 	scoring_service.clear_pending_match()
+	_opp_match_rating = -1
+	_opp_global_rating = -1
+	_opp_league = -1
 	_cleanup_network()
 	_result_popup_open = false
 	dialog = {}
@@ -4421,7 +4433,8 @@ func _ws_begin_match(message: Dictionary) -> void:
 	_rpc_start_game(game_id, seed_value, mm_level, blk_level, connected_players)
 	var opp_note: String = ""
 	if _opp_league >= 0 and connected_players == 2:
-		opp_note = " · لیگ " + str(LeagueScript.LEAGUES[clampi(_opp_league, 0, LeagueScript.LEAGUES.size() - 1)]["name"])
+		var opp_league: Dictionary = LeagueScript.LEAGUES[clampi(_opp_league, 0, LeagueScript.LEAGUES.size() - 1)]
+		opp_note = " · %s (%s)" % [str(opp_league["title"]), str(opp_league["name"])]
 	_show_toast("حریف پیدا شد: " + opponent_name + opp_note)
 	_rebuild_buttons()
 
@@ -4600,7 +4613,10 @@ func _settle_startup_state() -> void:
 	var settled: Dictionary = scoring_service.settle_pending_match(_game_ids())
 	if bool(settled.get("recorded", false)):
 		_show_toast("بازی آنلاین نیمه‌تمام قبلی به‌عنوان باخت ثبت شد (%s امتیاز)." % _fa(int(settled.get("delta", 0))).replace("-", "−"))
-	if scoring_service.report_unseen and not scoring_service.last_report.is_empty():
+	_maybe_show_season_report()
+
+func _maybe_show_season_report() -> void:
+	if scoring_service.report_unseen and not scoring_service.last_report.is_empty() and not _ov_active():
 		var r: Dictionary = scoring_service.last_report
 		var body: String = "%s تمام شد.\nبالاترین لیگ: %s · امتیاز پایانی %s\nبرد %s · مساوی %s · باخت %s\nفصل جدید را با %s امتیاز شروع می‌کنی؛ پیشرفت دائمی‌ات حفظ شده است." % [str(r.get("label", "")), str(r.get("peak_label", "")), _fa(int(r.get("points", 0))), _fa(int(r.get("wins", 0))), _fa(int(r.get("draws", 0))), _fa(int(r.get("losses", 0))), _fa(int(r.get("carry", 0)))]
 		scoring_service.acknowledge_season_report() # shown once; the archive stays in the rankings page
@@ -4632,6 +4648,14 @@ func _process(delta: float) -> void:
 		_last_sig = sig
 		_rebuild_buttons()
 	_cpu_tick()
+	# A web tab can stay open for days: roll the day/week/season clock and refresh quests without a restart.
+	_clock_check_t += delta
+	if _clock_check_t >= 20.0:
+		_clock_check_t = 0.0
+		if scoring_service.refresh_clock():
+			_rebuild_buttons()
+		if scoring_service.report_unseen and (state == State.MENU or state == State.RANKINGS or state == State.DASHBOARD):
+			_maybe_show_season_report()
 	queue_redraw()
 
 func _load_scores() -> void:

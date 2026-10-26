@@ -89,3 +89,22 @@ def test_quests_badges_and_season_calendar_exist():
     assert "DAILY_POOL" in quest and "WEEKLY_POOL" in quest and "BADGES" in quest
     assert "func jalali_from_unix" in league
     assert "TEHRAN_UTC_OFFSET_SECONDS := 12600" in league
+
+
+def test_offline_games_are_never_scored_as_network_games():
+    main = read("main.gd")
+    # Godot 4 always has an OfflineMultiplayerPeer, so "peer != null" alone would score every offline game.
+    assert "peer is OfflineMultiplayerPeer" in main
+    assert 'return "local_friendly"' in main
+    assert "mm_local_two_player" in main and "quo_local_multiplayer" in main
+
+
+def test_practice_never_costs_points_at_the_ceiling_and_hints_matchmaking():
+    scoring = read("services", "scoring_service.gd")
+    assert "practice and cur >= practice_ceiling" in scoring
+    assert "func practice_hint(" in scoring
+    assert "PRACTICE_RATING_HINT" in scoring
+    assert "STREAK_MIN_CPU_LEVEL := 3" in scoring
+    assert "func refresh_clock()" in scoring
+    main = read("main.gd")
+    assert "scoring_service.refresh_clock()" in main
