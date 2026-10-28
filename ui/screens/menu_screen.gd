@@ -56,9 +56,12 @@ func render(host, theme: Dictionary) -> void:
 			continue
 		render_game_tile(host, games[index], rect, host._press_active and host._press_id == "game_" + str(games[index].id), theme)
 	host._draw_bar_top(170.0)
-	# Official PENDAR logo lockup; the main controller continues to own the loaded texture.
+	# Keep the official logo inside the top utility strip. The old 166px square
+	# overlapped the category filters and made their hit areas visually unclear.
 	if host._brand_logo != null:
-		host.draw_texture_rect(host._brand_logo, Rect2(float(theme["VIEW_W"]) - 184.0, 2.0, 166.0, 166.0), false)
+		var logo_size: float = minf(60.0, maxf(48.0, float(theme["VIEW_W"]) * 0.11))
+		var logo_rect := Rect2(float(theme["VIEW_W"]) - logo_size - 12.0, 8.0, logo_size, logo_size)
+		host.draw_texture_rect(host._brand_logo, logo_rect, false)
 	var tier: Array = host._tier_info()
 	var tier_color: Color = tier[1]
 	var pill := Rect2(68, 26, 138, 36)

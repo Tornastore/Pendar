@@ -2,7 +2,7 @@
 
 const ALLOWED_GAMES = new Set([
   'othello', 'othello12', 'pentago', 'chess', 'domino', 'pasoor',
-  'quoridor', 'hokm', 'backgammon', 'gobblet', 'mastermind', 'abalone', 'blockace', 'quarto', 'uno'
+  'quoridor', 'hokm', 'backgammon', 'gobblet', 'mastermind', 'abalone', 'blockace', 'quarto', 'uno', 'connect4', 'jenga', 'mafia'
 ]);
 
 const ALLOWED_ACTIONS = new Set([
@@ -11,7 +11,8 @@ const ALLOWED_ACTIONS = new Set([
   '_rpc_quo_action', '_rpc_pas_play', '_rpc_gob_place', '_rpc_gob_move',
   '_rpc_aba_move', '_rpc_blk_place', '_rpc_quarto_choose_piece', '_rpc_quarto_place', '_rpc_bg_step', '_rpc_bg_move', '_rpc_bg_end_turn', '_rpc_hokm_play',
   '_rpc_resign', '_rpc_uno_play', '_rpc_uno_draw', '_rpc_uno_pass',
-  '_rpc_uno_catch', '_rpc_uno_challenge', '_rpc_uno_next_round'
+  '_rpc_uno_catch', '_rpc_uno_challenge', '_rpc_uno_next_round',
+  '_rpc_connect4_drop', '_rpc_jenga_action', '_rpc_mafia_action'
 ]);
 
 const ALLOWED_EMOJIS = new Set(['👍', '😂', '❤️', '🔥', '👏', '😮', '😢', '🤔']);
@@ -35,15 +36,18 @@ function clampLevel(value) {
 
 function playerCapacityForGame(game) {
   if (game === 'mastermind' || game === 'quoridor') return 4;
+  if (game === 'jenga') return 4;
   if (game === 'uno') return 10;
+  if (game === 'mafia') return 12;
   return 2;
 }
 
-// After the queue grace period, Mastermind and UNO can start with a partial room;
-// standard Quoridor supports exactly 2 or 4 (never an invalid 3-player room).
+// After the queue grace period, multiplayer rooms can start partially filled.
+// Mafia needs at least six seats for the classic role setup; Quoridor allows 2 or 4.
 function fallbackRoomSizeForQueue(game, waitingCount) {
   if (!Number.isInteger(waitingCount) || waitingCount < 2) return 0;
   const size = Math.min(waitingCount, playerCapacityForGame(game));
+  if (game === 'mafia') return size >= 6 ? size : 0;
   if (game === 'quoridor' && size === 3) return 2;
   return size >= 2 ? size : 0;
 }
@@ -90,6 +94,12 @@ function isActionFromSeat(action, args, seat, playerCount = 2) {
       return args.length === 2 && Number(args[0]) === seat && typeof args[1] === 'boolean';
     case '_rpc_uno_next_round':
       return args.length === 2 && seat === 0 && Number(args[0]) === 0 && Number.isInteger(Number(args[1])) && Number(args[1]) > 0 && Number(args[1]) < 2_147_483_647;
+    case '_rpc_connect4_drop':
+      return playerCount === 2 && args.length === 2 && Number(args[0]) === seat && Number.isInteger(Number(args[1])) && Number(args[1]) >= 0 && Number(args[1]) <= 6;
+    case '_rpc_jenga_action':
+      return playerCount >= 2 && playerCount <= 4 && args.length === 5 && Number(args[0]) === seat && ['remove', 'place'].includes(args[1]) && Number.isInteger(Number(args[2])) && Number(args[2]) >= 0 && Number(args[2]) <= 48 && Number.isInteger(Number(args[3])) && Number(args[3]) >= 0 && Number(args[3]) <= 2 && Number.isFinite(Number(args[4])) && Number(args[4]) >= 0 && Number(args[4]) <= 1 && (args[1] !== 'place' || Number(args[4]) === 0);
+    case '_rpc_mafia_action':
+      return playerCount >= 6 && playerCount <= 12 && args.length === 3 && Number(args[0]) === seat && ['vote', 'kill', 'protect', 'inspect'].includes(args[1]) && Number.isInteger(Number(args[2])) && Number(args[2]) >= 0 && Number(args[2]) < playerCount && (args[1] === 'protect' || Number(args[2]) !== seat);
     case '_rpc_resign':
       return args.length > 0 && Number(args[0]) === seat;
     default:

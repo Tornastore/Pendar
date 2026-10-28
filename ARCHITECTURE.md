@@ -226,3 +226,10 @@ The online matchmaking and LAN lobby views are delegated to `ui/screens/online_s
 ## Runtime regression coverage for remaining rule engines
 
 `tests/godot/test_remaining_game_rules.gd` runs under Godot 4.3 in both Web build and deploy workflows. It covers Othello opening/capture and score transitions; Quoridor legal pawn moves, wall geometry, and path preservation; Gobblet size/stack rules and four-in-a-row completion; Hokm follow-suit and trick scoring; Pasoor sum-to-eleven capture selection; Abalone board geometry and legal group movement; and Blockace inventory, required first placement, and piece consumption. The suite uses a small mock host and does not exercise rendering, network sessions, or full browser interaction; those remain separate integration checks.
+
+
+## Added modules: Connect Four, Jenga, Mafia
+
+The catalog now contains 18 IDs and the controller preloads three additional independent rule modules. `games/connect4/rules.gd` owns the 7x6 board, win detection, and six-level alpha-beta CPU; its presenter only draws the board and maps column controls. `games/jenga/rules.gd` owns legal extraction/placement, deterministic roll payloads and collapse outcomes; the presenter must not mutate the tower. `games/mafia/rules.gd` owns role allocation, day/night action validation, vote and night resolution, CPU targeting, and victory conditions; presentation hides alive players' roles.
+
+The WebSocket matchmaker's protocol allowlist contains the three games. Connect Four capacity is two, Jenga is four, and Mafia is twelve with a minimum fallback room size of six. Mafia actions are validated against each client's mirrored state and relayed by the current server; that design is convenient for friend games but is not an authoritative hidden-role system, so it must not be advertised as cheat-resistant competitive Mafia.

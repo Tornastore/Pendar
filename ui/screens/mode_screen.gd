@@ -18,88 +18,114 @@ func build_buttons(host, theme: Dictionary) -> void:
 			var active: bool = host.mm_difficulty == i + 1
 			var color: Color = theme["GREEN"] if active else theme["ACCENT"]
 			host._add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], host._set_mastermind_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "mastermind_difficulty_%d" % (i + 1))
-		option_y = 398.0
+		option_y = 410.0
 	elif host.selected_game == "quoridor":
 		var qmod = host._game_modules["quoridor"]
 		for i in range(6):
 			var active: bool = int(qmod.quo_difficulty) == i + 1
 			var color: Color = theme["GREEN"] if active else theme["ACCENT"]
 			host._add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], host._set_quoridor_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "quo_difficulty_%d" % (i + 1))
-		option_y = 398.0
+		option_y = 410.0
 	elif host.selected_game in ["othello", "othello12"]:
 		for i in range(6):
 			var active: bool = host.oth_difficulty == i + 1
 			var color: Color = theme["GREEN"] if active else theme["ACCENT"]
 			host._add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], host._set_othello_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "oth_difficulty_%d" % (i + 1))
-		option_y = 398.0
+		option_y = 410.0
 	elif host.selected_game == "chess":
 		for i in range(6):
 			var active: bool = host.chess_difficulty == i + 1
 			var color: Color = theme["GREEN"] if active else theme["ACCENT"]
 			host._add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], host._set_chess_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "chess_difficulty_%d" % (i + 1))
-		option_y = 398.0
+		option_y = 410.0
 	elif host.selected_game == "backgammon":
 		for i in range(6):
 			var active: bool = host.bg_difficulty == i + 1
 			var color: Color = theme["GREEN"] if active else theme["ACCENT"]
 			host._add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], host._set_backgammon_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "backgammon_difficulty_%d" % (i + 1))
-		option_y = 398.0
+		option_y = 410.0
 	elif host.selected_game == "pentago":
 		var pmod = host._game_modules["pentago"]
 		for i in range(6):
 			var active: bool = int(pmod.pent_difficulty) == i + 1
 			var color: Color = theme["GREEN"] if active else theme["ACCENT"]
 			host._add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], host._set_pentago_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "pentago_difficulty_%d" % (i + 1))
-		option_y = 398.0
+		option_y = 410.0
 	elif host.selected_game == "domino":
 		var dmod = host._game_modules["domino"]
 		for i in range(6):
 			var active: bool = int(dmod.dom_difficulty) == i + 1
 			var color: Color = theme["GREEN"] if active else theme["ACCENT"]
 			host._add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], host._set_domino_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "domino_difficulty_%d" % (i + 1))
-		option_y = 398.0
+		option_y = 410.0
 	elif host.selected_game == "pasoor":
 		var pasmod = host._game_modules["pasoor"]
 		for i in range(6):
 			var active: bool = int(pasmod.pas_difficulty) == i + 1
 			var color: Color = theme["GREEN"] if active else theme["ACCENT"]
 			host._add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], host._set_pasoor_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "pasoor_difficulty_%d" % (i + 1))
-		option_y = 398.0
+		option_y = 410.0
 	elif host.selected_game == "hokm":
 		var hmod = host._game_modules["hokm"]
 		for i in range(6):
 			var active: bool = int(hmod.hokm_difficulty) == i + 1
 			var color: Color = theme["GREEN"] if active else theme["ACCENT"]
 			host._add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], host._set_hokm_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "hokm_difficulty_%d" % (i + 1))
-		option_y = 398.0
+		option_y = 410.0
 	elif host.selected_game == "gobblet":
 		var gobmod = host._game_modules["gobblet"]
 		for i in range(6):
 			var active: bool = int(gobmod.gob_difficulty) == i + 1
 			var color: Color = theme["GREEN"] if active else theme["ACCENT"]
 			host._add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], host._set_gobblet_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "gobblet_difficulty_%d" % (i + 1))
-		option_y = 398.0
+		option_y = 410.0
 	elif host.selected_game == "abalone":
 		var abamod = host._game_modules["abalone"]
 		for i in range(6):
 			var active: bool = int(abamod.aba_difficulty) == i + 1
 			var color: Color = theme["GREEN"] if active else theme["ACCENT"]
 			host._add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], host._set_abalone_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "abalone_difficulty_%d" % (i + 1))
-		option_y = 398.0
+		option_y = 410.0
 	elif host.selected_game == "blockace":
 		var blkmod = host._game_modules["blockace"]
 		for i in range(6):
 			var active: bool = int(blkmod.blk_difficulty) == i + 1
 			var color: Color = theme["GREEN"] if active else theme["ACCENT"]
 			host._add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], host._set_blockace_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "blockace_difficulty_%d" % (i + 1))
-		option_y = 398.0
+		option_y = 410.0
 	elif host.selected_game == "quarto":
 		var qtomod = host._game_modules["quarto"]
 		for i in range(6):
 			var active: bool = int(qtomod.qto_difficulty) == i + 1
 			var color: Color = theme["GREEN"] if active else theme["ACCENT"]
 			host._add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], host._set_quarto_difficulty.bind(i + 1), true, color, "seg_on" if active else "ghost", "", "quarto_difficulty_%d" % (i + 1))
-		option_y = 398.0
+		option_y = 410.0
+	elif host.selected_game == "connect4":
+		var c4mod = host._game_modules["connect4"]
+		for i in range(6):
+			var active: bool = int(c4mod.c4_difficulty) == i + 1
+			host._add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], host._set_connect4_difficulty.bind(i + 1), true, theme["GREEN"] if active else theme["ACCENT"], "seg_on" if active else "ghost", "", "c4_difficulty_%d" % (i + 1))
+		option_y = 410.0
+	elif host.selected_game == "jenga":
+		var jmod = host._game_modules["jenga"]
+		for i in range(6):
+			var active: bool = int(jmod.jenga_difficulty) == i + 1
+			host._add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], host._set_jenga_difficulty.bind(i + 1), true, theme["GREEN"] if active else theme["ACCENT"], "seg_on" if active else "ghost", "", "jenga_difficulty_%d" % (i + 1))
+		for i in range(3):
+			var count: int = i + 2
+			var active_count: bool = int(jmod.jenga_player_count) == count
+			host._add_btn(Rect2(54 + i * 146, 394, 138, 32), "%s نفر" % host._fa(count), host._set_jenga_player_count.bind(count), true, theme["GREEN"] if active_count else theme["ACCENT"], "seg_on" if active_count else "ghost", "", "jenga_players_%d" % count)
+		option_y = 436.0
+	elif host.selected_game == "mafia":
+		var mfmod = host._game_modules["mafia"]
+		for i in range(6):
+			var active: bool = int(mfmod.mafia_difficulty) == i + 1
+			host._add_btn(Rect2(8 + i * 84, 345, 80, 40), difficulty_labels[i], host._set_mafia_difficulty.bind(i + 1), true, theme["GREEN"] if active else theme["ACCENT"], "seg_on" if active else "ghost", "", "mafia_difficulty_%d" % (i + 1))
+		for i in range(4):
+			var count: int = [6, 8, 10, 12][i]
+			var active_count: bool = int(mfmod.mafia_player_count) == count
+			host._add_btn(Rect2(18 + i * 128, 394, 122, 32), "%s نفر" % host._fa(count), host._set_mafia_player_count.bind(count), true, theme["GREEN"] if active_count else theme["ACCENT"], "seg_on" if active_count else "ghost", "", "mafia_players_%d" % count)
+		option_y = 436.0
 	elif host.selected_game == "uno":
 		var um = host._game_modules["uno"]
 		for i in range(6):
@@ -120,6 +146,24 @@ func build_buttons(host, theme: Dictionary) -> void:
 		host._add_btn(Rect2(24, option_y + 58, 492, 54), "میزبانی روی وای‌فای", host._start_host, net, theme["BLUE"], "option", "wifi", "m_host", "میزبانی UNO برای ۲ تا ۱۰ بازیکن")
 		host._add_btn(Rect2(24, option_y + 116, 492, 54), "اتصال با IP", host._go_ip_entry, net, theme["ACCENT"], "option", "keypad", "m_join", "به لابی UNO بپیوندید")
 		host._add_btn(Rect2(24, option_y + 174, 492, 54), "بازی آنلاین · صف انتظار", host._open_online_for_game, online_net, theme["PINK"], "option", "globe", "m_online", "جفت‌شدن با بازیکنان آنلاین UNO")
+		return
+	if host.selected_game == "jenga":
+		host._add_btn(Rect2(24, option_y, 492, 54), "بازی با CPU · %s نفر" % host._fa(host._game_modules["jenga"].jenga_player_count), host._start_vs_cpu, true, theme["GREEN"], "option", "cpu", "m_cpu", "بازی شما در برابر حریف‌های رایانه‌ای")
+		host._add_btn(Rect2(24, option_y + 58, 492, 54), "میزبانی روی وای‌فای", host._start_host, net, theme["BLUE"], "option", "wifi", "m_host", "میزبانی برای ۲ تا ۴ بازیکن")
+		host._add_btn(Rect2(24, option_y + 116, 492, 54), "اتصال با IP", host._go_ip_entry, net, theme["ACCENT"], "option", "keypad", "m_join", "پیوستن به میزبان در شبکه محلی")
+		host._add_btn(Rect2(24, option_y + 174, 492, 54), "بازی آنلاین · صف انتظار", host._open_online_for_game, online_net, theme["PINK"], "option", "globe", "m_online", "تطبیق آنلاین Jenga")
+		return
+	if host.selected_game == "mafia":
+		host._add_btn(Rect2(24, option_y, 492, 54), "مافیا با CPU · %s نفر" % host._fa(host._game_modules["mafia"].mafia_player_count), host._start_vs_cpu, true, theme["GREEN"], "option", "cpu", "m_cpu", "یک انسان و بازیکنان CPU؛ سناریوی کلاسیک")
+		host._add_btn(Rect2(24, option_y + 58, 492, 54), "میزبانی روی وای‌فای", host._start_host, net, theme["BLUE"], "option", "wifi", "m_host", "میزبانی مافیا برای ۶ تا ۱۲ بازیکن")
+		host._add_btn(Rect2(24, option_y + 116, 492, 54), "اتصال با IP", host._go_ip_entry, net, theme["ACCENT"], "option", "keypad", "m_join", "پیوستن به میزبان در شبکه محلی")
+		host._add_btn(Rect2(24, option_y + 174, 492, 54), "بازی آنلاین · صف انتظار", host._open_online_for_game, online_net, theme["PINK"], "option", "globe", "m_online", "تطبیق آنلاین مافیا؛ حداقل ۶ بازیکن")
+		return
+	if host.selected_game == "connect4":
+		host._add_btn(Rect2(24, option_y, 492, 62), "بازی با CPU", host._start_vs_cpu, true, theme["GREEN"], "option", "cpu", "m_cpu", "هوش مصنوعی با ۶ درجه سختی")
+		host._add_btn(Rect2(24, option_y + 66, 492, 62), "میزبانی روی وای‌فای", host._start_host, net, theme["BLUE"], "option", "wifi", "m_host", "بازی دونفره در شبکه محلی")
+		host._add_btn(Rect2(24, option_y + 132, 492, 62), "اتصال با IP", host._go_ip_entry, net, theme["ACCENT"], "option", "keypad", "مقابل میزبان بازی کنید")
+		host._add_btn(Rect2(24, option_y + 198, 492, 62), "بازی آنلاین · صف انتظار", host._open_online_for_game, online_net, theme["PINK"], "option", "globe", "صف انتظار آنلاین")
 		return
 	if host.selected_game == "quoridor":
 		host._add_btn(Rect2(24, option_y, 492, 62), "بازی با CPU · دو نفره", host._start_vs_cpu, true, theme["GREEN"], "option", "cpu", "m_cpu", "شما در برابر یک CPU")
@@ -221,11 +265,12 @@ func render(host, theme: Dictionary) -> void:
 	if host.selected_game == "quoridor":
 		host._txt_r("سطح هوش کامپیوتر را انتخاب کنید" + prompt_suffix, host.VIEW_W - 28, 333, 13, theme["TEXT_DIM"], true, 380)
 		host._txt_r("روش بازی", host.VIEW_W - 28, 389, 13, theme["TEXT_DIM"], true, 180)
-	elif host.selected_game in ["othello", "othello12", "pentago", "domino", "gobblet", "abalone", "mastermind", "blockace", "quarto", "backgammon", "uno", "chess"]:
+	elif host.selected_game in ["othello", "othello12", "pentago", "domino", "gobblet", "abalone", "mastermind", "blockace", "quarto", "backgammon", "uno", "chess", "connect4", "jenga", "mafia"]:
 		var difficulty_prompt: String = "درجه سختی، طول کد و تعداد رنگ‌ها" if host.selected_game == "mastermind" else "سطح هوش کامپیوتر را انتخاب کنید"
 		host._txt_r(difficulty_prompt + prompt_suffix, host.VIEW_W - 28, 333, 13, theme["TEXT_DIM"], true, 380)
-		var mode_prompt: String = "کد: %s خانه · %s رنگ" % [host._fa(3 + host.mm_difficulty), host._fa(3 + host.mm_difficulty)] if host.selected_game == "mastermind" else ("بازیکنان: %s · هدف: ۵۰۰ امتیاز" % host._fa(host._game_modules["uno"].uno_player_count) if host.selected_game == "uno" else "روش بازی")
-		host._txt_r(mode_prompt, host.VIEW_W - 28, 389, 13, theme["TEXT_DIM"], true, 180)
+		var mode_prompt: String = "کد: %s خانه · %s رنگ" % [host._fa(3 + host.mm_difficulty), host._fa(3 + host.mm_difficulty)] if host.selected_game == "mastermind" else ("بازیکنان: %s · هدف: ۵۰۰ امتیاز" % host._fa(host._game_modules["uno"].uno_player_count) if host.selected_game == "uno" else ("بازیکنان: %s" % host._fa(host._game_modules["jenga"].jenga_player_count) if host.selected_game == "jenga" else ("بازیکنان: %s · سناریوی کلاسیک" % host._fa(host._game_modules["mafia"].mafia_player_count) if host.selected_game == "mafia" else "روش بازی")))
+		if host.selected_game not in ["uno", "jenga", "mafia"]:
+			host._txt_r(mode_prompt, host.VIEW_W - 28, 389, 13, theme["TEXT_DIM"], true, 180)
 	else:
 		host._txt_r("روش بازی را انتخاب کنید", host.VIEW_W - 28, 336, 15, theme["TEXT_DIM"], true, 300)
 	host._txt_c(nm, Rect2(70, 10, host.VIEW_W - 140, 40), 22, theme["TEXT"], true)

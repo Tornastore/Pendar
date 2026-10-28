@@ -55,14 +55,34 @@ func render(host, theme: Dictionary) -> void:
 	var rows: Array = info.get("rows", [])
 	var y: float = 392.0
 	if rows.size() > 0:
-		var card := Rect2(40, y, float(theme["VIEW_W"]) - 80, 20 + rows.size() * 40)
+		# Large rosters (Mafia and UNO) must not push the score summary or action
+		# buttons off-screen. Keep every player visible in a compact two-column grid.
+		var compact_grid: bool = rows.size() > 6
+		var rows_per_column: int = int(ceil(float(rows.size()) / 2.0)) if compact_grid else rows.size()
+		var row_height: float = 29.0 if compact_grid else 40.0
+		var card_height: float = 16.0 + float(rows_per_column) * row_height
+		var card := Rect2(40, y, float(theme["VIEW_W"]) - 80, card_height)
 		host._panel(card, theme["CARD"], 20, theme["LINE_STRONG"], 1.0, 10, 4)
 		for i in rows.size():
-			var ry: float = card.position.y + 10 + i * 40
-			host._txt_r(str(rows[i][0]), card.end.x - 18, ry + 27, 16, theme["TEXT_DIM"], false, 260)
-			host._txt_c(str(rows[i][1]), Rect2(card.position.x + 12, ry, 180, 40), 20, theme["TEXT"], true)
-			if i < rows.size() - 1:
-				host.draw_rect(Rect2(card.position.x + 16, ry + 40, card.size.x - 32, 1), theme["LINE"])
+			var column: int = int(i / rows_per_column) if compact_grid else 0
+			var row_in_column: int = i % rows_per_column if compact_grid else i
+			var cell_width: float = card.size.x * 0.5 if compact_grid else card.size.x
+			var cell_x: float = card.position.x + float(column) * cell_width
+			var ry: float = card.position.y + 8.0 + float(row_in_column) * row_height
+			if compact_grid:
+				var cell := Rect2(cell_x + 4.0, ry, cell_width - 8.0, row_height - 3.0)
+				if row_in_column > 0:
+					host.draw_rect(Rect2(cell.position.x + 6.0, cell.position.y, cell.size.x - 12.0, 1.0), theme["LINE"])
+				var label_width: float = minf(78.0, cell.size.x * 0.38)
+				host._txt_r(str(rows[i][0]), cell.end.x - 6.0, cell.position.y + 18.0, 12, theme["TEXT_DIM"], false, label_width)
+				var value_rect := Rect2(cell.position.x + 4.0, cell.position.y, cell.size.x - label_width - 18.0, cell.size.y)
+				var value_text: String = str(rows[i][1])
+				host._txt_c(value_text, value_rect, host._fit_size(value_text, value_rect.size.x - 4.0, 12, true), theme["TEXT"], true)
+			else:
+				host._txt_r(str(rows[i][0]), card.end.x - 18, ry + 27, 16, theme["TEXT_DIM"], false, 260)
+				host._txt_c(str(rows[i][1]), Rect2(card.position.x + 12, ry, 180, 40), 20, theme["TEXT"], true)
+				if i < rows.size() - 1:
+					host.draw_rect(Rect2(card.position.x + 16, ry + 40, card.size.x - 32, 1), theme["LINE"])
 		y = card.end.y + 14.0
 	if host.selected_game == "mastermind":
 		var sy: float = maxf(y, 440.0)

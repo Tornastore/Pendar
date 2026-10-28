@@ -48,7 +48,7 @@ func render(host, theme: Dictionary) -> void:
 		var draws: int = int(stats.get("draws", 0))
 		host._txt_r("%s برد · %s مساوی · %s باخت" % [host._fa(wins), host._fa(draws), host._fa(losses)], rect.end.x - 20, rect.position.y + 46, 11, theme["TEXT_DIM"], false, 190)
 
-		var bar := Rect2(rect.position.x + 90, rect.position.y + 36, 130, 8)
+		var bar := Rect2(rect.position.x + 104, rect.position.y + 36, 116, 8)
 		host._panel(bar, Color(1, 1, 1, 0.07), 4)
 		var fraction: float = clampf(float(absi(points)) / float(max_abs), 0.0, 1.0)
 		if fraction > 0.0:

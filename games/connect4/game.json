@@ -1,0 +1,12 @@
+{
+  "id": "connect4",
+  "name": "دوز چهار‌تایی (Connect Four)",
+  "aliases": ["Connect", "Connect Four", "Bingo", "دوز عمودی"],
+  "category": "strategy",
+  "variant": "Standard 7×6 gravity board",
+  "players": 2,
+  "board_size": [7, 6],
+  "difficulty_levels": 6,
+  "network": "LAN IP / ENet on native exports; WebSocket matchmaking on Web",
+  "beta": false
+}

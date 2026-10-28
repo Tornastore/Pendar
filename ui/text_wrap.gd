@@ -1,6 +1,6 @@
 extends RefCounted
 ## Width-based line breaking for long Persian text.
-## Main._wrap() only breaks on explicit "\n", so long strings must be pre-broken with this helper before drawing.
+## Main._wrap() now wraps by words too; this helper remains useful when a screen needs a fixed line count.
 
 ## Returns `text` with "\n" inserted so that no line is wider than `width` pixels (measured with the host font).
 static func wrap(host, text: String, width: float, size: int, bold: bool = false, max_lines: int = 0) -> String:

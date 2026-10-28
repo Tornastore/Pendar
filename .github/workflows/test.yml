@@ -1,0 +1,131 @@
+name: PENDAR CI - Tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pendar-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-tests:
+    name: Python tests and architecture checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test tools
+        run: python -m pip install --upgrade pip pytest
+
+      - name: Run Python regression tests
+        run: python -m pytest -q
+
+      - name: Check modular architecture
+        run: python tools/verify_structure.py
+
+  matchmaking-tests:
+    name: Online matchmaking server tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install server dependencies
+        working-directory: online-server
+        run: npm install --no-audit --no-fund
+
+      - name: Run matchmaking and protocol tests
+        working-directory: online-server
+        run: npm test
+
+  godot-regression-tests:
+    name: Godot 4.3 rule tests and startup smoke test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    container:
+      image: barichello/godot-ci:4.3
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download required Persian fonts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p fonts
+          download_font() {
+            local filename="$1"
+            local destination="fonts/${filename}"
+            local primary_url="https://cdn.jsdelivr.net/npm/vazirmatn@33.0.3/fonts/ttf/${filename}"
+            local fallback_url="https://raw.githubusercontent.com/rastikerdar/vazirmatn/v33.003/fonts/ttf/${filename}"
+            if ! wget --tries=2 --waitretry=2 --timeout=20 -O "$destination" "$primary_url"; then
+              rm -f "$destination"
+              wget --tries=2 --waitretry=2 --timeout=20 -O "$destination" "$fallback_url"
+            fi
+            test -s "$destination"
+          }
+          download_font "Vazirmatn-Regular.ttf"
+          download_font "Vazirmatn-Bold.ttf"
+
+      - name: Import project resources
+        shell: bash
+        timeout-minutes: 8
+        run: godot --headless --editor --path . --import
+
+      - name: Run all GDScript regression suites
+        shell: bash
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
+          for script in tests/godot/test_*.gd; do
+            test -f "$script" || continue
+            test_name="$(basename "$script" .gd)"
+            log_file="/tmp/${test_name}.log"
+            echo "===== ${script} ====="
+            if ! godot --headless --path . --script "res://${script}" 2>&1 | tee "$log_file"; then
+              echo "ERROR: ${script} failed." >&2
+              exit 1
+            fi
+            if grep -E 'SCRIPT ERROR|Parse Error|Parser Error|Failed loading resource|Failed to load script|Cannot load script|failures=[1-9][0-9]*' "$log_file"; then
+              echo "ERROR: ${script} reported a script/runtime/test failure." >&2
+              exit 1
+            fi
+            if ! grep -Eq 'checks=[0-9]+, failures=0' "$log_file"; then
+              echo "ERROR: ${script} did not print a successful test summary." >&2
+              exit 1
+            fi
+          done
+
+      - name: Smoke-test game startup
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          log_file="/tmp/pendar-startup.log"
+          if ! godot --headless --verbose --path . --quit-after 2 2>&1 | tee "$log_file"; then
+            echo "ERROR: Godot startup smoke test failed." >&2
+            exit 1
+          fi
+          if grep -E 'SCRIPT ERROR|Parse Error|Parser Error|Failed loading resource|Failed to load script|Cannot load script' "$log_file"; then
+            echo "ERROR: Godot reported a startup resource/script error." >&2
+            exit 1
+          fi
