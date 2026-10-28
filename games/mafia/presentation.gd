@@ -1,4 +1,6 @@
 extends RefCounted
+
+const TextWrapScript = preload("res://ui/text_wrap.gd")
 ## Mafia's role-sensitive controls; never renders other living players' hidden roles.
 
 func handle_tap(_app, _game, _point: Vector2) -> void:
@@ -59,7 +61,7 @@ func render(app, game) -> void:
 	app._panel(Rect2(20, 194, 500, 76), Color(phase_color.r, phase_color.g, phase_color.b, 0.16), 18, Color(phase_color.r, phase_color.g, phase_color.b, 0.60), 1.2)
 	var phase_label: String = "شب %s" % app._fa(game.mafia_round) if game.mafia_phase == "night" else "روز %s · رأی‌گیری" % app._fa(game.mafia_round)
 	app._txt_c(phase_label, Rect2(28, 202, 484, 30), 19, phase_color.lightened(0.25), true)
-	app._txt_c(game.mafia_status, Rect2(30, 235, 480, 28), 11, app.TEXT_DIM)
+	app._txt_c(game.mafia_status, Rect2(30, 235, 480, 28), app._fit_size(game.mafia_status, 462, 11, false), app.TEXT_DIM)
 	if game.mafia_action_label != "":
 		app._txt_c(game.mafia_action_label, Rect2(28, 269, 484, 24), 12, app.ACCENT, true)
 	var alive_y: float = 562.0
@@ -76,18 +78,22 @@ func render(app, game) -> void:
 			color = app.RED
 		app._panel(rect, app.CARD if alive else Color("#111629"), 12, Color(color.r, color.g, color.b, 0.55 if alive else 0.2), 1.0)
 		var name: String = "شما" if is_me else "بازیکن %s" % app._fa(index + 1)
-		app._txt_c(name, Rect2(rect.position.x + 2, rect.position.y + 1, rect.size.x - 4, 16), 11, app.TEXT if alive else app.TEXT_FAINT, true)
+		app._txt_c(name, Rect2(rect.position.x + 2, rect.position.y + 1, rect.size.x - 4, 16), app._fit_size(name, rect.size.x - 10, 11, true), app.TEXT if alive else app.TEXT_FAINT, true)
 		var state_label: String = "زنده" if alive else "حذف شد"
 		if revealed:
 			state_label += " · " + game._mafia_role_label(game.mafia_roles[index])
 		elif is_me:
 			state_label += " · نقش شما: " + role_title
-		app._txt_c(state_label, Rect2(rect.position.x + 2, rect.position.y + 17, rect.size.x - 4, 15), 9, color)
+		app._txt_c(state_label, Rect2(rect.position.x + 2, rect.position.y + 17, rect.size.x - 4, 15), app._fit_size(state_label, rect.size.x - 10, 9, false), color)
 	if game.mafia_private_note != "":
 		app._panel(Rect2(24, 735, 492, 40), Color("#1b5b4c", 0.72), 14, Color("#63d9a9", 0.7), 1)
-		app._txt_c(game.mafia_private_note, Rect2(30, 738, 480, 34), 12, Color("#a6ffdc"), true)
+		var private_size: int = app._fit_size(game.mafia_private_note, 466, 12, true)
+		app._wrap(game.mafia_private_note, 30, 741, 480, private_size, Color("#a6ffdc"), HORIZONTAL_ALIGNMENT_RIGHT, true)
+	var event_height: float = 0.0
 	if game.mafia_last_event != "":
-		app._wrap(game.mafia_last_event, 24, 779, 492, 14, app.TEXT_DIM, HORIZONTAL_ALIGNMENT_RIGHT)
+		var compact_event: String = TextWrapScript.wrap(app, game.mafia_last_event, 492, 13, false, 2)
+		event_height = app._wrap(compact_event, 24, 779, 492, 13, app.TEXT_DIM, HORIZONTAL_ALIGNMENT_RIGHT)
+	var hint_y: float = minf(849.0, maxf(826.0, 779.0 + event_height + 12.0))
 	if not game.mafia_game_over:
 		var hint: String = "با بازیکنان گفت‌وگو کنید، سپس رأی بدهید." if game.mafia_phase == "day" else "شب است؛ فقط نقش‌های ویژه اقدام می‌کنند."
 		if not game._mafia_is_alive(seat):
@@ -96,7 +102,6 @@ func render(app, game) -> void:
 			hint = "شهروند عادی هستید؛ منتظر پایان اقدامات شب بمانید."
 		elif game.mafia_phase == "night" and not active:
 			hint = "اقدام شما ثبت شده؛ منتظر بقیه بمانید."
-		app._hint(hint, 830, app.TEXT_DIM)
+		app._hint(hint, hint_y, app.TEXT_DIM)
 	else:
-		app._hint("بازی تمام شد؛ نقش همه بازیکنان آشکار است.", 830, app.GREEN)
-	app._txt_c("نقش‌های پنهان: مافیا، کارآگاه، دکتر و شهروند · گرداننده خودکار است", Rect2(16, 884, 508, 38), 10, app.TEXT_FAINT)
+		app._hint("بازی تمام شد؛ نقش همه بازیکنان آشکار است.", hint_y, app.GREEN)

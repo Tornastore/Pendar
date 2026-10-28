@@ -98,13 +98,20 @@ def test_backgammon_stops_search_after_terminal_bear_off():
 
 def test_quoridor_expert_and_grandmaster_search_is_hard_bounded_for_web():
     ai = read("games/quoridor/ai.gd")
-    assert "EXPERT_SEARCH_BUDGET_USEC: int = 80000" in ai
-    assert "GRANDMASTER_SEARCH_BUDGET_USEC: int = 135000" in ai
-    assert "EXPERT_NODE_BUDGET: int = 48" in ai
-    assert "GRANDMASTER_NODE_BUDGET: int = 88" in ai
+    assert "EXPERT_SEARCH_BUDGET_USEC: int = 180000" in ai
+    assert "GRANDMASTER_SEARCH_BUDGET_USEC: int = 320000" in ai
+    assert "EXPERT_NODE_BUDGET: int = 144" in ai
+    assert "GRANDMASTER_NODE_BUDGET: int = 360" in ai
     assert "func _should_abort_search() -> bool:" in ai
     assert "if alpha >= beta or _search_aborted:" in ai
     assert "_route_wall_candidates(game, 1 - player, _active_wall_route_segments)" in ai
+    assert "func _block_immediate_opponent_win(game) -> Dictionary:" in ai
+    assert "if game._quo_goal_reached(1, target):" in ai
+    assert "_active_search_depth = 4 if level == 5 else MASTER_SEARCH_DEPTH" in ai
+    assert "EXPERT_WALL_EVALUATION_BUDGET: int = 96" in ai
+    assert "GRANDMASTER_WALL_EVALUATION_BUDGET: int = 192" in ai
+    assert "var enemy_wins_next: bool = false" in ai
+    assert "quality -= 950.0 if level == 3 else 1450.0" in ai
 
 
 def test_quoridor_minimax_no_longer_scans_all_128_walls_at_every_node():

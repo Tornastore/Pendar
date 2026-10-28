@@ -53,7 +53,9 @@ def test_jenga_enforces_remove_then_place_and_host_authoritative_risk():
     assert "func _jenga_legal_removal" in rules
     assert 'jenga_phase = "place"' in rules
     assert '"place"' in rules and "_jenga_legal_place_slots" in rules
-    assert "TOWER_BOTTOM - (level + 1) * row_h" in presentation
+    assert "isometric pseudo-3D tower plus front, side and top reference views" in presentation
+    assert "Geometry2D.is_point_in_polygon(point, geometry[face_name])" in presentation
+    assert "نمای روبه‌رو" in presentation and "نمای کناری" in presentation and "نمای بالا" in presentation
     assert "roll = randf()" in main
     assert "crypto.randomInt(0, 1_000_000)" in server
     assert "authoritative collapse roll" in main
