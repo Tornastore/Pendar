@@ -38,6 +38,9 @@ const GAME_MODULE_SCRIPTS := {
 	"blockace": preload("res://games/blockace/rules.gd"),
 	"quarto": preload("res://games/quarto/rules.gd"),
 	"uno": preload("res://games/uno/rules.gd"),
+	"connect4": preload("res://games/connect4/rules.gd"),
+	"jenga": preload("res://games/jenga/rules.gd"),
+	"mafia": preload("res://games/mafia/rules.gd"),
 }
 var scoring_service = ScoringServiceScript.new()
 var _online_client = OnlineClientScript.new()
@@ -859,6 +862,9 @@ func _current_game_difficulty() -> int:
 		"blockace": return int(_game_modules["blockace"].blk_difficulty)
 		"quarto": return int(_game_modules["quarto"].qto_difficulty)
 		"uno": return int(_game_modules["uno"].uno_difficulty)
+		"connect4": return int(_game_modules["connect4"].c4_difficulty)
+		"jenga": return int(_game_modules["jenga"].jenga_difficulty)
+		"mafia": return int(_game_modules["mafia"].mafia_difficulty)
 	return 3
 
 func _opponent_kind() -> String:
@@ -881,6 +887,8 @@ func _opponent_kind() -> String:
 func _match_player_count() -> int:
 	match selected_game:
 		"uno": return int(_game_modules["uno"].uno_player_count) if vs_cpu else connected_players
+		"jenga": return int(_game_modules["jenga"].jenga_player_count) if vs_cpu else connected_players
+		"mafia": return int(_game_modules["mafia"].mafia_player_count) if vs_cpu else connected_players
 		"quoridor": return int(_game_modules["quoridor"].quo_player_count)
 		"mastermind":
 			if vs_cpu and bool(_game_modules["mastermind"].mm_cpu_race):
@@ -951,6 +959,12 @@ func _handle_tap(p: Vector2) -> void:
 			_blk_tap(p)
 		elif selected_game == "uno":
 			_game_modules["uno"]._uno_board_tap(p)
+		elif selected_game == "connect4":
+			_game_modules["connect4"]._connect4_tap(p)
+		elif selected_game == "jenga":
+			_game_modules["jenga"]._jenga_tap(p)
+		elif selected_game == "mafia":
+			_game_modules["mafia"]._mafia_tap(p)
 
 # ==================== BUTTON HELPERS ====================
 
@@ -975,6 +989,12 @@ func _start_vs_cpu() -> void:
 	if selected_game == "uno":
 		_game_modules["uno"].uno_player_count = clampi(_game_modules["uno"].uno_player_count, 2, 10)
 		connected_players = _game_modules["uno"].uno_player_count
+	if selected_game == "jenga":
+		_game_modules["jenga"].jenga_player_count = clampi(_game_modules["jenga"].jenga_player_count, 2, 4)
+		connected_players = _game_modules["jenga"].jenga_player_count
+	if selected_game == "mafia":
+		_game_modules["mafia"].mafia_player_count = clampi(_game_modules["mafia"].mafia_player_count, 6, 12)
+		connected_players = _game_modules["mafia"].mafia_player_count
 	_start_game()
 
 func _start_mastermind_vs_three_cpu() -> void:
@@ -1030,6 +1050,10 @@ func _start_host() -> void:
 	max_players_for_game = int(_game_info(selected_game).get("max_p", 2))
 	if selected_game == "uno" and _game_modules.has("uno"):
 		max_players_for_game = clampi(int(_game_modules["uno"].uno_player_count), 2, 10)
+	elif selected_game == "jenga":
+		max_players_for_game = clampi(int(_game_modules["jenga"].jenga_player_count), 2, 4)
+	elif selected_game == "mafia":
+		max_players_for_game = clampi(int(_game_modules["mafia"].mafia_player_count), 6, 12)
 	peer = ENetMultiplayerPeer.new()
 	var err := peer.create_server(PORT, maxi(1, max_players_for_game - 1))
 	if err != OK:
@@ -1149,8 +1173,8 @@ func _on_peer_disconnected(id: int) -> void:
 
 @rpc("authority", "call_local", "reliable")
 func _rpc_lobby_sync(count: int, capacity: int) -> void:
-	connected_players = clampi(count, 1, 10)
-	max_players_for_game = clampi(capacity, 2, 10)
+	connected_players = clampi(count, 1, 12)
+	max_players_for_game = clampi(capacity, 2, 12)
 	if state == State.LOBBY:
 		_build_lobby_buttons()
 
@@ -1210,6 +1234,9 @@ func _start_network_game() -> void:
 	if selected_game == "quoridor" and connected_players == 3:
 		_show_toast("کوریدور با ۲ یا ۴ بازیکن شروع می‌شود؛ نفر چهارم را متصل کنید یا به ۲ نفر برگردید.")
 		return
+	if selected_game == "mafia" and connected_players < 6:
+		_show_toast("مافیا کلاسیک حداقل به ۶ بازیکن نیاز دارد.")
+		return
 	var rng_seed: int = randi()
 	var selected_mm_level: int = mm_difficulty if selected_game == "mastermind" else -1
 	var selected_blk_level: int = blk_difficulty if selected_game == "blockace" else -1
@@ -1227,6 +1254,12 @@ func _rpc_start_game(game_id: String, rng_seed: int = 0, mastermind_level: int =
 			mm_color_count = 3 + mm_difficulty
 	if game_id == "blockace" and blockace_level >= 1:
 		blk_difficulty = clampi(blockace_level, 1, 6)
+	if game_id == "connect4":
+		_game_modules["connect4"].c4_difficulty = clampi(int(_game_modules["connect4"].c4_difficulty), 1, 6)
+	if game_id == "jenga":
+		_game_modules["jenga"].jenga_difficulty = clampi(int(_game_modules["jenga"].jenga_difficulty), 1, 6)
+	if game_id == "mafia":
+		_game_modules["mafia"].mafia_difficulty = clampi(int(_game_modules["mafia"].mafia_difficulty), 1, 6)
 	if game_id == "quoridor":
 		_game_modules["quoridor"].quo_player_count = 4 if player_count >= 4 else 2
 		_game_modules["quoridor"].quo_local_multiplayer = false
@@ -1236,6 +1269,12 @@ func _rpc_start_game(game_id: String, rng_seed: int = 0, mastermind_level: int =
 	elif game_id == "uno":
 		connected_players = clampi(player_count, 2, 10)
 		_game_modules["uno"].uno_player_count = connected_players
+	elif game_id == "jenga":
+		connected_players = clampi(player_count, 2, 4)
+		_game_modules["jenga"].jenga_player_count = connected_players
+	elif game_id == "mafia":
+		connected_players = clampi(player_count, 6, 12)
+		_game_modules["mafia"].mafia_player_count = connected_players
 	if rng_seed != 0:
 		seed(rng_seed)  # یکسان‌سازی تصادفی برای پخش کارت/مهره
 	_start_game()
@@ -1279,6 +1318,9 @@ func _is_my_turn() -> bool:
 			return bg_turn == local_seat
 		"uno":
 			return int(_game_modules["uno"].uno_turn) == local_seat
+		"connect4": return int(_game_modules["connect4"].c4_turn) == local_seat
+		"jenga": return int(_game_modules["jenga"].jenga_turn) == local_seat
+		"mafia": return _game_modules["mafia"]._mafia_local_needs_action()
 	return false
 
 func _reset_othello() -> void:
@@ -1305,6 +1347,80 @@ func _othello_apply_place(c: Vector2i) -> void:
 @rpc("any_peer", "call_local", "reliable")
 func _rpc_othello_place(x: int, y: int) -> void:
 	_othello_apply_place(Vector2i(x, y))
+
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_connect4_drop(seat: int, column: int) -> void:
+	if selected_game != "connect4" or state != State.PLAYING or not _game_modules.has("connect4"):
+		return
+	var sender_id: int = multiplayer.get_remote_sender_id()
+	if _net_on():
+		if sender_id == 0:
+			if seat != local_seat:
+				return
+		elif is_host:
+			if not peer_to_seat.has(sender_id) or int(peer_to_seat[sender_id]) != seat:
+				return
+		elif sender_id != 1:
+			return
+	var game = _game_modules["connect4"]
+	if not game._c4_apply_drop(seat, column):
+		return
+	# ENet clients only send to the host; rebroadcast validated moves to the other seats.
+	if multiplayer.multiplayer_peer != null and not ws_match_active and is_host and sender_id != 0:
+		rpc("_rpc_connect4_drop", seat, column)
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_jenga_action(seat: int, kind: String, level: int, slot: int, roll: float = 0.0) -> void:
+	if selected_game != "jenga" or state != State.PLAYING or not _game_modules.has("jenga"):
+		return
+	var sender_id: int = multiplayer.get_remote_sender_id()
+	var lan_active: bool = multiplayer.multiplayer_peer != null and not ws_match_active
+	if _net_on():
+		if sender_id == 0:
+			if seat != local_seat:
+				return
+			# LAN clients wait for the host's canonical action, including the collapse roll.
+			if lan_active and not is_host:
+				return
+		elif is_host:
+			if not peer_to_seat.has(sender_id) or int(peer_to_seat[sender_id]) != seat:
+				return
+		elif sender_id != 1:
+			return
+	if not is_finite(roll) or roll < 0.0 or roll > 1.0:
+		return
+	var game = _game_modules["jenga"]
+	if not game._jenga_action_allowed(seat, kind, level, slot):
+		return
+	# The LAN host and online matchmaker, not the acting player, choose collapse chance.
+	if lan_active and is_host and sender_id != 0 and kind == "remove":
+		roll = randf()
+	game._jenga_apply_action(seat, kind, level, slot, roll)
+	if lan_active and is_host and sender_id != 0:
+		rpc("_rpc_jenga_action", seat, kind, level, slot, roll)
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_mafia_action(seat: int, kind: String, target: int) -> void:
+	if selected_game != "mafia" or state != State.PLAYING or not _game_modules.has("mafia"):
+		return
+	var sender_id: int = multiplayer.get_remote_sender_id()
+	if _net_on():
+		if sender_id == 0:
+			if seat != local_seat:
+				return
+		elif is_host:
+			if not peer_to_seat.has(sender_id) or int(peer_to_seat[sender_id]) != seat:
+				return
+		elif sender_id != 1:
+			return
+	var game = _game_modules["mafia"]
+	if not game._mafia_action_allowed(seat, kind, target):
+		return
+	game._mafia_apply_action(seat, kind, target)
+	# Relay the host-validated action so every LAN peer keeps the same night/day state.
+	if multiplayer.multiplayer_peer != null and not ws_match_active and is_host and sender_id != 0:
+		rpc("_rpc_mafia_action", seat, kind, target)
 
 func _reset_pentago() -> void:
 	_game_modules["pentago"]._reset_pentago()
@@ -1671,7 +1787,7 @@ func _wrap(s: String, x: float, y: float, w: float, size: int, col: Color, align
 	var f: Font = font_bold if bold else font
 	var display_text: String = _normalize_ui_text(s)
 	var sz: Vector2 = f.get_multiline_string_size(display_text, align, w, size)
-	draw_multiline_string(f, Vector2(x, y), display_text, align, w, size, -1, col, TextServer.BREAK_MANDATORY, TextServer.JUSTIFICATION_WORD_BOUND, TextServer.DIRECTION_AUTO)
+	draw_multiline_string(f, Vector2(x, y), display_text, align, w, size, -1, col, TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND, TextServer.JUSTIFICATION_WORD_BOUND, TextServer.DIRECTION_AUTO)
 	return sz.y
 
 func _wrap_h(s: String, w: float, size: int, bold: bool = false) -> float:
@@ -2333,6 +2449,8 @@ func _result_is_draw() -> bool:
 		"quoridor": return quo_winner < 0
 		"backgammon": return false
 		"uno": return false
+		"connect4": return int(_game_modules["connect4"].c4_winner) < 0
+		"jenga", "mafia": return false
 		"mastermind":
 			if _is_mastermind_race():
 				return str(_game_modules["mastermind"].mm_race_status) == "مساوی"
@@ -2361,6 +2479,9 @@ func _player_won_current() -> bool:
 		"blockace": return blk_winner == seat
 		"quarto": return qto_winner == seat + 1
 		"uno": return int(_game_modules["uno"].uno_winner) == seat
+		"connect4": return int(_game_modules["connect4"].c4_winner) == seat
+		"jenga": return int(_game_modules["jenga"].jenga_winner) == seat
+		"mafia": return bool(_game_modules["mafia"]._mafia_local_team_won())
 	return false
 
 # ---------- resign ----------
@@ -2422,6 +2543,18 @@ func _apply_resign(seat: int) -> void:
 		"quarto":
 			qto_game_over = true
 			qto_winner = 2 - seat
+		"connect4":
+			var c4 = _game_modules["connect4"]
+			c4.c4_game_over = true
+			c4.c4_winner = 1 - seat
+		"jenga":
+			var jg = _game_modules["jenga"]
+			jg.jenga_game_over = true
+			jg.jenga_winner = jg.jenga_last_successful_seat if jg.jenga_last_successful_seat >= 0 else posmod(seat + 1, jg.jenga_player_count)
+		"mafia":
+			var mf = _game_modules["mafia"]
+			mf.mafia_game_over = true
+			mf.mafia_winner_team = 1 if mf.mafia_roles[seat] == mf.ROLE_MAFIA else 0
 	_go_result(false)
 
 # ---------- game start / restart ----------
@@ -2477,6 +2610,13 @@ func _start_game() -> void:
 		"uno":
 			_game_modules["uno"].uno_player_count = clampi(_game_modules["uno"].uno_player_count, 2, 10)
 			_game_modules["uno"]._uno_reset_match()
+		"connect4": _game_modules["connect4"]._reset_connect4()
+		"jenga":
+			_game_modules["jenga"].jenga_player_count = clampi(_game_modules["jenga"].jenga_player_count, 2, 4)
+			_game_modules["jenga"]._reset_jenga()
+		"mafia":
+			_game_modules["mafia"].mafia_player_count = clampi(_game_modules["mafia"].mafia_player_count, 6, 12)
+			_game_modules["mafia"]._reset_mafia()
 		_:
 			_show_toast("این بازی هنوز کامل نشده")
 			state = State.MODE
@@ -2568,6 +2708,15 @@ func _cpu_tick() -> void:
 			var uno_mod = _game_modules["uno"]
 			if not uno_mod.uno_game_over and not uno_mod.uno_round_over and int(uno_mod.uno_turn) != 0:
 				_schedule_cpu(0.55, uno_mod._uno_cpu_turn)
+		"connect4":
+			var c4 = _game_modules["connect4"]
+			if not c4.c4_game_over and c4.c4_turn == 1:
+				_schedule_cpu(0.42, c4._c4_cpu_move)
+		"jenga":
+			var jg = _game_modules["jenga"]
+			if not jg.jenga_game_over and jg.jenga_turn != 0:
+				_schedule_cpu(0.35, jg._jenga_cpu_turn)
+		"mafia": _game_modules["mafia"]._mafia_cpu_tick()
 
 func _ui_sig() -> String:
 	var s: String = "%d|%d|%d|%s|%s|%d|%d|%d|%s|%s|%d|%s|%s|%d|%d|%s" % [state, int(pause_open), int(rules_open), str(dialog.get("title", "")), menu_filter, dash_tab, connected_players, int(online_searching), online_game, join_ip, int(is_host), ws_state, online_username, int(ws_match_active), int(ws_emoji_picker_open), online_status]
@@ -2617,7 +2766,7 @@ func _cell_t(key: String, idx: int, dur: float = 0.4) -> Array:
 # ======================================================================
 #  SCREENS — buttons builder + drawing for every non-game screen
 # ======================================================================
-const NET_GAMES := ["othello", "othello12", "pentago", "chess", "domino", "pasoor", "quoridor", "hokm", "backgammon", "gobblet", "mastermind", "abalone", "blockace", "quarto", "uno"]
+const NET_GAMES := ["othello", "othello12", "pentago", "chess", "domino", "pasoor", "quoridor", "hokm", "backgammon", "gobblet", "mastermind", "abalone", "blockace", "quarto", "uno", "connect4", "jenga", "mafia"]
 const TILE_W := 248.0
 const TILE_H := 176.0
 const TILE_GAP := 12.0
@@ -2795,6 +2944,26 @@ func _set_quarto_difficulty(level: int) -> void:
 
 func _set_uno_difficulty(level: int) -> void:
 	_game_modules["uno"].uno_difficulty = clampi(level, 1, 6)
+	_rebuild_buttons()
+
+func _set_connect4_difficulty(level: int) -> void:
+	_game_modules["connect4"].c4_difficulty = clampi(level, 1, 6)
+	_rebuild_buttons()
+
+func _set_jenga_difficulty(level: int) -> void:
+	_game_modules["jenga"].jenga_difficulty = clampi(level, 1, 6)
+	_rebuild_buttons()
+
+func _set_mafia_difficulty(level: int) -> void:
+	_game_modules["mafia"].mafia_difficulty = clampi(level, 1, 6)
+	_rebuild_buttons()
+
+func _set_jenga_player_count(count: int) -> void:
+	_game_modules["jenga"].jenga_player_count = clampi(count, 2, 4)
+	_rebuild_buttons()
+
+func _set_mafia_player_count(count: int) -> void:
+	_game_modules["mafia"].mafia_player_count = clampi(count, 6, 12)
 	_rebuild_buttons()
 
 func _set_uno_player_count(count: int) -> void:
@@ -3011,6 +3180,9 @@ func _btns_game() -> void:
 		"blockace": _btns_blockace()
 		"quarto": _btns_quarto()
 		"uno": _game_modules["uno"]._btns_uno()
+		"connect4": _game_modules["connect4"]._btns_connect4()
+		"jenga": _game_modules["jenga"]._btns_jenga()
+		"mafia": _game_modules["mafia"]._btns_mafia()
 		"chess": _game_modules["chess"]._btns_chess()
 
 func _seat_me(seat: int) -> bool:
@@ -3100,6 +3272,9 @@ func _draw_playing() -> void:
 		"blockace": _draw_blockace()
 		"quarto": _draw_quarto()
 		"uno": _game_modules["uno"]._draw_uno()
+		"connect4": _game_modules["connect4"]._draw_connect4()
+		"jenga": _game_modules["jenga"]._draw_jenga()
+		"mafia": _game_modules["mafia"]._draw_mafia()
 		_:
 			_draw_topbar("به زودی", "این بازی در نسخه‌های بعدی اضافه می‌شود")
 
@@ -3205,6 +3380,20 @@ func _result_info() -> Dictionary:
 				rows.append([_game_modules["uno"]._uno_player_name(seat), _fa(int(um.uno_scores[seat])) + " امتیاز"])
 			if not um.uno_game_over:
 				sub += " · برای دست بعدی از دکمه‌ی ادامه استفاده کنید."
+		"connect4":
+			sub = "چهار مهرهٔ هم‌رنگ یک خط ساختند." if int(_game_modules["connect4"].c4_winner) >= 0 else "صفحه پر شد؛ بازی مساوی شد."
+			rows.append(["تعداد حرکت‌ها", _fa(int(_game_modules["connect4"].c4_moves))])
+		"jenga":
+			var jm = _game_modules["jenga"]
+			sub = jm.jenga_status
+			rows.append(["حرکت‌ها", _fa(int(jm.jenga_moves))])
+			rows.append(["بازیکن برنده", _fa(int(jm.jenga_winner) + 1)])
+		"mafia":
+			var mmf = _game_modules["mafia"]
+			title = "مافیا پیروز شد" if int(mmf.mafia_winner_team) == 0 else "شهروندان پیروز شدند"
+			sub = mmf.mafia_last_event
+			for seat in range(mmf.mafia_player_count):
+				rows.append(["بازیکن %s" % _fa(seat + 1), mmf._mafia_role_label(str(mmf.mafia_roles[seat])) + (" · زنده" if mmf._mafia_is_alive(seat) else " · حذف‌شده")])
 	return {"title": title, "sub": sub, "rows": rows}
 
 func _btns_result() -> void:
@@ -4399,11 +4588,11 @@ func _ws_begin_match(message: Dictionary) -> void:
 	_set_game(game_id)
 	online_game = game_id
 	_origin_online = true
-	local_seat = clampi(int(message.get("seat", 0)), 0, 9 if game_id == "uno" else 3)
+	local_seat = clampi(int(message.get("seat", 0)), 0, 11 if game_id == "mafia" else (9 if game_id == "uno" else 3))
 	is_host = local_seat == 0
 	local_player_id = local_seat + 1
 	peer_to_seat.clear()
-	connected_players = clampi(int(message.get("player_count", 2)), 2, 10 if game_id == "uno" else 4)
+	connected_players = clampi(int(message.get("player_count", 2)), 2, 12 if game_id == "mafia" else (10 if game_id == "uno" else 4))
 	online_player_roster = message.get("players", []).duplicate(true)
 	vs_cpu = false
 	my_name = online_username
@@ -4427,6 +4616,12 @@ func _ws_begin_match(message: Dictionary) -> void:
 		mm_difficulty = clampi(int(message.get("mastermind_difficulty", mm_difficulty)), 1, 6)
 	if game_id == "blockace":
 		blk_difficulty = clampi(int(message.get("blockace_difficulty", blk_difficulty)), 1, 6)
+	if game_id == "connect4":
+		_game_modules["connect4"].c4_difficulty = clampi(int(message.get("difficulty", _game_modules["connect4"].c4_difficulty)), 1, 6)
+	if game_id == "jenga":
+		_game_modules["jenga"].jenga_difficulty = clampi(int(message.get("difficulty", _game_modules["jenga"].jenga_difficulty)), 1, 6)
+	if game_id == "mafia":
+		_game_modules["mafia"].mafia_difficulty = clampi(int(message.get("difficulty", _game_modules["mafia"].mafia_difficulty)), 1, 6)
 	var seed_value: int = int(message.get("seed", 0))
 	var mm_level: int = mm_difficulty if game_id == "mastermind" else -1
 	var blk_level: int = blk_difficulty if game_id == "blockace" else -1
@@ -4453,10 +4648,14 @@ func _ws_game_turn_seat() -> int:
 		"hokm": return hokm_turn
 		"backgammon": return bg_turn
 		"uno": return int(_game_modules["uno"].uno_turn)
+		"connect4": return int(_game_modules["connect4"].c4_turn)
+		"jenga": return int(_game_modules["jenga"].jenga_turn)
+		"mafia": return -1
 	return -1
 
 func _ws_remote_action_allowed(action: String, args: Array, sender_seat: int) -> bool:
-	if sender_seat < 0 or sender_seat >= connected_players or sender_seat == local_seat:
+	var authoritative_jenga_echo: bool = selected_game == "jenga" and action == "_rpc_jenga_action" and sender_seat == local_seat
+	if sender_seat < 0 or sender_seat >= connected_players or (sender_seat == local_seat and not authoritative_jenga_echo):
 		return false
 	if action == "_rpc_uno_next_round":
 		return selected_game == "uno" and state == State.PLAYING and _result_popup_open and args.size() >= 2 and sender_seat == 0 and int(args[0]) == 0 and bool(_game_modules["uno"].uno_round_over) and not bool(_game_modules["uno"].uno_game_over)
@@ -4465,6 +4664,12 @@ func _ws_remote_action_allowed(action: String, args: Array, sender_seat: int) ->
 	# Resigning is allowed at any point, even when it is not the resigning player's turn.
 	if action == "_rpc_resign":
 		return not args.is_empty() and int(args[0]) == sender_seat
+	if selected_game == "mafia":
+		return action == "_rpc_mafia_action" and args.size() == 3 and int(args[0]) == sender_seat and _game_modules["mafia"]._mafia_action_allowed(sender_seat, str(args[1]), int(args[2]))
+	if selected_game == "connect4":
+		return action == "_rpc_connect4_drop" and args.size() == 2 and int(args[0]) == sender_seat and _game_modules["connect4"]._c4_landing_row(int(args[1])) >= 0 and int(_game_modules["connect4"].c4_turn) == sender_seat
+	if selected_game == "jenga":
+		return action == "_rpc_jenga_action" and args.size() == 5 and int(args[0]) == sender_seat and typeof(args[4]) in [TYPE_FLOAT, TYPE_INT] and is_finite(float(args[4])) and float(args[4]) >= 0.0 and float(args[4]) <= 1.0 and _game_modules["jenga"]._jenga_action_allowed(sender_seat, str(args[1]), int(args[2]), int(args[3]))
 	if selected_game == "uno":
 		if _ws_game_turn_seat() != sender_seat or args.is_empty() or int(args[0]) != sender_seat:
 			return false
@@ -4558,6 +4763,9 @@ func _ws_execute_game_action(action: String, args: Array) -> void:
 		"_rpc_uno_catch": _rpc_uno_catch(int(args[0]))
 		"_rpc_uno_challenge": _rpc_uno_challenge(int(args[0]), bool(args[1]))
 		"_rpc_uno_next_round": _rpc_uno_next_round(int(args[0]), int(args[1]))
+		"_rpc_connect4_drop": _game_modules["connect4"]._c4_apply_drop(int(args[0]), int(args[1]))
+		"_rpc_jenga_action": _game_modules["jenga"]._jenga_apply_action(int(args[0]), str(args[1]), int(args[2]), int(args[3]), float(args[4]))
+		"_rpc_mafia_action": _game_modules["mafia"]._mafia_apply_action(int(args[0]), str(args[1]), int(args[2]))
 		"_rpc_resign": _rpc_resign(int(args[0]))
 
 func _receive_ws_game_action(message: Dictionary) -> void:
@@ -4574,7 +4782,9 @@ func _send_game_action(action: String, args: Array) -> void:
 		if not _ws_send_json({"type": "action", "action": action, "args": args}):
 			_show_toast("ارتباط آنلاین آماده نیست؛ حرکت ارسال نشد.")
 			return
-		_ws_execute_game_action(action, args)
+		# Jenga waits for the matchmaker to return the authoritative collapse roll.
+		if selected_game != "jenga":
+			_ws_execute_game_action(action, args)
 		return
 	if multiplayer.multiplayer_peer != null:
 		var rpc_args: Array = [action]

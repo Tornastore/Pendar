@@ -36,35 +36,61 @@ func title(host) -> String:
 		_: return "راهنمای " + str(host._game_info(host.selected_game).get("name", "بازی"))
 
 
+func _page_groups(host, all_lines: Array, text_width: float, max_body_height: float) -> Array:
+	# Pack by measured height, not only by a fixed number of bullets. This prevents
+	# long Persian help paragraphs from running underneath the paging buttons.
+	var pages: Array = []
+	var current_page: Array = []
+	var current_height: float = 0.0
+	for raw_line in all_lines:
+		var line_height: float = host._wrap_h(str(raw_line), text_width, 15)
+		var item_height: float = line_height + 16.0
+		if not current_page.is_empty() and (current_page.size() >= RULES_PAGE_SIZE or current_height + item_height > max_body_height):
+			pages.append(current_page.duplicate())
+			current_page.clear()
+			current_height = 0.0
+		current_page.append(raw_line)
+		current_height += item_height
+	if not current_page.is_empty() or pages.is_empty():
+		pages.append(current_page.duplicate())
+	return pages
+
+
 func page_count(host) -> int:
-	return maxi(1, int(ceil(float(lines(host).size()) / float(RULES_PAGE_SIZE))))
+	var text_width: float = maxf(180.0, float(host.VIEW_W) - 148.0)
+	var max_panel_height: float = maxf(320.0, float(host.VIEW_H) - 48.0)
+	var max_body_height: float = maxf(120.0, max_panel_height - 228.0)
+	return _page_groups(host, lines(host), text_width, max_body_height).size()
 
 
 func layout(host, theme: Dictionary) -> Dictionary:
 	var all_lines: Array = lines(host)
-	var pages: int = maxi(1, int(ceil(float(all_lines.size()) / float(RULES_PAGE_SIZE))))
-	var page_index: int = clampi(host.rules_page, 0, pages - 1)
-	var start_index: int = page_index * RULES_PAGE_SIZE
-	var page_lines: Array = []
-	for index in range(start_index, mini(start_index + RULES_PAGE_SIZE, all_lines.size())):
-		page_lines.append(all_lines[index])
-	var text_width: float = 392.0
+	var text_width: float = maxf(180.0, float(theme["VIEW_W"]) - 148.0)
+	var max_panel_height: float = maxf(320.0, float(theme["VIEW_H"]) - 48.0)
+	# Panel layout is 96px of header + measured body + 132px reserved footer.
+	var max_body_height: float = maxf(120.0, max_panel_height - 228.0)
+	var pages: Array = _page_groups(host, all_lines, text_width, max_body_height)
+	var page_index: int = clampi(host.rules_page, 0, pages.size() - 1)
+	var page_lines: Array = pages[page_index]
 	var total_height: float = 0.0
 	var line_heights: Array = []
 	for text in page_lines:
 		var line_height: float = host._wrap_h(str(text), text_width, 15)
 		line_heights.append(line_height)
 		total_height += line_height + 16.0
-	var footer_height: float = 132.0 if pages > 1 else 84.0
-	var panel_height: float = minf(float(theme["VIEW_H"]) - 48.0, 96.0 + total_height + footer_height)
+	var panel_height: float = minf(max_panel_height, 96.0 + total_height + 132.0)
 	var panel_y: float = maxf(24.0, (float(theme["VIEW_H"]) - panel_height) * 0.5)
+	var first_line: int = 0
+	for page_before in range(page_index):
+		first_line += pages[page_before].size()
 	return {
 		"rect": Rect2(24.0, panel_y, float(theme["VIEW_W"]) - 48.0, panel_height),
 		"hs": line_heights,
 		"tw": text_width,
 		"lines": page_lines,
 		"page": page_index,
-		"pages": pages,
+		"pages": pages.size(),
+		"first_line": first_line,
 	}
 
 
@@ -97,7 +123,7 @@ func render(host, theme: Dictionary) -> void:
 		var line_height: float = line_heights[index]
 		var dot_center := Vector2(rect.end.x - 40, y + 12)
 		host.draw_circle(dot_center, 13, Color(color.r, color.g, color.b, 0.25))
-		host._txt_c(host._fa(int(layout_data["page"]) * RULES_PAGE_SIZE + index + 1), Rect2(dot_center.x - 13, dot_center.y - 13, 26, 26), 13, color.lightened(0.35), true)
+		host._txt_c(host._fa(int(layout_data["first_line"]) + index + 1), Rect2(dot_center.x - 13, dot_center.y - 13, 26, 26), 13, color.lightened(0.35), true)
 		host._wrap(str(page_lines[index]), rect.position.x + 24, y + 16, float(layout_data["tw"]), 15, theme["TEXT"], HORIZONTAL_ALIGNMENT_RIGHT)
 		y += line_height + 16.0
 	if int(layout_data["pages"]) > 1:

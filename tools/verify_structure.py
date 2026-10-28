@@ -86,12 +86,13 @@ for script_path in sorted((ROOT / "games").rglob("rules.gd")):
                 f"{script_path.relative_to(ROOT)}:{index}: CanvasItem draw command must be called through app."
             )
 
-# The shipped app has 14 independent rule modules; Othello 8x8 and 12x12 share one engine.
+# Othello 8x8 and 12x12 share an engine; each other title has its own rules module.
 expected_modules = {
     "othello", "pentago", "quoridor", "domino", "chess", "pasoor",
     "mastermind", "gobblet", "hokm", "backgammon", "abalone", "blockace", "quarto", "uno",
+    "connect4", "jenga", "mafia",
 }
-module_paths = re.findall(r'"([a-z]+)": preload\("res://games/([a-z]+)/rules\.gd"\)', main)
+module_paths = re.findall(r'"([a-z0-9]+)": preload\("res://games/([a-z0-9]+)/rules\.gd"\)', main)
 preloaded = {key for key, folder in module_paths if key == folder}
 if preloaded != expected_modules:
     errors.append(f"module preload mismatch: expected {sorted(expected_modules)}, found {sorted(preloaded)}")
@@ -154,6 +155,12 @@ for game_id in sorted(expected_modules):
             "uno_pending_round_winner", "uno_round_started_msec", "uno_round_winner",
             "uno_scores", "uno_status",
         }
+    if game_id == "connect4":
+        aliased_module_members |= {"c4_board", "c4_game_over", "c4_last_column"}
+    if game_id == "jenga":
+        aliased_module_members |= {"jenga_game_over", "jenga_last_successful_seat", "jenga_layers", "jenga_moves", "jenga_pending_piece", "jenga_phase", "jenga_status"}
+    if game_id == "mafia":
+        aliased_module_members |= {"mafia_action_label", "mafia_ai_intel", "mafia_alive", "mafia_day_votes", "mafia_game_over", "mafia_last_eliminated", "mafia_last_event", "mafia_night_actions", "mafia_phase", "mafia_private_note", "mafia_revealed", "mafia_role_names", "mafia_roles", "mafia_round", "mafia_status", "mafia_suspicion", "mafia_vote_history", "mafia_winner_team"}
     missing_proxies = sorted(state_vars - state_proxies - direct_module_members - aliased_module_members)
     if missing_proxies:
         errors.append(f"{game_id}: state fields without compatibility properties: {missing_proxies}")
@@ -181,8 +188,8 @@ if not re.search(r"static func all_games\(\) -> Array", catalog):
     errors.append("GameCatalog does not expose all_games()")
 
 catalog_ids = re.findall(r'\{"id":\s*"([a-z0-9]+)"', catalog)
-if len(catalog_ids) != 15 or len(set(catalog_ids)) != 15:
-    errors.append(f"catalog should define 15 unique game IDs, got {len(catalog_ids)} entries")
+if len(catalog_ids) != 18 or len(set(catalog_ids)) != 18:
+    errors.append(f"catalog should define 18 unique game IDs, got {len(catalog_ids)} entries")
 if "scoring_service.record_result" not in main:
     errors.append("main.gd is not delegating result recording to ScoringService")
 ranking_screen_text = (ROOT / "ui" / "screens" / "rankings_screen.gd").read_text(encoding="utf-8") if (ROOT / "ui" / "screens" / "rankings_screen.gd").is_file() else ""

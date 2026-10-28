@@ -1,0 +1,12 @@
+{
+  "id": "mafia",
+  "name": "مافیا کلاسیک",
+  "category": "classic",
+  "variant": "Classic Mafia: Mafia, Detective, Doctor and Civilians; moderator automated",
+  "players": "6-12",
+  "min_players": 6,
+  "max_players": 12,
+  "difficulty_levels": 6,
+  "network": "LAN IP / ENet on native exports; WebSocket matchmaking on Web",
+  "beta": false
+}

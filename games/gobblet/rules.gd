@@ -12,7 +12,8 @@ var gob_sel_size: int = -1
 var gob_sel_from: Vector2i = Vector2i(-1, -1)
 var gob_game_over: bool = false
 var gob_winner: int = 0
-var gob_difficulty: int = 3 # 1 random .. 6 tactical one-ply search
+var gob_difficulty: int = 3 # 1 random .. 6 tactical multi-ply search
+var _gob_cpu_move_history: Array[Dictionary] = []
 
 func reset_game() -> void:
 	_reset_gobblet()
@@ -30,6 +31,7 @@ func _reset_gobblet() -> void:
 	gob_sel_from = Vector2i(-1, -1)
 	gob_game_over = false
 	gob_winner = 0
+	_gob_cpu_move_history.clear()
 
 func _gob_top(x: int, y: int) -> Dictionary:
 	if x < 0 or x >= 4 or y < 0 or y >= 4:
@@ -156,8 +158,27 @@ func _gob_move(from: Vector2i, to: Vector2i, player: int) -> bool:
 	if _gob_check_win(player):
 		_gob_finish(player)
 		return true
+	if player == 2:
+		_gob_cpu_move_history.append({"from": from, "to": to, "size": int(piece.s)})
+		if _gob_cpu_move_history.size() > 8:
+			_gob_cpu_move_history.pop_front()
 	gob_turn = 3 - player
 	return true
+
+func _gob_repetition_penalty(action: Dictionary, player: int) -> float:
+	if player != 2 or str(action.get("kind", "")) != "move" or _gob_cpu_move_history.is_empty():
+		return 0.0
+	var source: Vector2i = action.from
+	var target: Vector2i = action.to
+	var level: int = clampi(gob_difficulty, 1, 6)
+	var penalty_by_level: Array[float] = [0.0, 1.0, 4.0, 12.0, 35.0, 85.0]
+	var penalty: float = penalty_by_level[level - 1]
+	for history_index in range(_gob_cpu_move_history.size() - 1, maxi(-1, _gob_cpu_move_history.size() - 5), -1):
+		var previous: Dictionary = _gob_cpu_move_history[history_index]
+		if source == previous.get("to", Vector2i(-1, -1)) and target == previous.get("from", Vector2i(-1, -1)):
+			var recency_scale: float = 1.0 if history_index == _gob_cpu_move_history.size() - 1 else 0.65
+			return penalty * recency_scale
+	return 0.0
 
 func _gob_action_score(action: Dictionary, player: int) -> float:
 	var saved_board: Array = gob_board.duplicate(true)
@@ -201,6 +222,7 @@ func _gob_action_score(action: Dictionary, player: int) -> float:
 			score += (0.8 + float(gob_difficulty) * 0.25) - Vector2(dest.x, dest.y).distance_to(Vector2(1.5, 1.5)) * (0.15 + float(gob_difficulty) * 0.07)
 	gob_board = saved_board
 	gob_hand = saved_hand
+	score -= _gob_repetition_penalty(action, player)
 	var noise_by_level: Array[float] = [0.0, 19.0, 10.0, 4.0, 0.35, 0.0]
 	var noise: float = noise_by_level[clampi(gob_difficulty, 1, 6) - 1]
 	return score + randf_range(-noise, noise)

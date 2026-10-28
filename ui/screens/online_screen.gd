@@ -6,7 +6,9 @@ const TextWrapScript = preload("res://ui/text_wrap.gd")
 
 func online_extra(host) -> float:
 	var rows: int = int(ceil(float(host.NET_GAMES.size()) / 3.0))
-	var end_y: float = 156.0 + (rows - 1) * 44.0 + 38.0
+	# Compact fixed-size rows keep the status panel above the bottom navigation
+	# even when the catalogue grows to six rows or more.
+	var end_y: float = 156.0 + (rows - 1) * 36.0 + 32.0
 	return maxf(0.0, end_y - 254.0)
 
 func build_online_buttons(host, theme: Dictionary) -> void:
@@ -21,9 +23,9 @@ func build_online_buttons(host, theme: Dictionary) -> void:
 		var row: int = int(i / 3)
 		var w: float = 156.0
 		var x: float = theme["VIEW_W"] - 16.0 - w - col * (w + 10.0)
-		var y: float = 156.0 + row * 44.0
+		var y: float = 156.0 + row * 36.0
 		var nm: String = str(host._game_info(id).name)
-		host._add_btn(Rect2(x, y, w, 38), nm, host._pick_online_game.bind(id), true, host._game_info(id).icon_col, "seg_on" if id == host.online_game else "ghost", "", "og_" + id)
+		host._add_btn(Rect2(x, y, w, 32), nm, host._pick_online_game.bind(id), true, host._game_info(id).icon_col, "seg_on" if id == host.online_game else "ghost", "", "og_" + id)
 		i += 1
 	var ex: float = online_extra(host)
 	if host.online_searching:
@@ -45,9 +47,9 @@ func render_online(host, theme: Dictionary) -> void:
 	host._draw_topbar("بازی آنلاین", "انتخاب بازی و جفت‌سازی خودکار با بازیکن منتظر")
 	var profile := Rect2(16, 82, theme["VIEW_W"] - 32, 56)
 	host._panel(profile, theme["CARD"], 16, theme["LINE_STRONG"], 1.0)
-	if host.username_editing:
-		host._txt_r("نام کاربری", theme["VIEW_W"] - 22, 113, 12, theme["TEXT_DIM"], true, 100)
-	else:
+	# While editing, the real LineEdit occupies the left side of the profile card;
+	# do not draw the static label beneath the save button or over the input.
+	if not host.username_editing:
 		host._txt_r("نام کاربری", theme["VIEW_W"] - 22, 113, 12, theme["TEXT_DIM"], true, 100)
 		host._txt_r(host.online_username, theme["VIEW_W"] - 138, 113, 15, theme["TEXT"], true, 190)
 	host._txt_r("۱. بازی را انتخاب کنید", theme["VIEW_W"] - 24, 138, 15, theme["TEXT_DIM"], true, 300)
@@ -76,11 +78,11 @@ func build_lobby_buttons(host, theme: Dictionary) -> void:
 	host._back_btn()
 	host._add_btn(Rect2(16, 16, 44, 44), "", host._open_rules, true, theme["TEXT"], "icon", "help", "help")
 	if host.is_host:
-		var can_start: bool = host.connected_players >= 2 and not (host.selected_game == "quoridor" and host.connected_players == 3)
+		var can_start: bool = host.connected_players >= 2 and not (host.selected_game == "quoridor" and host.connected_players == 3) and not (host.selected_game == "mafia" and host.connected_players < 6)
 		host._add_btn(Rect2(40, 706, theme["VIEW_W"] - 80, 62), "شروع بازی", host._start_network_game, can_start, theme["GREEN"], "solid", "play", "start")
 		host._last_btn().hint = "کوریدور با ۲ یا ۴ بازیکن شروع می‌شود؛ سایر بازی‌ها طبق ظرفیت خود شروع می‌شوند."
 		var ips: Array = host.host_ips
-		for j in ips.size():
+		for j in range(mini(ips.size(), 3)):
 			var y: float = 250.0 + 82.0 + j * 42.0
 			host._add_btn(Rect2(30, y - 2, 40, 36), "", host._copy_ip.bind(str(ips[j])), true, theme["ACCENT"], "icon", "copy", "copy_%d" % j)
 	host._add_btn(Rect2(40, 782, theme["VIEW_W"] - 80, 54), "ترک لابی", host._request_leave_lobby, true, theme["RED"], "soft", "door", "leave")
@@ -129,12 +131,17 @@ func render_lobby(host, theme: Dictionary) -> void:
 	host._draw_topbar("لابی بازی", str(info.get("name", "")))
 	var seat0_present: bool = true
 	var seat1_present: bool = host.connected_players >= 2 if host.is_host else host._client_connected
-	if host.selected_game == "uno":
-		# UNO supports up to ten seats. Two columns keep the complete lobby visible.
-		for seat in range(mini(host.max_players_for_game, 10)):
-			var col_idx: int = seat % 2
-			var row_idx: int = int(seat / 2)
-			var seat_rect := Rect2(16.0 + float(col_idx) * 254.0, 92.0 + float(row_idx) * 58.0, 246.0, 54.0)
+	if host.selected_game == "uno" or host.selected_game == "mafia":
+		# UNO uses two columns; Mafia uses a compact 3x4 grid for twelve seats.
+		var seat_limit: int = mini(host.max_players_for_game, 10 if host.selected_game == "uno" else 12)
+		for seat in range(seat_limit):
+			var col_idx: int = seat % (2 if host.selected_game == "uno" else 3)
+			var row_idx: int = int(seat / (2 if host.selected_game == "uno" else 3))
+			var seat_rect: Rect2
+			if host.selected_game == "uno":
+				seat_rect = Rect2(16.0 + float(col_idx) * 254.0, 92.0 + float(row_idx) * 58.0, 246.0, 54.0)
+			else:
+				seat_rect = Rect2(14.0 + float(col_idx) * 174.0, 92.0 + float(row_idx) * 68.0, 168.0, 62.0)
 			var present: bool = false
 			if host.is_host:
 				present = seat == 0 or seat in host.peer_to_seat.values()
@@ -165,8 +172,9 @@ func render_lobby(host, theme: Dictionary) -> void:
 		_draw_seat(host, theme, Rect2(16, 100, 238, 124), 1, seat1_present, host.local_seat == 1, theme["ACCENT"])
 	if host.is_host:
 		var ips: Array = host.host_ips
-		var card_y: float = (390.0 if host.selected_game == "uno" else (316.0 if host.max_players_for_game >= 4 else 250.0))
-		var card := Rect2(16, card_y, theme["VIEW_W"] - 32, 112 + maxi(ips.size(), 1) * 42)
+		var card_y: float = (390.0 if host.selected_game in ["uno", "mafia"] else (316.0 if host.max_players_for_game >= 4 else 250.0))
+		var shown_ip_count: int = mini(ips.size(), 3)
+		var card := Rect2(16, card_y, theme["VIEW_W"] - 32, 112 + maxi(shown_ip_count, 1) * 42)
 		host._panel(card, theme["CARD"], 20, theme["LINE_STRONG"], 1.0, 12, 5)
 		host._txt_r("آدرس شما برای دوست", card.end.x - 18, card.position.y + 34, 15, theme["TEXT_DIM"], true, 300)
 		if host.online_room_code != "":
@@ -174,17 +182,20 @@ func render_lobby(host, theme: Dictionary) -> void:
 			host._panel(cr, Color(theme["ACCENT"].r, theme["ACCENT"].g, theme["ACCENT"].b, 0.14), 16, theme["ACCENT"], 1.0)
 			host._txt_c("کد " + host._fa(host.online_room_code), cr, 14, theme["ACCENT"], true)
 		if ips.size() > 0:
-			for j in ips.size():
+			for j in range(mini(ips.size(), 3)):
 				var y: float = card.position.y + 82.0 + j * 42.0
 				host._txt_r(str(ips[j]), card.end.x - 18, y + 24, 26, theme["ACCENT"], true, 300)
 		else:
 			host._txt_r("IP پیدا نشد — از تنظیمات وای‌فای ببینید", card.end.x - 18, card.position.y + 92, 14, theme["TEXT_DIM"], false, 400)
 		host._txt_r("پورت: " + host._fa(host.PORT), card.end.x - 18, card.end.y - 16, 13, theme["TEXT_DIM"], false, 200)
+		if ips.size() > 3:
+			host._txt_r("آدرس‌های دیگر در تنظیمات شبکه", card.end.x - 18, card.end.y - 36, 10, theme["TEXT_FAINT"], false, 230)
 		if host.max_players_for_game >= 4:
 			host._txt_r("هر بازیکن IP بالا را وارد کند · ظرفیت %s نفر" % host._fa(host.max_players_for_game), card.end.x - 18, card.position.y + 58, 12, theme["TEXT_DIM"], false, 420)
 		var need: int = host.max_players_for_game - host.connected_players
-		var msg: String = ("منتظر %s بازیکن دیگر…" % host._fa(need)) if need > 0 else "همه آماده‌اند — بازی را شروع کنید"
-		host._txt_c(msg, Rect2(0, 650, theme["VIEW_W"], 36), 17, theme["TEXT_DIM"] if need > 0 else theme["GREEN"], true)
+		var mafia_ready: bool = host.selected_game == "mafia" and host.connected_players >= 6
+		var msg: String = ("حداقل نفرات حاضرند؛ می‌توانید با %s نفر شروع کنید" % host._fa(host.connected_players)) if mafia_ready and need > 0 else (("منتظر %s بازیکن دیگر…" % host._fa(need)) if need > 0 else "همه آماده‌اند — بازی را شروع کنید")
+		host._txt_c(msg, Rect2(0, 650, theme["VIEW_W"], 36), 15 if mafia_ready else 17, theme["GREEN"] if mafia_ready or need == 0 else theme["TEXT_DIM"], true)
 	else:
 		var card2 := Rect2(16, 250, theme["VIEW_W"] - 32, 190)
 		host._panel(card2, theme["CARD"], 20, theme["LINE_STRONG"], 1.0, 12, 5)

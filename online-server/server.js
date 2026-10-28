@@ -266,7 +266,7 @@ function tryFormRooms(key, force = false, announce = true) {
   const game = firstClient.game;
   const capacity = playerCapacityForGame(game);
   const now = Date.now();
-  const multi = game === 'mastermind' || game === 'quoridor' || game === 'uno';
+  const multi = game === 'mastermind' || game === 'quoridor' || game === 'uno' || game === 'jenga' || game === 'mafia';
   if (!multi) {
     // 1v1: closest ratings first, widening the accepted gap with waiting time.
     while (queue.length >= 2) {
@@ -347,7 +347,7 @@ function joinQueue(socket, payload) {
   const queue = queueFor(key);
   if (!queue.includes(socket)) queue.push(socket);
   tryFormRooms(key, false, 'force');
-  if (game === 'mastermind' || game === 'quoridor' || game === 'uno') scheduleQueueFlush(key);
+  if (game === 'mastermind' || game === 'quoridor' || game === 'uno' || game === 'jenga' || game === 'mafia') scheduleQueueFlush(key);
 }
 
 function sendActionToRoom(socket, payload) {
@@ -362,8 +362,16 @@ function sendActionToRoom(socket, payload) {
     error(socket, 'حرکت از این بازیکن یا با این اطلاعات مجاز نیست.', 'action_not_allowed');
     return;
   }
+  const relayAll = payload.action === '_rpc_jenga_action';
+  const args = payload.args.slice();
+  if (payload.action === '_rpc_jenga_action' && args[1] === 'remove') {
+    // The acting client cannot rig whether its removal collapses the tower.
+    args[4] = crypto.randomInt(0, 1_000_000) / 1_000_000;
+  }
   for (const player of room.players) {
-    if (player.seat !== client.seat) send(player.socket, { type: 'action', action: payload.action, args: payload.args, seat: client.seat });
+    if (relayAll || player.seat !== client.seat) {
+      send(player.socket, { type: 'action', action: payload.action, args, seat: client.seat });
+    }
   }
 }
 

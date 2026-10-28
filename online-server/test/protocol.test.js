@@ -8,7 +8,7 @@ const {
 } = require('../lib/protocol');
 
 test('supports every game listed in the Godot online chooser', () => {
-  for (const game of ['othello', 'othello12', 'pentago', 'chess', 'domino', 'pasoor', 'quoridor', 'hokm', 'backgammon', 'gobblet', 'mastermind', 'abalone', 'blockace', 'quarto', 'uno']) {
+  for (const game of ['othello', 'othello12', 'pentago', 'chess', 'domino', 'pasoor', 'quoridor', 'hokm', 'backgammon', 'gobblet', 'mastermind', 'abalone', 'blockace', 'quarto', 'uno', 'connect4', 'jenga', 'mafia']) {
     assert.ok(ALLOWED_GAMES.has(game), `missing ${game}`);
   }
 });
@@ -53,6 +53,9 @@ test('validates incoming Mastermind feedback records before relay', () => {
 test('LAN and online player capacity is four only for games with multiplayer rules', () => {
   assert.equal(playerCapacityForGame('mastermind'), 4);
   assert.equal(playerCapacityForGame('quoridor'), 4);
+  assert.equal(playerCapacityForGame('jenga'), 4);
+  assert.equal(playerCapacityForGame('connect4'), 2);
+  assert.equal(playerCapacityForGame('mafia'), 12);
   assert.equal(playerCapacityForGame('chess'), 2);
 });
 
@@ -105,4 +108,26 @@ test('UNO actions validate seat, card index, color and action payloads', () => {
   assert.equal(isActionFromSeat('_rpc_uno_challenge', [4, 'true'], 4, 10), false);
   assert.equal(isActionFromSeat('_rpc_uno_next_round', [0, 123], 0, 10), true);
   assert.equal(isActionFromSeat('_rpc_uno_next_round', [1, 123], 1, 10), false);
+});
+
+
+test('Mafia queue only forms classic rooms with six to twelve players', () => {
+  assert.equal(fallbackRoomSizeForQueue('mafia', 2), 0);
+  assert.equal(fallbackRoomSizeForQueue('mafia', 5), 0);
+  assert.equal(fallbackRoomSizeForQueue('mafia', 6), 6);
+  assert.equal(fallbackRoomSizeForQueue('mafia', 8), 8);
+  assert.equal(fallbackRoomSizeForQueue('mafia', 20), 12);
+});
+
+test('Connect Four, Jenga and Mafia network actions validate their payloads', () => {
+  assert.equal(isActionFromSeat('_rpc_connect4_drop', [1, 6], 1, 2), true);
+  assert.equal(isActionFromSeat('_rpc_connect4_drop', [1, 7], 1, 2), false);
+  assert.equal(isActionFromSeat('_rpc_connect4_drop', [0, 3], 0, 4), false);
+  assert.equal(isActionFromSeat('_rpc_jenga_action', [2, 'remove', 4, 1, 0.5], 2, 4), true);
+  assert.equal(isActionFromSeat('_rpc_jenga_action', [2, 'fly', 4, 1, 0.5], 2, 4), false);
+  assert.equal(isActionFromSeat('_rpc_jenga_action', [2, 'place', 18, 1, 0.5], 2, 4), false);
+  assert.equal(isActionFromSeat('_rpc_mafia_action', [5, 'vote', 3], 5, 8), true);
+  assert.equal(isActionFromSeat('_rpc_mafia_action', [5, 'vote', 8], 5, 8), false);
+  assert.equal(isActionFromSeat('_rpc_mafia_action', [5, 'kill', 5], 5, 8), false);
+  assert.equal(isActionFromSeat('_rpc_mafia_action', [5, 'vote', 2], 5, 4), false);
 });

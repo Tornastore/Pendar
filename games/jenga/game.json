@@ -1,0 +1,12 @@
+{
+  "id": "jenga",
+  "name": "برج هیجان (Jenga)",
+  "category": "classic",
+  "variant": "Classic 18-story tower; remove below highest complete story and replace on top",
+  "players": "2-4",
+  "min_players": 2,
+  "max_players": 4,
+  "difficulty_levels": 6,
+  "network": "LAN IP / ENet on native exports; WebSocket matchmaking on Web",
+  "beta": false
+}
