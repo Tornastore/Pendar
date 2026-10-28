@@ -23,6 +23,7 @@ const ResultScreenScript = preload("res://ui/screens/result_screen.gd")
 const ModeScreenScript = preload("res://ui/screens/mode_screen.gd")
 const OnlineScreenScript = preload("res://ui/screens/online_screen.gd")
 const MenuScreenScript = preload("res://ui/screens/menu_screen.gd")
+const TextWrapScript = preload("res://ui/text_wrap.gd")
 const GAME_MODULE_SCRIPTS := {
 	"othello": preload("res://games/othello/rules.gd"),
 	"pentago": preload("res://games/pentago/rules.gd"),
@@ -1785,14 +1786,17 @@ func _fit_size(s: String, max_w: float, size: int, bold: bool = false) -> int:
 
 func _wrap(s: String, x: float, y: float, w: float, size: int, col: Color, align: int = HORIZONTAL_ALIGNMENT_CENTER, bold: bool = false) -> float:
 	var f: Font = font_bold if bold else font
-	var display_text: String = _normalize_ui_text(s)
-	var sz: Vector2 = f.get_multiline_string_size(display_text, align, w, size)
-	draw_multiline_string(f, Vector2(x, y), display_text, align, w, size, -1, col, TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND, TextServer.JUSTIFICATION_WORD_BOUND, TextServer.DIRECTION_AUTO)
+	var normalized: String = _normalize_ui_text(s)
+	var display_text: String = TextWrapScript.wrap(self, normalized, w, size, bold)
+	var sz: Vector2 = f.get_multiline_string_size(display_text, align, -1.0, size)
+	draw_multiline_string(f, Vector2(x, y), display_text, align, w, size, -1, col, TextServer.BREAK_MANDATORY, TextServer.JUSTIFICATION_WORD_BOUND, TextServer.DIRECTION_AUTO)
 	return sz.y
 
 func _wrap_h(s: String, w: float, size: int, bold: bool = false) -> float:
 	var f: Font = font_bold if bold else font
-	return f.get_multiline_string_size(_normalize_ui_text(s), HORIZONTAL_ALIGNMENT_CENTER, w, size).y
+	var normalized: String = _normalize_ui_text(s)
+	var wrapped: String = TextWrapScript.wrap(self, normalized, w, size, bold)
+	return f.get_multiline_string_size(wrapped, HORIZONTAL_ALIGNMENT_CENTER, -1.0, size).y
 
 # ---------- shape helpers ----------
 func _panel(r: Rect2, fill: Color, rad: float = 16.0, bc: Color = Color(0, 0, 0, 0), bw: float = 0.0, shadow: float = 0.0, sy: float = 0.0) -> void:

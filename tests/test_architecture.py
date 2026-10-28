@@ -31,8 +31,8 @@ def test_quoridor_ai_has_six_difficulty_profiles_and_master_search() -> None:
     assert "if level >= 5:" in ai
     assert "func _minimax(" in ai
     assert "func _search_actions(" in ai
-    assert "MASTER_SEARCH_DEPTH: int = 4" in ai
-    assert "_active_search_depth = 3 if level == 5 else MASTER_SEARCH_DEPTH" in ai
+    assert "MASTER_SEARCH_DEPTH: int = 5" in ai
+    assert "_active_search_depth = 4 if level == 5 else MASTER_SEARCH_DEPTH" in ai
     for level in ("\t\t3:", "\t\t4:", "\t\t5:"):
         assert level in ai
     assert "QuoridorAIScript = preload(\"res://games/quoridor/ai.gd\")" in rules

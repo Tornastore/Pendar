@@ -4,17 +4,17 @@ extends RefCounted
 const DIRS: Array[Vector2i] = [
 	Vector2i(0, -1), Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1)
 ]
-const MASTER_SEARCH_DEPTH: int = 4 # Kept for strong play, but all search is hard-bounded below.
+const MASTER_SEARCH_DEPTH: int = 5 # Grandmaster searches one ply deeper under a larger hard budget.
 const MASTER_WALL_BRANCH: int = 2
 const WIN_SCORE: float = 100000.0
 # A browser game's main thread must never be occupied by an unbounded search.
 # These budgets cap wall evaluations, minimax nodes and wall-clock time per move.
-const EXPERT_SEARCH_BUDGET_USEC: int = 80000
-const GRANDMASTER_SEARCH_BUDGET_USEC: int = 135000
-const EXPERT_NODE_BUDGET: int = 48
-const GRANDMASTER_NODE_BUDGET: int = 88
-const EXPERT_WALL_EVALUATION_BUDGET: int = 42
-const GRANDMASTER_WALL_EVALUATION_BUDGET: int = 76
+const EXPERT_SEARCH_BUDGET_USEC: int = 180000
+const GRANDMASTER_SEARCH_BUDGET_USEC: int = 320000
+const EXPERT_NODE_BUDGET: int = 144
+const GRANDMASTER_NODE_BUDGET: int = 360
+const EXPERT_WALL_EVALUATION_BUDGET: int = 96
+const GRANDMASTER_WALL_EVALUATION_BUDGET: int = 192
 var _active_search_depth: int = MASTER_SEARCH_DEPTH
 var _active_wall_branch: int = MASTER_WALL_BRANCH
 var _root_wall_branch: int = 2
@@ -29,16 +29,26 @@ const HISTORY_LOOKBACK: int = 9
 
 func choose_action(game, difficulty: int) -> Dictionary:
 	var level: int = clampi(difficulty, 1, 6)
+	# Never miss an immediate win, regardless of the selected difficulty.
+	for target in game._quo_legal_moves(1):
+		if game._quo_goal_reached(1, target):
+			return {"type": "move", "to": target}
+	# If the human can finish on their next move, spend a wall to block that route
+	# whenever a legal defensive wall exists. This prevents avoidable instant losses
+	# on every difficulty, including levels 1-4.
+	var urgent_block: Dictionary = _block_immediate_opponent_win(game)
+	if not urgent_block.is_empty():
+		return urgent_block
 	if level >= 5:
-		# Expert and Grandmaster use a bounded adversarial search. Deadlines are
-		# especially important for Web exports, where GDScript runs on the UI thread.
-		_active_search_depth = 3 if level == 5 else MASTER_SEARCH_DEPTH
-		_active_wall_branch = 1 if level == 5 else MASTER_WALL_BRANCH
-		_root_wall_branch = 1 if level == 5 else 2
+		# Expert and Grandmaster use bounded adversarial search. The prior budgets
+		# interrupted most wall analysis before useful choices were explored.
+		_active_search_depth = 4 if level == 5 else MASTER_SEARCH_DEPTH
+		_active_wall_branch = 2 if level == 5 else 3
+		_root_wall_branch = 2 if level == 5 else 3
 		_search_deadline_usec = Time.get_ticks_usec() + (EXPERT_SEARCH_BUDGET_USEC if level == 5 else GRANDMASTER_SEARCH_BUDGET_USEC)
 		_nodes_remaining = EXPERT_NODE_BUDGET if level == 5 else GRANDMASTER_NODE_BUDGET
 		_wall_evaluations_remaining = EXPERT_WALL_EVALUATION_BUDGET if level == 5 else GRANDMASTER_WALL_EVALUATION_BUDGET
-		_active_wall_route_segments = 8
+		_active_wall_route_segments = 10 if level == 5 else 12
 		_search_aborted = false
 		return _choose_master_grandmaster(game)
 	var cpu_pos: Vector2i = game.quo_pawns[1]
@@ -76,6 +86,37 @@ func choose_action(game, difficulty: int) -> Dictionary:
 		return wall
 	return best_move
 
+
+
+func _block_immediate_opponent_win(game) -> Dictionary:
+	if int(game.quo_player_count) != 2 or int(game.quo_walls_left[1]) <= 0:
+		return {}
+	var immediate_threat: bool = false
+	for target in game._quo_legal_moves(0):
+		if game._quo_goal_reached(0, target):
+			immediate_threat = true
+			break
+	if not immediate_threat:
+		return {}
+	var cpu_distance: int = _distance(game, 1, game.quo_pawns[1])
+	var human_distance: int = _distance(game, 0, game.quo_pawns[0])
+	var best: Dictionary = {}
+	var best_score: float = -INF
+	for info in _route_wall_candidates(game, 0, 12):
+		var candidate: Dictionary = _evaluate_wall(game, str(info.key), int(info.x), int(info.y), bool(info.vertical), cpu_distance, human_distance)
+		if candidate.is_empty() or int(candidate.get("enemy_delta", 0)) <= 0:
+			continue
+		# When the human is one move from the goal, any wall that raises the true
+		# shortest-path distance above one prevents the immediate win.
+		var score: float = float(candidate.enemy_delta) * 500.0
+		score -= maxf(0.0, float(candidate.get("self_delta", 0))) * 90.0
+		score += 14.0 if int(candidate.get("self_delta", 0)) <= 0 else 0.0
+		if score > best_score:
+			best_score = score
+			best = candidate
+	if not best.is_empty():
+		best["score"] = best_score
+	return best
 
 
 func choose_action_for_player(game, difficulty: int, player: int) -> Dictionary:
@@ -116,13 +157,13 @@ func choose_action_for_player(game, difficulty: int, player: int) -> Dictionary:
 		opponents.append({"player": other, "distance": _distance(game, other, game.quo_pawns[other])})
 	opponents.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a.distance) < int(b.distance))
 	var candidate_map: Dictionary = {}
-	var target_limit: int = 1 if level == 3 else (2 if level < 6 else 3)
+	var target_limit: int = 1 if level == 3 else (2 if level < 5 else 3)
 	for oi in range(mini(target_limit, opponents.size())):
 		var target_player: int = int(opponents[oi].player)
-		for wall in _route_wall_candidates(game, target_player, 5 if level < 5 else 8):
+		for wall in _route_wall_candidates(game, target_player, 7 if level < 5 else 10):
 			candidate_map[str(wall.key)] = wall
 	var candidates: Array = candidate_map.values()
-	var wall_budget: int = 14 if level == 3 else (22 if level < 6 else 30)
+	var wall_budget: int = 20 if level == 3 else (32 if level < 6 else 48)
 	var inspected: int = 0
 	var best_wall: Dictionary = {}
 	var best_wall_score: float = -INF
@@ -453,9 +494,17 @@ func _evaluate_master_position(game) -> float:
 	var wall_value: float = 3.0 + urgency * 3.5
 	score += float(cpu_walls - human_walls) * wall_value
 	if cpu_distance <= 2:
-		score += float(3 - cpu_distance) * 22.0
+		score += float(3 - cpu_distance) * 42.0
 	if human_distance <= 2:
-		score -= float(3 - human_distance) * 28.0
+		score -= float(3 - human_distance) * 48.0
+	if cpu_distance == 1:
+		score += 850.0
+	elif cpu_distance == 2:
+		score += 180.0
+	if human_distance == 1:
+		score -= 1100.0
+	elif human_distance == 2:
+		score -= 240.0
 	# Prefer useful mobility but keep it a secondary tie-breaker behind route distance.
 	var cpu_options: int = _legal_move_count(game, 1)
 	var human_options: int = _legal_move_count(game, 0)
@@ -504,6 +553,23 @@ func _best_move(game, moves: Array[Dictionary], current_distance: int, level: in
 		var target: Vector2i = move.to
 		var centrality: float = -absf(float(target.x) - 4.0)
 		var quality: float = float(progress) * 100.0 + (centrality * float(level) * 0.25)
+		# At medium and higher difficulty, evaluate the immediate reply after every
+		# candidate. This rejects pawn advances that accidentally hand the opponent
+		# a direct finish or a very short route.
+		if level >= 3:
+			var previous_cpu_pos: Vector2i = game.quo_pawns[1]
+			game.quo_pawns[1] = target
+			var enemy_distance_after: int = _distance(game, 0, game.quo_pawns[0])
+			var enemy_wins_next: bool = false
+			for reply in game._quo_legal_moves(0):
+				if game._quo_goal_reached(0, reply):
+					enemy_wins_next = true
+					break
+			game.quo_pawns[1] = previous_cpu_pos
+			if enemy_wins_next:
+				quality -= 950.0 if level == 3 else 1450.0
+			if enemy_distance_after <= 2:
+				quality -= float(3 - enemy_distance_after) * (42.0 if level == 3 else 58.0)
 		# Stronger profiles remember recent CPU squares; this stabilizes play
 		# even below grandmaster without making beginner play deterministic.
 		quality -= _move_repetition_penalty(game, target) * (float(level - 1) / 5.0)
@@ -561,7 +627,7 @@ func _best_wall(game, level: int, current_cpu_distance: int, current_human_dista
 
 	# Evaluate only wall anchors on the opponent's route instead of testing all 128
 	# placements. This keeps even levels 2-4 responsive in web exports.
-	var route_candidates: Array[Dictionary] = _route_wall_candidates(game, 0, 8)
+	var route_candidates: Array[Dictionary] = _route_wall_candidates(game, 0, 12)
 	for info in route_candidates:
 		var candidate: Dictionary = _evaluate_wall(game, str(info.key), int(info.x), int(info.y), bool(info.vertical), current_cpu_distance, current_human_distance)
 		if not candidate.is_empty():

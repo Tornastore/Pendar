@@ -307,6 +307,57 @@ func _draw_game_art(id: String, rect: Rect2, col: Color) -> void:
 				_panel(Rect2(-17, -30, 34, 60), Color(0.06, 0.07, 0.12), 18, Color(1,1,1,0.65), 0.8)
 				_txt_c(["1", "+۲", "↻", "۷"][i], Rect2(-17, -22, 34, 45), 18, uno_cols[i], true)
 			_art_end()
+		"connect4":
+			_art_xf(c, Vector2.ZERO, s)
+			var board := Rect2(-87, -43, 174, 86)
+			_panel(board, Color("#1764c7"), 10, Color("#72b1ff"), 2.0, 5, 3)
+			for yy in range(4):
+				for xx in range(7):
+					var cc := Vector2(-75 + xx * 25, -31 + yy * 21)
+					_canvas.draw_circle(cc + Vector2(0, 1.5), 7.5, Color(0, 0, 0, 0.28))
+					_canvas.draw_circle(cc, 7.0, Color("#091632"))
+			for pos in [Vector2(-50, 11), Vector2(-25, 11), Vector2(0, -10), Vector2(25, -10)]:
+				_canvas.draw_circle(pos + Vector2(0, 1), 7.8, Color("#9a303a"))
+				_canvas.draw_circle(pos, 7.0, Color("#ff626b"))
+			for pos in [Vector2(-50, -10), Vector2(-25, -10), Vector2(0, 11), Vector2(25, 11)]:
+				_canvas.draw_circle(pos + Vector2(0, 1), 7.8, Color("#927020"))
+				_canvas.draw_circle(pos, 7.0, Color("#ffd452"))
+			_art_end()
+		"jenga":
+			_art_xf(c, Vector2.ZERO, s)
+			for level in range(5):
+				var horizontal: bool = level % 2 == 0
+				for slot in range(3):
+					var center := Vector2((slot - 1) * (18.0 if horizontal else 25.0), 31.0 - level * 15.0)
+					var dx: Vector2 = Vector2(25, 0) if horizontal else Vector2(12, -9)
+					var dz: Vector2 = Vector2(-12, 9) if horizontal else Vector2(25, 0)
+					var p1: Vector2 = center - dx - dz * 0.35
+					var p2: Vector2 = center + dx - dz * 0.35
+					var p3: Vector2 = center + dx + dz * 0.35
+					var p4: Vector2 = center - dx + dz * 0.35
+					var drop := Vector2(0, 4.0)
+					var wood: Color = Color("#d8a56a") if level % 2 == 0 else Color("#b87a43")
+					_canvas.draw_colored_polygon(PackedVector2Array([p4, p3, p3 + drop, p4 + drop]), wood.darkened(0.34))
+					_canvas.draw_colored_polygon(PackedVector2Array([p2, p3, p3 + drop, p2 + drop]), wood.darkened(0.22))
+					_canvas.draw_colored_polygon(PackedVector2Array([p1, p2, p3, p4]), wood.lightened(0.08))
+					_canvas.draw_polyline(PackedVector2Array([p1, p2, p3, p4, p1]), Color("#6a4426"), 1.0, true)
+			_canvas.draw_polyline(PackedVector2Array([Vector2(-42, 39), Vector2(43, 39)]), Color(0, 0, 0, 0.22), 3.0, true)
+			_art_end()
+		"mafia":
+			_art_xf(c, Vector2.ZERO, s)
+			var card_centers: Array[Vector2] = [Vector2(-45, 6), Vector2(0, -5), Vector2(45, 6)]
+			var card_rotations: Array[float] = [-0.16, 0.0, 0.16]
+			for index in range(card_centers.size()):
+				var cc: Vector2 = card_centers[index]
+				_art_xf(c, cc, s, card_rotations[index])
+				var cr := Rect2(-24, -34, 48, 68)
+				_panel(cr, Color("#20243a"), 8, Color("#b7c4e8", 0.8), 1.2, 4, 2)
+				_canvas.draw_circle(Vector2(0, -6), 13, Color("#3b4158"))
+				_canvas.draw_colored_polygon(PackedVector2Array([Vector2(-18, 18), Vector2(-15, 1), Vector2(0, -1), Vector2(15, 1), Vector2(18, 18)]), Color("#121525"))
+				_canvas.draw_circle(Vector2(-4, -6), 2.0, Color("#f2d8a6"))
+				_canvas.draw_circle(Vector2(4, -6), 2.0, Color("#f2d8a6"))
+				_canvas.draw_line(Vector2(-7, 7), Vector2(7, 7), Color("#e45b69" if index == 1 else "#6ca5ff"), 2.0, true)
+			_art_end()
 		"quarto":
 			_art_xf(c, Vector2.ZERO, s)
 			for yy in range(4):

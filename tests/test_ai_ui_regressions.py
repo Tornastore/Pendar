@@ -68,7 +68,11 @@ def test_rules_overlay_pages_by_measured_height_and_draws_wrapped_words():
     assert "host._wrap_h(str(raw_line), text_width, 15)" in rules
     assert "current_height + item_height > max_body_height" in rules
     assert '"first_line": first_line' in rules
-    assert 'TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND' in main
+    assert "TextWrapScript.wrap(self, normalized, w, size, bold)" in main
+    assert "TextServer.BREAK_MANDATORY" in main
+    helper = read("ui/text_wrap.gd")
+    assert "_split_oversized_word" in helper
+    assert "return \"\\n\".join(lines)" in helper
 
 
 def test_logo_is_confined_to_top_utility_strip():
@@ -118,3 +122,29 @@ def test_large_results_use_compact_two_column_rosters():
     # Twelve roster rows fit into six 29px rows, leaving space for the score and buttons.
     card_height = 16 + math.ceil(12 / 2) * 29
     assert 392 + card_height + 14 < 604
+
+
+
+def test_new_game_menu_art_exists_for_connect4_jenga_and_mafia():
+    renderer = read("ui/illustration_renderer.gd")
+    for game_id in ("connect4", "jenga", "mafia"):
+        assert f'"{game_id}":' in renderer
+    assert 'Color("#1764c7")' in renderer
+    assert 'Color("#d8a56a")' in renderer
+    assert 'var card_centers: Array[Vector2]' in renderer
+
+
+def test_mafia_roster_and_event_text_reserve_bottom_button_dock():
+    mafia = read("games/mafia/presentation.gd")
+    assert "TextWrapScript.wrap(app, game.mafia_last_event, 492, 13, false, 2)" in mafia
+    assert "var hint_y: float = minf(849.0" in mafia
+    assert 'Rect2(16, 884, 508, 38)' not in mafia
+    assert "app._fit_size(state_label" in mafia
+
+
+def test_jenga_layout_has_three_views_and_keeps_status_above_bottom_dock():
+    jenga = read("games/jenga/presentation.gd")
+    assert 'var labels: Array[String] = ["نمای روبه‌رو", "نمای کناری", "نمای بالا"]' in jenga
+    assert "func _draw_block" in jenga
+    assert "Geometry2D.is_point_in_polygon(point, geometry[face_name])" in jenga
+    assert "app._wrap(game.jenga_status, 24, 844, 492, 12" in jenga
