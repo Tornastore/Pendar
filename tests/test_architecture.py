@@ -28,13 +28,16 @@ def test_quoridor_ai_has_six_difficulty_profiles_and_master_search() -> None:
     assert "func choose_action(game, difficulty: int)" in ai
     assert "if level == 1" in ai
     assert "if level == 2" in ai
-    assert "if level >= 5:" in ai
-    assert "func _minimax(" in ai
-    assert "func _search_actions(" in ai
-    assert "MASTER_SEARCH_DEPTH: int = 5" in ai
-    assert "_active_search_depth = 4 if level == 5 else MASTER_SEARCH_DEPTH" in ai
-    for level in ("\t\t3:", "\t\t4:", "\t\t5:"):
-        assert level in ai
+    assert "if level >= 3:" in ai
+    assert "func _search_action(" in ai and "func _search_action_4p(" in ai
+    assert 'preload("res://games/quoridor/engine.gd")' in ai
+    assert 'preload("res://games/quoridor/engine4.gd")' in ai
+    for level in (3, 4, 5, 6):
+        assert f'\t{level}: {{"depth"' in ai
+    engine = (project_root / "games" / "quoridor" / "engine.gd").read_text(encoding="utf-8")
+    assert "func think(game, me: int, params: Dictionary) -> Dictionary:" in engine
+    assert "func _search(" in engine and "func _root_iteration(" in engine
+    assert (project_root / "games" / "quoridor" / "engine4.gd").exists()
     assert "QuoridorAIScript = preload(\"res://games/quoridor/ai.gd\")" in rules
     assert "host._set_quoridor_difficulty.bind(i + 1)" in MODE_SCREEN_PATH.read_text(encoding="utf-8")
     assert '"quo_difficulty_%d"' in MODE_SCREEN_PATH.read_text(encoding="utf-8")
@@ -302,14 +305,15 @@ def test_quoridor_master_ai_penalizes_repeated_cpu_pawn_positions() -> None:
     assert "quo_cpu_position_history.append(step)" in rules
     assert "while quo_cpu_position_history.size() > 12:" in rules
 
-    # Root search and other non-random profiles penalize reversals/revisits.
-    assert "func _master_root_preference(" in ai
+    # The search penalizes reversals/revisits at its root, and the beginner levels keep the
+    # original repetition penalty.
+    engine = (project_root / "games" / "quoridor" / "engine.gd").read_text(encoding="utf-8")
     assert "func _move_repetition_penalty(" in ai
     assert "IMMEDIATE_REVERSAL_PENALTY: float = 175.0" in ai
     assert "RECENT_REVISIT_PENALTY: float = 42.0" in ai
-    assert "score += _master_root_preference(game, action, root_distance)" in ai
     assert "quality -= _move_repetition_penalty(game, target)" in ai
-    assert "_minimax(game, 0, _active_search_depth - 1, -INF, INF)" in ai
+    assert '"avoid": history.slice(' in ai
+    assert "_root_bias[i] = -40 if idx >= avoid.size() - 2 else -18" in engine
 
 
 def test_multiplayer_games_offer_cpu_opponents_and_mastermind_cpu_race() -> None:
