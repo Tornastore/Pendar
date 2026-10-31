@@ -1,4 +1,5 @@
 """Regression contracts for stronger Expert and Grandmaster AI profiles."""
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,7 +45,7 @@ def test_backgammon_prefers_maximum_legal_dice_usage_before_position_score():
 
 def test_strong_profiles_have_tactical_lookahead_across_the_game_catalog():
     source_by_game = {
-        "games/quoridor/ai.gd": ("_minimax(", "_move_repetition_penalty("),
+        "games/quoridor/engine.gd": ("func _search(", "_root_bias"),
         "games/gobblet/rules.gd": ("_gob_rank_actions(replies", "worst_continuation"),
         "games/abalone/rules.gd": ("_aba_rank_actions(replies", "worst_line"),
         "games/blockace/rules.gd": ("opponent_best", "our_future_moves"),
@@ -96,31 +97,57 @@ def test_backgammon_stops_search_after_terminal_bear_off():
     finish = ai.index("if index >= dice.size():", fn)
     assert terminal < finish
 
-def test_quoridor_expert_and_grandmaster_search_is_hard_bounded_for_web():
+def test_quoridor_search_is_hard_bounded_for_web():
     ai = read("games/quoridor/ai.gd")
-    assert "EXPERT_SEARCH_BUDGET_USEC: int = 180000" in ai
-    assert "GRANDMASTER_SEARCH_BUDGET_USEC: int = 320000" in ai
-    assert "EXPERT_NODE_BUDGET: int = 144" in ai
-    assert "GRANDMASTER_NODE_BUDGET: int = 360" in ai
-    assert "func _should_abort_search() -> bool:" in ai
-    assert "if alpha >= beta or _search_aborted:" in ai
-    assert "_route_wall_candidates(game, 1 - player, _active_wall_route_segments)" in ai
+    engine = read("games/quoridor/engine.gd")
+    profiles = ai[ai.index("const PROFILES: Dictionary"):ai.index("const PROFILES_4P: Dictionary")]
+    # Every searched level has both a node cap and a wall-clock cap, and both stay small
+    # enough that a browser main thread is never blocked for long.
+    for level in (3, 4, 5, 6):
+        assert f'\t{level}: {{"depth"' in profiles
+    assert len(re.findall(r'"ms": (\d+)', profiles)) == 4
+    assert len(re.findall(r'"nodes": (\d+)', profiles)) == 4
+    for ms in re.findall(r'"ms": (\d+)', profiles):
+        assert int(ms) <= 1000
+    for nodes in re.findall(r'"nodes": (\d+)', profiles):
+        assert int(nodes) <= 12000
+    assert "const WEB_BUDGET_SCALE: float = 0.7" in ai
+    assert 'OS.has_feature("web")' in ai
+    assert "_nodes >= _node_limit or Time.get_ticks_usec() >= _deadline" in engine
+    assert "_aborted = true" in engine and "if _aborted:" in engine
+    # The engine searches its own copy of the board and its answer is re-checked by the rules.
+    assert "func _validated(game, player: int, action: Dictionary) -> Dictionary:" in ai
     assert "func _block_immediate_opponent_win(game) -> Dictionary:" in ai
     assert "if game._quo_goal_reached(1, target):" in ai
-    assert "_active_search_depth = 4 if level == 5 else MASTER_SEARCH_DEPTH" in ai
-    assert "EXPERT_WALL_EVALUATION_BUDGET: int = 96" in ai
-    assert "GRANDMASTER_WALL_EVALUATION_BUDGET: int = 192" in ai
-    assert "var enemy_wins_next: bool = false" in ai
-    assert "quality -= 950.0 if level == 3 else 1450.0" in ai
+    assert "func _first_legal_wall(" in ai
 
 
-def test_quoridor_minimax_no_longer_scans_all_128_walls_at_every_node():
+def test_quoridor_top_levels_are_deterministic_and_stronger_levels_search_deeper():
     ai = read("games/quoridor/ai.gd")
-    actions = ai[ai.index("func _search_actions("):ai.index("func _route_wall_candidates(")]
-    assert "_route_wall_candidates(" in actions
-    assert "for y in range(8)" not in actions
-    assert "_wall_evaluations_remaining <= 0" in actions
-    assert "Always include legal pawn moves first" in actions
+    profiles = ai[ai.index("const PROFILES: Dictionary"):ai.index("const PROFILES_4P: Dictionary")]
+    rows = {int(m.group(1)): m.group(0) for m in re.finditer(r'\t(\d): \{[^\n]+\}', profiles)}
+    assert sorted(rows) == [3, 4, 5, 6]
+    depth = {lvl: int(re.search(r'"depth": (\d+)', row).group(1)) for lvl, row in rows.items()}
+    nodes = {lvl: int(re.search(r'"nodes": (\d+)', row).group(1)) for lvl, row in rows.items()}
+    noise = {lvl: int(re.search(r'"noise": (\d+)', row).group(1)) for lvl, row in rows.items()}
+    assert depth[3] < depth[4] < depth[5] < depth[6]
+    assert nodes[3] < nodes[4] < nodes[5] < nodes[6]
+    assert noise[3] > noise[4] > noise[5] == noise[6] == 0
+
+
+def test_quoridor_search_only_expands_walls_that_cut_the_shortest_route_dag():
+    engine = read("games/quoridor/engine.gd")
+    start = engine.index("func _gen_walls(")
+    gen = engine[start:engine.index("# ------", start)]
+    # Walls come from exact shortest-route cut counts, never from a blind scan of all 128 anchors.
+    assert "_accumulate(" in gen
+    assert "if _acc_o[idx] < total_o:" in gen
+    assert "for a in range(64)" not in gen
+    assert "wall_limit_by_depth" in engine
+    assert "func _accumulate(" in engine and "func _dag_forward(" in engine
+    # Pawn moves are always generated first so the search can never be left without a move.
+    search = engine[engine.index("func _search("):engine.index("# ------", engine.index("func _search("))]
+    assert search.index("_gen_pawn(") < search.index("_gen_walls(")
 
 
 def test_backgammon_six_levels_are_wired_to_cpu_turn_and_catalog_is_not_beta():
