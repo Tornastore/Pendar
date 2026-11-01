@@ -74,6 +74,8 @@ func _run() -> void:
 	_rng.seed = 20260531
 	_test_every_level_is_legal_and_bounded()
 	_test_levels_two_and_three_keep_beginner_behaviour()
+	_test_grandmaster_opens()
+	_test_no_endless_shuffle()
 	_test_four_player_engine_matches_rules()
 	_test_full_games()
 	print("QUORIDOR_AI_LEVEL_TESTS: checks=%d, failures=%d" % [_checks, _failures])
@@ -124,6 +126,80 @@ func _test_levels_two_and_three_keep_beginner_behaviour() -> void:
 		game.quo_turn = 1
 		var action: Dictionary = game.quo_ai.choose_action(game, level)
 		_expect(str(action.get("type", "")) == "move" and action.to == Vector2i(6, 0), "level %d takes an immediate win" % level)
+
+func _test_grandmaster_opens() -> void:
+	var game = _new_game(2)
+	game.quo_difficulty = 6
+	game.reset_game()
+	_expect(game.quo_turn == 1, "the grandmaster CPU opens the game")
+	game.quo_difficulty = 5
+	game.reset_game()
+	_expect(game.quo_turn == 0, "level 5 leaves the first move to the human")
+	game.quo_difficulty = 6
+	game.quo_local_multiplayer = true
+	game.reset_game()
+	_expect(game.quo_turn == 0, "hot-seat games always start with seat 0")
+	game.quo_local_multiplayer = false
+	_host.vs_cpu = false
+	game.reset_game()
+	_expect(game.quo_turn == 0, "games without a CPU opponent always start with seat 0")
+	_host.vs_cpu = true
+	var four = _new_game(4)
+	four.quo_difficulty = 6
+	four.reset_game()
+	_expect(four.quo_turn == 0, "four-player games keep seat 0 first")
+	var opening = _new_game(2)
+	opening.quo_difficulty = 6
+	opening.reset_game()
+	var action: Dictionary = opening.quo_ai.choose_action(opening, 6)
+	_expect(_apply(opening, 1, action) and opening.quo_turn == 0, "the CPU's opening move is legal and hands the turn to the human")
+
+func _signature(game) -> String:
+	var keys: Array = game.quo_walls.keys()
+	keys.sort()
+	return "%s|%s|%s|%s" % [str(game.quo_pawns), str(keys), str(game.quo_walls_left), str(game.quo_turn)]
+
+# A stand-off seen in CPU-vs-CPU play: nobody wants to advance, so both pawns shuffle between two
+# cells forever. The CPU must stop repeating the same position and make progress.
+func _test_no_endless_shuffle() -> void:
+	var game = _new_game(2)
+	var opening: Array = ["0:4,1", "1:4,7", "0:5,1", "1:5,7", "0:5,2", "1:5,6", "0:5,3", "1:5,5", "0:Wh5,2", "1:Wh4,4", "0:6,3", "1:Wh6,3", "0:5,3", "1:6,5", "0:5,4", "1:Wh5,5", "0:5,3"]
+	for entry in opening:
+		var seat: int = int(entry.substr(0, 1))
+		var body: String = entry.substr(2)
+		if body.begins_with("W"):
+			var xy: PackedStringArray = body.substr(2).split(",")
+			game._quo_place_wall(int(xy[0]), int(xy[1]), body.substr(1, 1) == "v")
+			game.quo_walls_left[seat] -= 1
+			game._quo_advance_turn(seat)
+		else:
+			var cell: PackedStringArray = body.split(",")
+			var to: Vector2i = Vector2i(int(cell[0]), int(cell[1]))
+			if seat == 1:
+				game.quo_cpu_position_history.append(to)
+			game._quo_apply_move(seat, to)
+	var counts: Dictionary = {}
+	var most: int = 0
+	var shuffle_cells: Array = [Vector2i(5, 4), Vector2i(5, 3)]
+	for i in range(24):
+		var action: Dictionary = game.quo_ai.choose_action(game, 5)
+		if not _apply(game, 1, action):
+			_expect(false, "stand-off: the CPU produced an illegal action %s" % str(action))
+			return
+		if str(action.get("type", "")) == "move":
+			game.quo_cpu_position_history.append(action.to)
+		var sig: String = _signature(game)
+		counts[sig] = int(counts.get(sig, 0)) + 1
+		most = maxi(most, int(counts[sig]))
+		if game.quo_game_over:
+			break
+		var wanted: Vector2i = shuffle_cells[i % 2]
+		var legal: Array[Vector2i] = game._quo_legal_moves(0)
+		game._quo_apply_move(0, wanted if wanted in legal else game._quo_next_step(0))
+		if game.quo_game_over:
+			break
+	_expect(most <= 3, "the CPU does not repeat one position more than three times against a shuffling human (max %d)" % most)
+	_expect(game.quo_game_over and game.quo_winner == 1, "the CPU breaks the stand-off and wins instead of shuffling forever")
 
 func _ref_distance(game, seat: int) -> int:
 	var start: Vector2i = game.quo_pawns[seat]

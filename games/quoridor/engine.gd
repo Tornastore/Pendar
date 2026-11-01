@@ -35,10 +35,18 @@ var w_tempo: int = 50      # side to move wins an exact race, so it is worth hal
 var w_wall: int = 30       # value of one spare wall compared with the opponent's spares
 var w_flex: int = 5        # more distinct shortest routes = harder to trap (capped at 4)
 var w_threat: int = 0      # bonus per step of distance when the opponent has a single lane
+var w_reserve: int = 0     # extra value of each of the last three walls (kept for the end-game)
 
 # ---- per-search configuration (set through think()) ----
 var wall_limit_by_depth: PackedInt32Array = PackedInt32Array([0, 3, 5, 6, 7, 8, 8, 8, 8, 8, 8, 8, 8])
 var exact_order_depth: int = 3
+var adv_k_bonus: int = 0   # extra wall candidates at nodes where the searching side's opponent moves
+var _root_side: int = 0
+var qs_walls: int = 0      # wall ideas weighed at the search horizon (0 = off)
+var rep_counts: Dictionary = {}   # position hash -> times the game already reached it
+var rep_penalty: int = 140
+var last_child_hash: int = 0
+var qs_margin: int = 350   # skip the horizon check when even a big wall cannot reach alpha
 
 # ---- board ----
 var mvU: PackedByteArray = PackedByteArray()
@@ -670,13 +678,92 @@ func _eval(dm: int, d_o: int, cmp: int, cop: int, me: int, op: int) -> int:
 			return 20000 - dm * 10
 		return -20000 + d_o * 10
 	var s: int = (d_o - dm) * 100 + w_tempo
-	s += (wm - wo) * w_wall
+	s += (wm - wo) * w_wall + w_reserve * (mini(wm, 3) - mini(wo, 3))
 	s += w_flex * (mini(cmp, 4) - mini(cop, 4))
 	return s
 
 # ------------------------------------------------------------------------------------
 # Search
 # ------------------------------------------------------------------------------------
+
+## Horizon check: the side to move may still place one lengthening wall before the position is
+## judged. Looks at the most promising cut walls (exact distances) and returns the better of
+## "stand pat" and the best resulting score, so tricks just beyond the horizon are not missed.
+func _qs_walls(me: int, op: int, fm: PackedInt32Array, cm: PackedInt32Array, fo: PackedInt32Array, co: PackedInt32Array, stand: int) -> int:
+	var op_pawn: int = pawn[op]
+	var me_pawn: int = pawn[me]
+	var total_o: int = co[op_pawn]
+	var total_m: int = cm[me_pawn]
+	var dm: int = fm[me_pawn]
+	var d_o: int = fo[op_pawn]
+	var touched: int = _accumulate(op_pawn, fo, co, _fwd, _acc_o, _list_o)
+	if touched == 0:
+		return stand
+	_accumulate(me_pawn, fm, cm, _fwd2, _acc_m, _list_m)
+	var best_idx0: int = -1
+	var best_ord0: int = -100000
+	var best_idx1: int = -1
+	var best_ord1: int = -100000
+	for t in range(touched):
+		var idx: int = _list_o[t]
+		if _acc_o[idx] < total_o:
+			continue
+		var vert: bool = idx >= 64
+		var a: int = idx - 64 if vert else idx
+		if not _wall_geometry_ok(vert, a):
+			continue
+		var ord: int = 100
+		if _acc_m[idx] >= total_m:
+			ord -= 150
+		var x: int = a & 7
+		var y: int = a >> 3
+		if vert:
+			if y == 0 or y == 7:
+				ord += 40
+			if y >= 2 and vw[a - 16] == 1:
+				ord += 40
+			if y <= 5 and vw[a + 16] == 1:
+				ord += 40
+		else:
+			if x == 0 or x == 7:
+				ord += 40
+			if x >= 2 and hw[a - 2] == 1:
+				ord += 40
+			if x <= 5 and hw[a + 2] == 1:
+				ord += 40
+		if ord > best_ord0:
+			best_idx1 = best_idx0
+			best_ord1 = best_ord0
+			best_idx0 = idx
+			best_ord0 = ord
+		elif ord > best_ord1:
+			best_idx1 = idx
+			best_ord1 = ord
+	var best: int = stand
+	for pick in range(mini(qs_walls, 2)):
+		var widx: int = best_idx0 if pick == 0 else best_idx1
+		if widx < 0:
+			break
+		var wvert: bool = widx >= 64
+		var wa: int = widx - 64 if wvert else widx
+		_set_wall(wvert, wa, true)
+		_bfs(op, _tf, _tc)
+		var new_o: int = _tf[op_pawn]
+		var new_m: int = dm
+		var legal: bool = new_o < FAR
+		if legal and _acc_m[widx] >= total_m:
+			_bfs(me, _tf, _tc)
+			new_m = _tf[me_pawn]
+			legal = new_m < FAR
+		_set_wall(wvert, wa, false)
+		if not legal or new_o <= d_o:
+			continue
+		wleft[me] -= 1
+		var value: int = -_eval(new_o, new_m, co[op_pawn], cm[me_pawn], op, me)
+		wleft[me] += 1
+		if value > best:
+			best = value
+	return best
 
 func _pvs(depth: int, alpha: int, beta: int, ply: int, first: bool, f0: PackedInt32Array, f1: PackedInt32Array, c0: PackedInt32Array, c1: PackedInt32Array) -> int:
 	if first:
@@ -712,7 +799,10 @@ func _search(depth: int, alpha: int, beta: int, ply: int, f0: PackedInt32Array, 
 		if d_o <= 1 and wleft[me] > 0 and ply < MAX_PLY - 6:
 			depth = 1
 		else:
-			return _eval(fm[from], d_o, cm[from], co[pawn[op]], me, op)
+			var stand: int = _eval(fm[from], d_o, cm[from], co[pawn[op]], me, op)
+			if qs_walls <= 0 or wleft[me] <= 0 or stand >= beta or stand + qs_margin <= alpha:
+				return stand
+			return _qs_walls(me, op, fm, cm, fo, co, stand)
 	if ply >= MAX_PLY - 2:
 		return _eval(fm[from], d_o, cm[from], co[pawn[op]], me, op)
 
@@ -738,6 +828,8 @@ func _search(depth: int, alpha: int, beta: int, ply: int, f0: PackedInt32Array, 
 
 	if wleft[me] > 0:
 		var limit: int = wall_limit_by_depth[mini(depth, wall_limit_by_depth.size() - 1)]
+		if limit > 0 and me != _root_side:
+			limit += adv_k_bonus
 		if limit > 0:
 			n = _gen_walls(me, fo, co, fm, cm, codes, ords, n, depth >= exact_order_depth, limit)
 	if n == 0:
@@ -848,6 +940,12 @@ func _root_iteration(depth: int, full_window: bool, f0: PackedInt32Array, f1: Pa
 		if not _make(code, 0):
 			_root_score[i] = NEG_INF
 			continue
+		if not rep_counts.is_empty():
+			# A move that recreates a position the game has already been in is penalised more
+			# every time, which breaks "nobody wants to advance" stand-offs.
+			var seen: int = int(rep_counts.get(hash, 0))
+			if seen > 0:
+				bias -= mini(seen, 4) * rep_penalty
 		var nf0: PackedInt32Array = f0
 		var nf1: PackedInt32Array = f1
 		var nc0: PackedInt32Array = c0
@@ -906,7 +1004,9 @@ func clear_tt() -> void:
 ## Searches the live game for `me` and returns {"type": "move"/"wall", ...}.
 ## params: depth (max iterations), budget_usec, nodes, noise (points, 0 = deterministic),
 ##         avoid (recent own cells, oldest first), k (wall candidates per remaining depth),
-##         root_n (root moves weighed when noisy), keep_tt (reuse the previous search's table).
+##         root_n (root moves weighed when noisy), keep_tt (reuse the previous search's table),
+##         reserve (extra value of the last three walls), qs / qsm (horizon wall check),
+##         rep (position hash -> repetitions already seen in this game).
 func think(game, me: int, params: Dictionary) -> Dictionary:
 	load_position(game, me)
 	var max_depth: int = int(params.get("depth", 4))
@@ -918,6 +1018,12 @@ func think(game, me: int, params: Dictionary) -> Dictionary:
 	if params.has("k"):
 		wall_limit_by_depth = PackedInt32Array(params["k"])
 	exact_order_depth = int(params.get("exact_depth", 3))
+	adv_k_bonus = int(params.get("adv_k", 0))
+	qs_walls = int(params.get("qs", 0))
+	rep_counts = params.get("rep", {})
+	w_reserve = int(params.get("reserve", w_reserve))
+	qs_margin = int(params.get("qsm", 350))
+	_root_side = me
 	_nodes = 0
 	_aborted = false
 	if not bool(params.get("keep_tt", false)):
@@ -973,6 +1079,9 @@ func think(game, me: int, params: Dictionary) -> Dictionary:
 				break
 	last_nodes = _nodes
 	last_score = best_score
+	if _make(best_code, 0):
+		last_child_hash = hash
+		_unmake(best_code, 0)
 	if best_code < WALL_BASE:
 		return {"type": "move", "to": Vector2i(_cell_x[best_code], _cell_y[best_code])}
 	var vert: bool = best_code >= VWALL_BASE
