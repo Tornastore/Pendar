@@ -7,6 +7,10 @@ const QUO_DIRS: Array[Vector2i] = [Vector2i(0, -1), Vector2i(1, 0), Vector2i(-1,
 var quo_ai = QuoridorAIScript.new()
 var _quo_presentation = QuoridorPresentationScript.new()
 var quo_difficulty: int = 3 # 1 very easy .. 5 expert .. 6 master grandmaster
+# Moving first is a real advantage in Quoridor, so in a two-player game against the CPU the
+# grandmaster level takes the opening move itself. Set this to 7 to give the first move to the
+# human at every level again.
+const CPU_OPENS_FROM_LEVEL: int = 6
 var quo_player_count: int = 2
 var quo_local_multiplayer: bool = false
 
@@ -33,6 +37,8 @@ func _reset_quoridor() -> void:
 	else:
 		quo_walls_left = [10, 10]
 	quo_turn = 0
+	if quo_player_count == 2 and not quo_local_multiplayer and app != null and app.vs_cpu and quo_difficulty >= CPU_OPENS_FROM_LEVEL:
+		quo_turn = 1
 	quo_mode = 0
 	quo_game_over = false
 	quo_winner = -1

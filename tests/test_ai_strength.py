@@ -135,6 +135,28 @@ def test_quoridor_top_levels_are_deterministic_and_stronger_levels_search_deeper
     assert noise[3] > noise[4] > noise[5] == noise[6] == 0
 
 
+def test_quoridor_grandmaster_opens_and_search_keeps_walls_in_reserve():
+    rules = read("games/quoridor/rules.gd")
+    ai = read("games/quoridor/ai.gd")
+    engine = read("games/quoridor/engine.gd")
+    # Moving first is a real advantage, so the strongest level takes the opening move itself.
+    assert "const CPU_OPENS_FROM_LEVEL: int = 6" in rules
+    assert "quo_difficulty >= CPU_OPENS_FROM_LEVEL" in rules
+    assert "not quo_local_multiplayer" in rules and "quo_player_count == 2" in rules
+    # The last three walls are worth extra so they are not burned on small gains early, and the
+    # search checks one lengthening wall at its horizon.
+    profiles = ai[ai.index("const PROFILES: Dictionary"):ai.index("const PROFILES_4P: Dictionary")]
+    for level in (4, 5, 6):
+        row = re.search(rf'\t{level}: \{{[^\n]+\}}', profiles).group(0)
+        assert '"reserve": 100' in row and '"qs": 1' in row
+    assert "w_reserve * (mini(wm, 3) - mini(wo, 3))" in engine
+    assert "func _qs_walls(" in engine
+    # Repeating a position the game has already reached is penalised more every time.
+    assert "bias -= mini(seen, 4) * rep_penalty" in engine
+    assert '"rep": _rep_counts,' in ai and "_rep_counts.clear()" in ai
+    assert "qs_walls <= 0 or wleft[me] <= 0 or stand >= beta or stand + qs_margin <= alpha" in engine
+
+
 def test_quoridor_search_only_expands_walls_that_cut_the_shortest_route_dag():
     engine = read("games/quoridor/engine.gd")
     start = engine.index("func _gen_walls(")

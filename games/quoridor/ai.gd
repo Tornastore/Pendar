@@ -23,12 +23,13 @@ const HISTORY_LOOKBACK: int = 9
 # Two players: depth = deepest iteration, ms = time cap, nodes = node cap, noise = judgement
 # noise in points (100 = one pawn step), root_n = root moves weighed when noisy, k = wall
 # candidates per remaining depth, exact = remaining depth from which walls are ranked by real
-# distance gain.
+# distance gain, reserve = extra value of each of the last three walls (they are kept for the
+# end-game instead of being spent on small gains), qs = wall ideas weighed at the search horizon.
 const PROFILES: Dictionary = {
-	3: {"depth": 2, "ms": 70, "nodes": 500, "noise": 55, "root_n": 7, "exact": 99, "k": [0, 2, 3]},
-	4: {"depth": 4, "ms": 150, "nodes": 1500, "noise": 18, "root_n": 7, "exact": 3, "k": [0, 3, 4, 5, 5]},
-	5: {"depth": 9, "ms": 380, "nodes": 4200, "noise": 0, "root_n": 0, "exact": 3, "k": [0, 3, 5, 6, 7, 8, 8, 8, 8, 8]},
-	6: {"depth": 14, "ms": 900, "nodes": 11000, "noise": 0, "root_n": 0, "exact": 3, "k": [0, 3, 5, 6, 7, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8]},
+	3: {"depth": 2, "ms": 70, "nodes": 500, "noise": 55, "root_n": 7, "exact": 99, "reserve": 60, "qs": 0, "k": [0, 2, 3]},
+	4: {"depth": 4, "ms": 150, "nodes": 1500, "noise": 18, "root_n": 7, "exact": 3, "reserve": 100, "qs": 1, "k": [0, 3, 4, 5, 5]},
+	5: {"depth": 9, "ms": 380, "nodes": 4200, "noise": 0, "root_n": 0, "exact": 3, "reserve": 100, "qs": 1, "k": [0, 3, 5, 6, 7, 8, 8, 8, 8, 8]},
+	6: {"depth": 14, "ms": 900, "nodes": 11000, "noise": 0, "root_n": 0, "exact": 3, "reserve": 100, "qs": 1, "k": [0, 3, 5, 6, 7, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8]},
 }
 # Four players: targets = rivals considered for walls, noise in points, reply_n = best
 # candidates that are re-scored after the next player's best reply.
@@ -45,6 +46,7 @@ var _engine = null
 var _engine4 = null
 var _tt_level: int = 0
 var _tt_walls: int = -1
+var _rep_counts: Dictionary = {}
 
 func choose_action(game, difficulty: int) -> Dictionary:
 	var level: int = clampi(difficulty, 1, 6)
@@ -106,22 +108,32 @@ func _search_action(game, level: int) -> Dictionary:
 	# profile, walls only ever accumulate), so the transposition table is kept between moves.
 	var wall_total: int = game.quo_walls.size()
 	var keep_tt: bool = level == _tt_level and _tt_walls >= 0 and wall_total >= _tt_walls
+	if history.size() <= 1 or wall_total < _tt_walls:
+		_rep_counts.clear()   # a new game started
 	_tt_level = level
 	_tt_walls = wall_total
 	var params: Dictionary = {
 		"keep_tt": keep_tt,
+		"rep": _rep_counts,
 		"depth": int(profile.depth),
 		"budget_usec": budget,
 		"nodes": int(profile.nodes),
 		"noise": int(profile.noise),
 		"root_n": int(profile.root_n),
 		"exact_depth": int(profile.exact),
+		"reserve": int(profile.reserve),
+		"qs": int(profile.qs),
+		"qsm": 300,
 		"k": profile.k,
 		# Recently visited cells (oldest first, current cell excluded) are discouraged so the
 		# CPU never shuffles A-B-A-B when two continuations score the same.
 		"avoid": history.slice(maxi(0, history.size() - 6), maxi(0, history.size() - 1)),
 	}
-	return _validated(game, 1, _engine.think(game, 1, params))
+	var checked: Dictionary = _validated(game, 1, _engine.think(game, 1, params))
+	if not checked.is_empty():
+		var child: int = int(_engine.last_child_hash)
+		_rep_counts[child] = int(_rep_counts.get(child, 0)) + 1
+	return checked
 
 ## Levels 3-6 for four players: arrival-time scoring from engine4.gd.
 func _search_action_4p(game, level: int, player: int) -> Dictionary:
